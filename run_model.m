@@ -1,14 +1,15 @@
-%% Size-structured 1D monod model based on Ward and Follows, PNAS 113(11), 2016, 2958–2963
+%% Size-structured 1D monod model with a single predator class
 
 clear
 clc
 close all
 
-%% Load and filter forcing data - this is mostly copied from Fabian's code
+%% Load and filter forcing data
+% this is mostly copied from Fabian's code, much of which has been
+% commented out
 
-% select your model names (must match the string used in the directory names
-% and in the model-spcific scripts
-bioModel  = 'size_based_model'; % What biogeochemistry?
+% select your model names
+% bioModel  = 'size_based_model'; % What biogeochemistry?
 forcModel = 'sinmod'; % What forcing?
 
 % define forcing name (i.e. forcing subfolder)
@@ -156,11 +157,11 @@ end
 FixedParams.years = years;
 for iy = 1:length(years)
     y_index = ['y' num2str(years(iy))];
-    FixedParams.(y_index).nt = length(F.(y_index).t);
-    FixedParams.(y_index).t = F.(y_index).t;
-    FixedParams.(y_index).nTraj = length(F.(y_index).iTraj);
-    FixedParams.(y_index).lat = F.(y_index).y;
-    FixedParams.(y_index).lon = F.(y_index).x;    
+    FixedParams.(y_index).nt = length(F.(y_index).t);        % number of timesteps
+    FixedParams.(y_index).t = F.(y_index).t;                 % all times
+    FixedParams.(y_index).nTraj = length(F.(y_index).iTraj); % number of selected particle trajectories
+    FixedParams.(y_index).lat = F.(y_index).y;               % latitude
+    FixedParams.(y_index).lon = F.(y_index).x;               % longitude
 end
 
 
@@ -173,13 +174,9 @@ Htot = 150;                                                           % total mo
 dzmin = 5;                                                            % minimum layer width (dzmin <= Htot/(nz-1))
 dzmax = 2 * Htot / FixedParams.nz - dzmin;                            % maximum layer width
 FixedParams.zw = [0; -cumsum(linspace(dzmin,dzmax,FixedParams.nz))']; % depth of layer edges
-FixedParams.zwidth = FixedParams.zw(1:end-1) - FixedParams.zw(2:end);             % width of each depth layer
-FixedParams.z = 0.5*(FixedParams.zw(1:end-1)+FixedParams.zw(2:end));  % depth of layer midpoints
-FixedParams.delz = abs(diff(FixedParams.z));                                      % distance between centres of adjacent depth layers
-% FixedParams.delz2 = FixedParams.delz.^2;                              % delz2 & delzq are used in 1st derivative approximations over z, the irregular depth grid
-% FixedParams.delzq = FixedParams.delz(1:FixedParams.nz-2) .* ...
-%     FixedParams.delz(2:FixedParams.nz-1) .* ...
-%     (FixedParams.delz(1:FixedParams.nz-2) + FixedParams.delz(2:FixedParams.nz-1));
+FixedParams.zwidth = FixedParams.zw(1:end-1) - FixedParams.zw(2:end); % widths of depth layers
+FixedParams.z = 0.5*(FixedParams.zw(1:end-1)+FixedParams.zw(2:end));  % midpoints of depth layers
+FixedParams.delz = abs(diff(FixedParams.z));                          % distance between centres of adjacent depth layers
 
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -187,7 +184,7 @@ FixedParams.delz = abs(diff(FixedParams.z));                                    
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 % Extracts relavent data and interpolate it over our chosen depth layers
-[Forc, FixedParams] = prepareForcing(F,FixedParams); % As some trajectories may be excluded, elements of FixedParams may need updated
+[Forc, FixedParams] = prepareForcing(F,FixedParams);
 
 
 %~~~~~~~~~~~~~~~~
@@ -198,30 +195,30 @@ FixedParams.delz = abs(diff(FixedParams.z));                                    
 FixedParams.INtype = {'NO3'};
 FixedParams.nIN = length(FixedParams.INtype);                               % number of inorganic nutrients
 
-% Plankton - use 6 phytoplankton size classes and a single zooplankton size
-FixedParams.nPP = 6;                                                   % number of phytoplankton size classes
-FixedParams.nZP = 1;                                                   % number of zooplankton classes
-% FixedParams.n_size = FixedParams.nPP + FixedParams.nZP;           % number of plankton size classes
+% Plankton
+FixedParams.nPP = 6;                                                        % number of phytoplankton size classes
+FixedParams.nZP = 1;                                                        % number of zooplankton classes
 
-% Phytoplanton sizes - smallest diameter is 0.5, volumes of successive size 
+% Phytoplanton sizes - smallest diameter is 0.5 mu m, volumes of successive size 
 % classes increase by factors of 32 (equally spaced on log-scale).
 PPdia = 0.5;
 FixedParams.PPsize = 4/3*pi*(PPdia/2)^3;
-FixedParams.PPsize(2:FixedParams.nPP) = 32 .^ (1:FixedParams.nPP-1) .* FixedParams.PPsize(1);
+FixedParams.PPsize(2:FixedParams.nPP) = 32 .^ (1:FixedParams.nPP-1) .* ...
+    FixedParams.PPsize(1);                                                  % cell volumes [mu m^3]
 PPdia = 2 .* (3 .* FixedParams.PPsize ./ (4*pi)) .^ (1/3);
 FixedParams.diatoms = FixedParams.PPsize >= 100;                            % assume large phytoplankton are diatoms - only needed to split SINMOD output over classes during state variable initialisation
 
 FixedParams.phytoplankton = [true(1,FixedParams.nPP) ... 
-    false(1,FixedParams.nZP)];                                         % index phytoplankton length classes
+    false(1,FixedParams.nZP)];                                              % index phytoplankton
 FixedParams.zooplankton = [false(1,FixedParams.nPP) ... 
-    true(1,FixedParams.nZP)];                                          % index zooplankton length classes
+    true(1,FixedParams.nZP)];                                               % index zooplankton
 
 % Organic matter - only DOM is explicitly modelled
-FixedParams.OMtype = {'DOM'};                                               % dissolved, particulate
+FixedParams.OMtype = {'DOM'};
 FixedParams.nOM = length(FixedParams.OMtype);                               % number of organic matter variables
 
 FixedParams.nVar = FixedParams.nIN + FixedParams.nPP + FixedParams.nZP + ...
-    FixedParams.nOM; % number of state variables per depth and trajectory
+    FixedParams.nOM;                                                        % number of state variables per depth and trajectory
 
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -261,10 +258,6 @@ FixedParams.POM_is_lost = true; % is POM lost from the system by sinking below b
 [Params, FixedParams] = initialiseParameters(FixedParams);
 Params0 = Params;
 
-% Use the 'updateParameters.m' function to easily update these initial
-% values using Name-Value pair arguments, eg ...
-
-% Params = updateParameters_Ward2016(Params, FixedParams, 'k_NO3_a', 0.25, 'k_NO3_b', 0.1); % scalars
 
 
 %% Integration time interval
@@ -285,7 +278,6 @@ nEquations = FixedParams.nVar * FixedParams.nz; % number of ODEs
 
 % solve with ode45 solver
 odeDTmin = 1/24/60; % min timestep = 1 minute
-% odeDTmin = 1/24; % min timestep = 30 minutes
 odeDTmax = 1;      % max timestep = 1 day
 
 % set solver options: positive definite, tolerances, min/max tsteps
@@ -294,39 +286,24 @@ ode45options=odeset('NonNegative',[1 ones(1, nEquations)],...
   'InitialStep',odeDTmin,'MaxStep',odeDTmax);
 
 
-
-% Params = updateParameters_MonodModelSinglePredator(Params, FixedParams, 'Gmax', 3);
-% Params = updateParameters_MonodModelSinglePredator(Params, FixedParams, 'k_G', 0.5);
-% 
-% Params = updateParameters_MonodModelSinglePredator(Params, FixedParams, 'ps', 3); % light limitation variability between sizes
-% 
-% Params = updateParameters_MonodModelSinglePredator(Params, FixedParams, 'Vmax_a', 4, 'Vmax_b', -0.02);
-% Params = updateParameters_MonodModelSinglePredator(Params, FixedParams, 'k_a', 1.5, 'k_b', 0.08);
-% 
-% [Params.Vmax Params.k]
-% 
-
-
-
-
-
 % Storage for output
 for iy = 1:length(FixedParams.years)
     y_index = ['y' num2str(FixedParams.years(iy))];
     out.(y_index) = nan(nEquations, tmax(iy), FixedParams.(y_index).nTraj);
 end
 
-% Optional extra outputs to extract - 4 cases allowed, so far...
-% returnExtras = 'none';
+% Optional extra outputs to extract - 4 cases allowed so far. When running
+% a parameter optimisation algorithm set returnExtras='none' for speed.
+returnExtras = 'none';
 % returnExtras = 'auxiliaryAndRates';
-returnExtras = 'auxiliary';       % extra, non-state variables, are stored
-% returnExtras = 'rates';           % state variable rates of change are stored
+%returnExtras = 'auxiliary';             % extra, non-state variables, are stored
+% returnExtras = 'rates';               % state variable rates of change are stored
 
 FixedParams.returnExtras = strcmp(returnExtras, 'auxiliary') || ...
-    strcmp(returnExtras, 'auxiliaryAndRates'); % if-statement input in ODEs determing whether auxiliary variables are returned
+    strcmp(returnExtras, 'auxiliaryAndRates');
 
+% create storage for extra outputs if required
 switch returnExtras
-    % create storage for extra outputs
     case 'auxiliaryAndRates'
         for iy = 1:length(FixedParams.years)
             y_index = ['y' num2str(FixedParams.years(iy))];
@@ -346,27 +323,21 @@ switch returnExtras
 end
 
 
-% Combine parameters into single input structure -- for efficiency the fixed parameters should probably be trimmed to include only the essentials...
+% Combine parameters into single input structure
 parameterList.Params = Params;
 parameterList.FixedParams = FixedParams;
 
 
 % Loop through years
-for iy = 1:length(FixedParams.years)
-% iy = 1; % Or comment above line and just choose a single year
-    
-    y_index = ['y' num2str(FixedParams.years(iy))];
-    
+for iy = 1:length(FixedParams.years)    
+    y_index = ['y' num2str(FixedParams.years(iy))];    
     % Loop through trajectories
     for kk = 1:FixedParams.(y_index).nTraj
-%     kk = 1; % just run a single trajectory for testing...
-
         % Extract forcing data for year iy, trajectory kk; and permute time to
         % last dimension
         forcing.T = permute(Forc.(y_index).T(:,:,kk), [2 1]);
         forcing.PAR = permute(Forc.(y_index).PAR(:,:,kk), [2 1]);
         forcing.K = permute(Forc.(y_index).kv(:,:,kk), [2 1]);
-        forcing.K_center = permute(Forc.(y_index).kv_center(:,:,kk), [2 1]);
         
         % Initial condition for year iy, trajectory kk
         v_in = v0.(y_index)(:,kk);        
@@ -378,7 +349,6 @@ for iy = 1:length(FixedParams.years)
             parameterList.Forc.T = forcing.T(:,ts);
             parameterList.Forc.PAR = forcing.PAR(:,ts);
             parameterList.Forc.K = forcing.K(:,ts);
-            parameterList.Forc.K_center = forcing.K_center(:,ts);
             switch returnExtras
                 case 'auxiliaryAndRates'
                     [dvdt,extraOutput] = ODEs(0, v_in, parameterList);
@@ -402,16 +372,13 @@ for iy = 1:length(FixedParams.years)
         
         % Integrate step-wise between successive data points -- perhaps the
         % only way to guarentee smoothly continuous ODE functions
-        
         tic        
 %         profile on
-        for tt = 1:tmax(iy)-1
-            
+        for tt = 1:tmax(iy)-1            
             % Set forcing data
             parameterList.Forc.T = forcing.T(:,tt:tt+1);
             parameterList.Forc.PAR = forcing.PAR(:,tt:tt+1);
             parameterList.Forc.K = forcing.K(:,tt:tt+1);
-            parameterList.Forc.K_center = forcing.K_center(:,tt:tt+1);
             
             % Integrate -- returning full output structure can be useful for debugging
             sol=ode45(@(t, v_in) ODEs(t, v_in, parameterList), [0 1], v_in, ode45options);
@@ -445,7 +412,6 @@ for iy = 1:length(FixedParams.years)
                 end
                 clear extraOutput dvdt
             end
-            
         end
 %         profile viewer
         toc
@@ -470,6 +436,7 @@ end
 
 
 %% Check mass is conserved
+
 % This will need adjusted for case POM_is_lost==true
 for iy = 1:length(FixedParams.years)
     if iy == 1, figure, end
@@ -508,7 +475,7 @@ Z = output.(y_index).Z(:,:,kk);
 OM = output.(y_index).OM(:,:,kk);
 
 % Save plots?
-save = true;
+save = false;
 folder = 'OUTPUT/plots/';
 
 % Create time-depth grid for interpolation
