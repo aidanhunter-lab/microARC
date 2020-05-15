@@ -28,7 +28,16 @@ OM = v_in(fixedParams.OM_index)';
 % Linearly interpolate between days
 T = (forc.T(:,1) + diff(forc.T,1,2) .* t)';
 K = forc.K(:,1) + diff(forc.K,1,2) .* t;
-I = (forc.PAR(:,1) + diff(forc.PAR,1,2) .* t)';
+% I = (forc.PAR(:,1) + diff(forc.PAR,1,2) .* t)';
+Isurf = (forc.PARsurf(:,1) + diff(forc.PARsurf,1,2) .* t)';
+
+% Calculate light levels at depth -- within each depth layer light
+% attenuates over half the layer width plus the combined widths of all
+% shallower layers.
+att = (fixedParams.attSW + fixedParams.attP .* sum(PP)) .* fixedParams.zwidth';
+att = 0.5 * att + [0 cumsum(att(1:nz-1))];
+I = Isurf * exp(-att);
+
 
 %% MODEL EQUATIONS
 
@@ -151,6 +160,7 @@ dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt];
 
 %% AUXILIARY OUTPUTS
 if fixedParams.returnExtras
+    extraOutput.PAR = I;
     extraOutput.POM = SPOM;
     extraOutput.remin_POM = remin_POM';
 end
@@ -171,11 +181,28 @@ function v = diffusion_1D(u,K,w,delz)
 % Function assumes zero flux boundary conditions.
 % Diffusivities K are at midpoints of spatial grid used for u, so 
 % size(K,1)=size(u,1)-1.
-usize = size(u);
-dmdt = zeros(usize);
-dmdt(1:usize(1)-1,:) = diff([zeros(1,usize(2)); (K ./ delz) .* diff(u)]); % rate of change of mass
-dmdt(usize(1),:) = -sum(dmdt);  % mass is conserved
-v = dmdt ./ w; % rate of change of concentration
+padZeros = zeros(1,size(u,2));
+v = diff([padZeros; (K ./ delz) .* diff(u); padZeros]) ./ w;
 end
+
+% This diffusion function should conserve automatically mass, but it
+% doesn't seem necessary...
+% function v = diffusion_1D(u,K,w,delz)
+% % Returns rate of change of u due to diffusion.
+% % Inputs: array of concentrations u,
+% %         array of diffusivities K,
+% %         depth layer widths w,
+% %         distance between depth layer centers delz.
+% %         The 1st dimension of each array is space (modelled depths of
+% %         water column).
+% % Function assumes zero flux boundary conditions.
+% % Diffusivities K are at midpoints of spatial grid used for u, so 
+% % size(K,1)=size(u,1)-1.
+% usize = size(u);
+% dmdt = zeros(usize);
+% dmdt(1:usize(1)-1,:) = diff([zeros(1,usize(2)); (K ./ delz) .* diff(u)]); % rate of change of mass
+% dmdt(usize(1),:) = -sum(dmdt);  % mass is conserved
+% v = dmdt ./ w; % rate of change of concentration
+% end
 
 
