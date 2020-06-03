@@ -1,8 +1,8 @@
-function [dvdt, extraOutput] = ODEs(t, v_in, parameterList)
+function [dvdt, extraOutput] = ODEs(t, v_in, parameterList, forc, timeStep)
 
 fixedParams = parameterList.FixedParams;
 params = parameterList.Params;
-forc = parameterList.Forc;
+% forc = parameterList.Forc;
 
 %% MODEL DIMENSIONS
 
@@ -25,11 +25,14 @@ OM = v_in(fixedParams.OM_index)';
 
 %% FORCING DATA
 
+T = forc.T(:,timeStep-1:timeStep);
+K = forc.K(:,timeStep-1:timeStep);
+Isurf = forc.PARsurf(:,timeStep-1:timeStep);
+
 % Linearly interpolate between days
-T = (forc.T(:,1) + diff(forc.T,1,2) .* t)';
-K = forc.K(:,1) + diff(forc.K,1,2) .* t;
-% I = (forc.PAR(:,1) + diff(forc.PAR,1,2) .* t)';
-Isurf = (forc.PARsurf(:,1) + diff(forc.PARsurf,1,2) .* t)';
+T = (T(:,1) + diff(T,1,2) .* t)';
+K = K(:,1) + diff(K,1,2) .* t;
+Isurf = (Isurf(:,1) + diff(Isurf,1,2) .* t)';
 
 % Calculate light levels at depth -- within each depth layer light
 % attenuates over half the layer width plus the combined widths of all
@@ -62,9 +65,9 @@ if all(I == 0)
     N_uptake_losses = zeros(1, nz);    
 else    
     mu = params.pmax .* (1 - exp(-(params.aP .* I) ./ params.pmax));        % photosynthetic (metabolic) rate (1 / day)    
-    mumax = params.Vmax_over_qmin ./ ((params.Qmax_over_delQ .* ... 
-        params.Vmax_over_qmin) ./ mu + 1);                                  % maximum growth rate (1 / day) depends on nutrient uptake and photosynthetic rates
-    V = (gammaT .* N) ./ (N ./ mumax + 1 ./ params.aN_over_qmin);           % growth rate, Michaelis-Menton form unusually written for efficiency
+    mumax = params.Vmax_over_Qmin ./ ((params.Qmax_over_delQ .* ... 
+        params.Vmax_over_Qmin) ./ mu + 1);                                  % maximum growth rate (1 / day) depends on nutrient uptake and photosynthetic rates
+    V = (gammaT .* N) ./ (N ./ mumax + 1 ./ params.aN_over_Qmin);           % growth rate, Michaelis-Menton form unusually written for efficiency
     B_uptake = [V; zeros(1, nz)] .* B;
     N_uptake_losses = sum(B_uptake);
 end
@@ -184,25 +187,4 @@ function v = diffusion_1D(u,K,w,delz)
 padZeros = zeros(1,size(u,2));
 v = diff([padZeros; (K ./ delz) .* diff(u); padZeros]) ./ w;
 end
-
-% This diffusion function should conserve automatically mass, but it
-% doesn't seem necessary...
-% function v = diffusion_1D(u,K,w,delz)
-% % Returns rate of change of u due to diffusion.
-% % Inputs: array of concentrations u,
-% %         array of diffusivities K,
-% %         depth layer widths w,
-% %         distance between depth layer centers delz.
-% %         The 1st dimension of each array is space (modelled depths of
-% %         water column).
-% % Function assumes zero flux boundary conditions.
-% % Diffusivities K are at midpoints of spatial grid used for u, so 
-% % size(K,1)=size(u,1)-1.
-% usize = size(u);
-% dmdt = zeros(usize);
-% dmdt(1:usize(1)-1,:) = diff([zeros(1,usize(2)); (K ./ delz) .* diff(u)]); % rate of change of mass
-% dmdt(usize(1),:) = -sum(dmdt);  % mass is conserved
-% v = dmdt ./ w; % rate of change of concentration
-% end
-
 
