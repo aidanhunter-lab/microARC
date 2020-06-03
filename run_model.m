@@ -5,8 +5,6 @@ clc
 close all
 
 %% Load and filter forcing data
-% this is mostly copied from Fabian's code, much of which has been
-% commented out
 
 % select your model names
 % bioModel  = 'size_based_model'; % What biogeochemistry?
@@ -25,33 +23,12 @@ expName = 'AWI-Hausgarten';
 years = 2017:2018;
 
 % set input directories and files
-% baseDir = fullfile(filesep, 'media', 'aidan', 'STORAGE', 'Work', 'microARC');
-% forcDir = fullfile(baseDir, 'DATA', 'particle_trajectories', forcModel, forcName);
-% forcDummy = 'particles_MODEL_DOMAIN_EXPERIMENT-YEAR_YEAR_t*iSub03.mat';
-
-% baseDir = fullfile(filesep, 'media', 'aidan', 'STORAGE', 'Work', 'microARC');
 forcDir = fullfile('DATA', 'particle_trajectories', forcModel, forcName);
 forcDummy = 'particles_MODEL_DOMAIN_EXPERIMENT-YEAR_YEAR_t*iSub03.mat';
 
-
 % % set output directory
-% outDir = fullfile(baseDir, 'OUTPUT', bioModel, 'FORCSTR', runName, expName);
-
-% select trajectores
-%  - selection options
-%     1. use all trajectories by setting useTraj = [];
-%     2. manually define trajectory index vector, e.g.: iTraj0 = 1:100:7500
-%     3. use validation region(s)/transect(s) and time => vector of negative region indices, e.g.: iTraj = -1
-
-% MERGING THIS SCRIPT WITH CODE THAT CHOOSES APPROPRIATE TRAJECTORIES CAN
-% BE DONE LATER... FOR NOW JUST SELECT A FEW TRAJECTORIES TO RUN THE MODEL
-% OVER
-
-% useTraj = [];
-useTraj = 1:100:5000;
-
-% % set maximum number of trajectories to be used (set <=0 if no limitation)
-% nTrajMax = 0;
+% outDir = fullfile('OUTPUT', bioModel, 'FORCSTR', runName, expName);
+% outDir = strrep(outDir, 'FORCSTR', sprintf('FRC_%s', forcModel));
 
 % list of biological forcing variables (used for initalization)
 switch lower(forcModel)
@@ -61,20 +38,13 @@ switch lower(forcModel)
         bioForcing = {'NO3', 'PS', 'PL'};
 end
 
-% outDir = strrep(outDir, 'FORCSTR', sprintf('FRC_%s', forcModel));
+% select trajectores - choose all trajectories, they're filtered later
+%  - selection options
+%     1. use all trajectories by setting useTraj = [];
+%     2. manually define trajectory index vector, e.g.: iTraj0 = 1:100:7500
+useTraj = [];
+% useTraj = 1:100:5000;
 
-% define "validation" region(s) or transect(s); extend list as necessary --
-% see Fabian's original code...
-% #1: Fram Strait
-i = 1;
-vali(i).name = 'FramStrait';       % name of region/transect
-vali(i).type = 'transect';         % type of validation
-vali(i).date = '01-Mar to 30-Sep'; % time when trajectories need to cut the region
-vali(i).radius = 25;               % radius around section locations in km
-
-% use this separator string for validation time periods (in the different
-% validation regions and/or transects
-dateSep = ' to ';
 
 % loop over selected forcing files
 for iy = 1:length(years)
@@ -150,656 +120,298 @@ end
 %% Model set-up
 
 % Model input is stored in 3 structs, 'Forc', 'FixedParams' and 'Params',
-% that contain the time-varying forcing data, constant parameters, and
-% parameters to vary in an optimisation. Any parameter contained in 'Params'
-% may be moved into 'FixedParams'.
+% containing particle-trajectory forcing data, constant parameters, and
+% variable parameters that may be numerically tuned. A 4th struct, 'Data',
+% containing measurements is required if parameters are numerically tuned.
 
-FixedParams.years = years;
-for iy = 1:length(years)
-    y_index = ['y' num2str(years(iy))];
-    FixedParams.(y_index).nt = length(F.(y_index).t);        % number of timesteps
-    FixedParams.(y_index).t = F.(y_index).t;                 % all times
-    FixedParams.(y_index).nTraj = length(F.(y_index).iTraj); % number of selected particle trajectories
-    FixedParams.(y_index).lat = F.(y_index).y;               % latitude
-    FixedParams.(y_index).lon = F.(y_index).x;               % longitude
+% Choose model dimensions and initial parameter values
+[FixedParams, Params] = initialiseParameters(F);
+Params0 = Params;
+
+% Parameter values can be changed using name-value pairs in
+% updateParameters.m, eg,
+Params = updateParameters(Params, FixedParams, 'pmax_a', 30, 'pmax_b', -0.55, 'Gmax', 3);
+
+
+%~~~~~~~~~~~~~
+% Prepare data
+%~~~~~~~~~~~~~
+
+% Interpolate forcing data over chosen depth layers
+Forc0 = prepareForcing(F,FixedParams);
+
+% load fitting data
+obsDir = fullfile('DATA', 'AWI_Hausgarten');
+obsFile = 'AWI-Hausgarten.xlsx';
+dat = readtable(fullfile(obsDir,obsFile));
+% rename variables
+vn = dat.Properties.VariableNames;
+vn{strcmp(vn, 'PangaeaEventLabel')} = 'eventLabel';
+vn{strcmp(vn, 'lat_degN')} = 'lat';
+vn{strcmp(vn, 'long_degE')} = 'lon';
+vn{strcmp(vn, 'Sample')} = 'sample';
+vn{strcmp(vn, 'depth_m')} = 'depth';
+vn{strcmp(vn, 'StationName')} = 'station';
+dat.Properties.VariableNames = vn;
+% use years with samples and forcing data
+clear year
+iForc = ismember(year(dat.SamplingDate), FixedParams.years);
+dat = dat(iForc,:);
+dat.year = year(dat.SamplingDate);
+dat.month = month(dat.SamplingDate);
+dat.day = day(dat.SamplingDate);
+dat.yearday = floor(yearday(datenum(dat.SamplingDate)));
+eventLabel = unique(dat.eventLabel, 'stable');
+event = (1:length(eventLabel))';
+events = table(event, eventLabel);
+dat = join(dat, events);
+% remove duplicate event numbers corresponding to samples at different depths
+dat0 = dat;
+dat.depth = [];
+dat.sample = [];
+dat = unique(dat, 'stable');
+head(dat)
+
+% Filter forcing data by finding trajectories close to sampling events
+maxDist = 25; % distance of particle from sample location
+maxTraj = 10; % maximum number of particles per sample event
+[Forc, eventTraj] = chooseTrajectories(Forc0, dat, maxDist, maxTraj);
+% head(eventTraj) % list all trajectories selected for each sampling event
+
+% Store fitting-data in separate struct
+events = unique(eventTraj.event);
+Data.nEvent = length(events);
+Data.label = dat.eventLabel(ismember(dat.event,events));
+Data.t = datenum(dat.SamplingDate(ismember(dat.event,events)));
+Data.eventTraj = false(Data.nEvent, Forc.nTraj);
+for i = 1:Data.nEvent
+    ti = eventTraj.trajIndex(eventTraj.event == events(i));
+    Data.eventTraj(i,ti) = true;
 end
-
-
-%~~~~~~~~~~~~~~~~~~~~~~
-% Modelled depth layers
-%~~~~~~~~~~~~~~~~~~~~~~
-
-FixedParams.nz = 15;                                                  % number of modelled depth layers
-FixedParams.Htot = 150;                                               % total modelled depth
-dzmin = 5;                                                            % minimum layer width (dzmin <= Htot/(nz-1))
-dzmax = 2 * FixedParams.Htot / FixedParams.nz - dzmin;                % maximum layer width
-FixedParams.zw = [0; -cumsum(linspace(dzmin,dzmax,FixedParams.nz))']; % depth of layer edges
-FixedParams.zwidth = FixedParams.zw(1:end-1) - FixedParams.zw(2:end); % widths of depth layers
-FixedParams.z = 0.5*(FixedParams.zw(1:end-1)+FixedParams.zw(2:end));  % midpoints of depth layers
-FixedParams.delz = abs(diff(FixedParams.z));                          % distance between centres of adjacent depth layers
-
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-% Prepare forcing data for model
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% Extracts relavent data and interpolate it over our chosen depth layers
-[Forc, FixedParams] = prepareForcing(F,FixedParams);
-
-
-%~~~~~~~~~~~~~~~~
-% State variables
-%~~~~~~~~~~~~~~~~
-
-% Inorganic nutrients - only nitrate is modelled
-FixedParams.INtype = {'NO3'};
-FixedParams.nIN = length(FixedParams.INtype);                               % number of inorganic nutrients
-
-% Plankton
-FixedParams.nPP = 6;                                                        % number of phytoplankton size classes
-FixedParams.nZP = 1;                                                        % number of zooplankton classes
-
-% Phytoplanton sizes - smallest diameter is 0.5 mu m, volumes of successive size 
-% classes increase by factors of 32 (equally spaced on log-scale).
-PPdia = 0.5;
-FixedParams.PPsize = 4/3*pi*(PPdia/2)^3;
-FixedParams.PPsize(2:FixedParams.nPP) = 32 .^ (1:FixedParams.nPP-1) .* ...
-    FixedParams.PPsize(1);                                                  % cell volumes [mu m^3]
-PPdia = 2 .* (3 .* FixedParams.PPsize ./ (4*pi)) .^ (1/3);
-FixedParams.diatoms = FixedParams.PPsize >= 100;                            % assume large phytoplankton are diatoms - only needed to split SINMOD output over classes during state variable initialisation
-
-FixedParams.phytoplankton = [true(1,FixedParams.nPP) ... 
-    false(1,FixedParams.nZP)];                                              % index phytoplankton
-FixedParams.zooplankton = [false(1,FixedParams.nPP) ... 
-    true(1,FixedParams.nZP)];                                               % index zooplankton
-
-% Organic matter - only DOM is explicitly modelled
-FixedParams.OMtype = {'DOM'};
-FixedParams.nOM = length(FixedParams.OMtype);                               % number of organic matter variables
-
-FixedParams.nVar = FixedParams.nIN + FixedParams.nPP + FixedParams.nZP + ...
-    FixedParams.nOM;                                                        % number of state variables per depth and trajectory
 
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % State variable initial condition
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-% Store state variables in array: 1st dimension = variable
-%                                 2nd dimension = location (trajectory)
+% Store state variables in array v0: 1st dimension = variable
+%                                    2nd dimension = location (trajectory)
 % 
 % Order of variables = inorganic nutrients [depth]
 %                      phytoplankton       [size, depth]
 %                      zooplankton         [depth]
 %                      organic matter      [depth]
+%
 
-[v0, initialState] = initialiseVariables(FixedParams,Forc); % v0 stores initial input vectors; initialState contains the same info in a more readable struct
-
-
-%~~~~~~~~~~~~~~~~~
-% Variable indexes
-%~~~~~~~~~~~~~~~~~
-
-% Create indexes to extract inorganic nutrients, plankton and organic
-% matter from the array containing all variables, and indexes for specific
-% nutrient types within each of IN, PP, ZP and OM.
-
-FixedParams = createIndexes(FixedParams);
+v0 = initialiseVariables(FixedParams,Forc); % v0 stores initial input vectors
 
 
+%~~~~~~~~~~~~~~~~~~~~~~~
+% Optional extra outputs
+%~~~~~~~~~~~~~~~~~~~~~~~
 
-%~~~~~~~~~~~~~~~~~
-% Model parameters
-%~~~~~~~~~~~~~~~~~
-
-FixedParams.POM_is_lost = true; % is POM lost from the system by sinking below bottom modelled depth layer
-
-% Initialise model parameters
-[Params, FixedParams] = initialiseParameters(FixedParams);
-Params0 = Params;
-
-
-
-%% Integration time interval
-dt=1;             % output timestep (days)
-t0=1;             % tstep 1
-tspan = nan(length(FixedParams.years),2);
-tmax = nan(1,length(FixedParams.years));
-for iy = 1:length(FixedParams.years)
-    y_index = ['y' num2str(FixedParams.years(iy))];
-    tmax(iy) = FixedParams.(y_index).nt;  % final timestep
-    tspan(iy,:) = [t0 tmax(iy)];          % modelled time interval
-end
+% Can return extra output along with the integrated state variables. Four
+% options (so far) for returnExtras.
+% returnExtras = 'none';
+returnExtras = 'auxiliary'; % return non-state variables
+% returnExtras = 'rates';   % return rates of change of state variables
+% returnExtras = 'auxiliaryAndRates';
+FixedParams.returnExtras = returnExtras;
 
 
 %% Integrate
 
-nEquations = FixedParams.nVar * FixedParams.nz; % number of ODEs
+% Solve with ode45, called separately for each time step -- defined by
+% forcing data (daily) intervals
+odeInitTime = 12/24; % initial timestep = 12 hrs. (ode45 will automatically reduce this if required)
+odeMaxTime = 1;      % max timestep = 1 day
 
-% solve with ode45 solver
-odeDTmin = 1/24/60; % min timestep = 1 minute
-odeDTmax = 1;      % max timestep = 1 day
-
-% set solver options: positive definite, tolerances, min/max tsteps
-ode45options=odeset('NonNegative',[1 ones(1, nEquations)],...
+% set solver options: positive definite, tolerances, initial & max time steps
+ode45options=odeset('NonNegative',[1 ones(1, FixedParams.nEquations)],...
   'AbsTol',1e-6,'RelTol',1e-4,...
-  'InitialStep',odeDTmin,'MaxStep',odeDTmax);
+  'InitialStep',odeInitTime,'MaxStep',odeMaxTime);
+
+poolObj = gcp; % integrations are parallelised over trajectories
 
 
-% Storage for output
-for iy = 1:length(FixedParams.years)
-    y_index = ['y' num2str(FixedParams.years(iy))];
-    out.(y_index) = nan(nEquations, tmax(iy), FixedParams.(y_index).nTraj);
-end
-
-% Optional extra outputs to extract - 4 cases allowed so far. When running
-% a parameter optimisation algorithm set returnExtras='none' for speed.
-returnExtras = 'none';
-% returnExtras = 'auxiliaryAndRates';
-% returnExtras = 'auxiliary';             % extra, non-state variables, are stored
-% returnExtras = 'rates';               % state variable rates of change are stored
-
-FixedParams.returnExtras = strcmp(returnExtras, 'auxiliary') || ...
-    strcmp(returnExtras, 'auxiliaryAndRates');
-
-% create storage for extra outputs if required
-switch returnExtras
-    case 'auxiliaryAndRates'
-        for iy = 1:length(FixedParams.years)
-            y_index = ['y' num2str(FixedParams.years(iy))];
-            auxVars.(y_index) = [];
-            rates.(y_index) = nan(nEquations, tmax(iy), FixedParams.(y_index).nTraj);
-        end
-    case 'auxiliary'
-        for iy = 1:length(FixedParams.years)
-            y_index = ['y' num2str(FixedParams.years(iy))];
-            auxVars.(y_index) = [];
-        end
-    case 'rates'
-        for iy = 1:length(FixedParams.years)
-            y_index = ['y' num2str(FixedParams.years(iy))];
-            rates.(y_index) = nan(nEquations, tmax(iy), FixedParams.(y_index).nTraj);
-        end
-end
+% integrating function
+tic
+[OUT, AUXVARS, RATES, namesExtra, nExtra] = ... 
+    integrateTrajectories(FixedParams, Params, Forc, v0, ode45options);
+toc
 
 
-% Combine parameters into single input structure
-parameterList.Params = Params;
-parameterList.FixedParams = FixedParams;
+% %---------------------------------
+% % Parameters to tune
+% parnames = {'A', 'm', 'aP', 'Gmax', 'k_G', 'Lambda', 'lambda_max', 'wk', ...
+%     'rPOM', 'rDOM', 'Qmin_a', 'Qmin_b', 'Qmax_over_delQ_a', ... 
+%     'Qmax_over_delQ_a', 'Vmax_over_Qmin_a', 'Vmax_over_Qmin_b', ... 
+%     'aN_over_Qmin_a', 'aN_over_Qmin_b', 'pmax_a', 'pmax_b'};
+% FixedParams.tunePars = parnames;
+% npars = length(parnames);
+% pars = nan(1, npars);
+% for i = 1:npars
+%     pars(i) = Params.(parnames{i});
+% end
+% 
+% % tune parameters
+% ga(@(x)costFun(x, FixedParams, Params, Forc, Data, v0, ode45options), npars)
+% 
+% %---------------------------------
 
 
-% Loop through years
-for iy = 1:length(FixedParams.years)    
-    y_index = ['y' num2str(FixedParams.years(iy))];    
-    % Loop through trajectories
-    for kk = 1:FixedParams.(y_index).nTraj
-        % Extract forcing data for year iy, trajectory kk; and permute time to
-        % last dimension
-        forcing.T = permute(Forc.(y_index).T(:,:,kk), [2 1]);
-%         forcing.PAR = permute(Forc.(y_index).PAR(:,:,kk), [2 1]);
-        forcing.PARsurf = permute(Forc.(y_index).PARsurf(:,:,kk), [2 1]);
-        forcing.K = permute(Forc.(y_index).kv(:,:,kk), [2 1]);
-        forcing.wet = permute(Forc.(y_index).wet(:,:,kk), [2 1]);
+% Extract solutions from array, OUT, into a more readable struct, out.
+% Same for extra outputs...
+nt = FixedParams.nt;
+nz = FixedParams.nz;
+nPP = FixedParams.nPP;
+nTraj = Forc.nTraj;
 
-        
-        % Initial condition for year iy, trajectory kk
-        v_in = v0.(y_index)(:,kk);        
-        out.(y_index)(:,1,kk) = v_in;
-        
-        % Initialise extra outputs
-        if ~strcmp(returnExtras, 'none')
-            ts = tspan(iy,1):tspan(iy,1)+1;
-            parameterList.Forc.T = forcing.T(:,ts);
-%             parameterList.Forc.PAR = forcing.PAR(:,ts);
-            parameterList.Forc.PARsurf = forcing.PARsurf(:,ts);
-            parameterList.Forc.K = forcing.K(:,ts);
-            switch returnExtras
-                case 'auxiliaryAndRates'
-                    [dvdt,extraOutput] = ODEs(0, v_in, parameterList);
-                    fields = fieldnames(extraOutput);
-                    for jj = 1:length(fields)
-                        auxVars.(y_index).(fields{jj})(:,1,kk) = extraOutput.(fields{jj});
-                    end
-                    rates.(y_index)(:,1,kk) = dvdt;
-                case 'auxiliary'
-                    [~,extraOutput] = ODEs(0, v_in, parameterList);
-                    fields = fieldnames(extraOutput);
-                    for jj = 1:length(fields)
-                        auxVars.(y_index).(fields{jj})(:,1,kk) = extraOutput.(fields{jj});
-                    end
-                case 'rates'
-                    dvdt = ODEs(0, v_in, parameterList);
-                    rates.(y_index)(:,1,kk) = dvdt;
+out.N = reshape(OUT(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
+out.P = reshape(OUT(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
+out.Z = reshape(OUT(FixedParams.ZP_index,:,:), [1 nz nt nTraj]);
+out.OM = reshape(OUT(FixedParams.OM_index,:,:), [1 nz nt nTraj]);
+
+if ~strcmp(returnExtras, 'none')
+    switch returnExtras
+        case 'auxiliary'
+            for k = 1:nExtra
+                auxVars.(namesExtra{k}) = squeeze(AUXVARS(:,k,:,:));
             end
-            clear extraOutput dvdt
-        end
-        
-        % Integrate step-wise between successive data points -- perhaps the
-        % only way to guarentee smoothly continuous ODE functions
-        tic        
-%         profile on
-        for tt = 1:tmax(iy)-1            
-            % Set forcing data
-            parameterList.Forc.T = forcing.T(:,tt:tt+1);
-%             parameterList.Forc.PAR = forcing.PAR(:,tt:tt+1);
-            parameterList.Forc.PARsurf = forcing.PARsurf(:,tt:tt+1);
-            parameterList.Forc.K = forcing.K(:,tt:tt+1);
-            
-            % Account for changes in modelled water column depth caused by
-            % shallow portions of particle trajectories.
-            % If water column deepens then fill new depth layers assuming
-            % concentrations equal those of previous deepest layer                
-            if diff(sum(forcing.wet(:,tt:tt+1))) > 0
-                % Extract state variable types from input vector
-                N = v_in(parameterList.FixedParams.IN_index);
-                P = reshape(v_in(parameterList.FixedParams.PP_index), ...
-                    [parameterList.FixedParams.nPP parameterList.FixedParams.nz]);
-                Z = v_in(parameterList.FixedParams.ZP_index);
-                OM = v_in(parameterList.FixedParams.OM_index); 
-                % Infill values
-                zmax_now = find(forcing.wet(:,tt),1,'last');
-                zmax_next = find(forcing.wet(:,tt+1),1,'last');                
-                nfill = zmax_next - zmax_now;
-                N(zmax_now+1:zmax_next) = repmat(N(zmax_now), [nfill 1]);                
-                P(:,zmax_now+1:zmax_next) = repmat(P(:,zmax_now), [1 nfill]);                
-                Z(zmax_now+1:zmax_next) = repmat(Z(zmax_now), [nfill 1]);                
-                OM(zmax_now+1:zmax_next) = repmat(OM(zmax_now), [nfill 1]);                
-                % Recombine the input vector
-                v_in = [N; P(:); Z; OM];
+        case 'auxiliaryAndRates'
+            for k = 1:nExtra
+                auxVars.(namesExtra{k}) = squeeze(AUXVARS(:,k,:,:));
             end
-            
-            
-            % Integrate -- returning full output structure can be useful for debugging
-            sol=ode45(@(t, v_in) ODEs(t, v_in, parameterList), [0 1], v_in, ode45options);
-            
-            % Store solutions each day (each forcing data time-step)
-            out.(y_index)(:,tt+1,kk) = deval(sol, 1);            
-            clear sol
-
-            % Update initials for next time step
-            v_in = out.(y_index)(:,tt+1,kk);
-            
-            % Extract extra outputs            
-            if ~strcmp(returnExtras, 'none')
-                switch returnExtras
-                    case 'auxiliaryAndRates'
-                        [dvdt,extraOutput] = ODEs(0, v_in, parameterList);
-                        fields = fieldnames(extraOutput);
-                        for jj = 1:length(fields)
-                            auxVars.(y_index).(fields{jj})(:,tt+1,kk) = extraOutput.(fields{jj});
-                        end
-                        rates.(y_index)(:,1,kk) = dvdt;
-                    case 'auxiliary'
-                        [~,extraOutput] = ODEs(0, v_in, parameterList);
-                        fields = fieldnames(extraOutput);
-                        for jj = 1:length(fields)
-                            auxVars.(y_index).(fields{jj})(:,tt+1,kk) = extraOutput.(fields{jj});
-                        end
-                    case 'rates'
-                        dvdt = ODEs(0, v_in, parameterList);
-                        rates.(y_index)(:,tt+1,kk) = dvdt;
-                end
-                clear extraOutput dvdt
-            end
-        end
-        
-        % Omit any values occuring below the maximum modelled depth --
-        % caused by shallowing sea floor
-        dry = ~forcing.wet;
-        if any(dry(:))
-            N = out.(y_index)(parameterList.FixedParams.IN_index,:,kk);
-            P = out.(y_index)(parameterList.FixedParams.PP_index,:,kk);            
-            P = reshape(P, [parameterList.FixedParams.nPP ...
-                parameterList.FixedParams.nz size(P,2)]);
-            Z = out.(y_index)(parameterList.FixedParams.ZP_index,:,kk);
-            OM = out.(y_index)(parameterList.FixedParams.OM_index,:,kk);
-            N(dry) = nan;
-            P(repmat(reshape(dry, [1 size(dry)]), [size(P,1) 1 1])) = nan;
-            P = reshape(P, [size(P,1)*size(P,2) size(P,3)]);
-            Z(dry) = nan;
-            OM(dry) = nan;
-            out.(y_index)(:,:,kk) = [N; P; Z; OM];
-
-        end
-        
-%         profile viewer
-        toc
-        
+            rates.N = reshape(RATES(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
+            rates.P = reshape(RATES(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
+            rates.Z = reshape(RATES(FixedParams.ZP_index,:,:), [1 nz nt nTraj]);
+            rates.OM = reshape(RATES(FixedParams.OM_index,:,:), [1 nz nt nTraj]);
+        case 'rates'
+            rates.N = reshape(RATES(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
+            rates.P = reshape(RATES(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
+            rates.Z = reshape(RATES(FixedParams.ZP_index,:,:), [1 nz nt nTraj]);
+            rates.OM = reshape(RATES(FixedParams.OM_index,:,:), [1 nz nt nTraj]);
     end
 end
-
-
-
-%% Extract outputs
-
-% State variables
-for iy = 1:length(FixedParams.years)
-    y_index = ['y' num2str(FixedParams.years(iy))];
-    output.(y_index).N = out.(y_index)(FixedParams.IN_index,:,:);    
-    output.(y_index).P = reshape(out.(y_index)(FixedParams.PP_index,:,:), ...
-        [FixedParams.nPP FixedParams.nz FixedParams.(y_index).nt ...
-        FixedParams.(y_index).nTraj]);
-    output.(y_index).Z = out.(y_index)(FixedParams.ZP_index,:,:);
-    output.(y_index).OM = out.(y_index)(FixedParams.OM_index,:,:);
-end
-
-% Extra outputs
-if strcmp(returnExtras, 'auxiliary') || strcmp(returnExtras, 'auxiliaryAndRates')
-    for iy = 1:length(FixedParams.years)
-        y_index = ['y' num2str(FixedParams.years(iy))];
-        fields =  fieldnames(auxVars.(y_index));
-        for ff = 1:length(fields)
-            outputExtra.(y_index).(fields{ff}) = auxVars.(y_index).(fields{ff});
-        end
-    end
-end
-
-
-
-%% Check mass is conserved
-
-% This will need adjusted for case POM_is_lost==true
-for iy = 1:length(FixedParams.years)
-    if iy == 1, figure, end
-    y_index = ['y' num2str(FixedParams.years(iy))];    
-    totalMass.(y_index) = squeeze(sum(FixedParams.zwidth .* output.(y_index).N)) + ...
-        squeeze(sum(FixedParams.zwidth .* output.(y_index).Z)) + ...
-        squeeze(sum(FixedParams.zwidth .* output.(y_index).OM)) + ...    
-        squeeze(sum(sum(FixedParams.zwidth .* permute(output.(y_index).P, [2 1 3 4])))); % total quantity at each time step - assuming 1m^2 cross-sectional area of water column
-    subplot(length(FixedParams.years), 1, iy)
-    plot(diff(totalMass.(y_index)))
-    if iy == length(FixedParams.years)
-        xlabel('time step')
-        suptitle('change in total mass each time step')
-    end
-    ylabel('mass difference (mmol N)')
-    title(num2str(FixedParams.years(iy)))
-end
-
-
 
 
 %% Plot some output...
 
-close all
-
-iy = 1;    % Choose year
-y_index = ['y' num2str(FixedParams.years(iy))];
-nsimTraj = size(out.(y_index), 3);
-nt = size(out.(y_index), 2);
-
-kk = 1;  % Choose output from a single trajectory
-
-N = output.(y_index).N(:,:,kk);
-P = output.(y_index).P(:,:,:,kk);
-Z = output.(y_index).Z(:,:,kk);
-OM = output.(y_index).OM(:,:,kk);
+%~~~~~~~~~~~~~~~~~~~~~~~~~
+% Plot single trajectories
+%~~~~~~~~~~~~~~~~~~~~~~~~~
 
 % Save plots?
 save = false;
 % save = true;
 folder = 'OUTPUT/plots/';
-% folder = '/home/aidan/Desktop/meeting/';
-% folder = '/media/aidan/STORAGE/Work/microARC/my_models/latex files/plots/';
+
+close all
+
+% Choose trajectory
+k = 1;
+% Or, first, filter by year or sampling event 
+iy = 1;  % year index
+ie = 10; % sampling event
+
+if FixedParams.years(iy) ~= dat.year(dat.event == ie)
+    kk = nan;
+    warning('Selected sampling event must occur during selected year')
+else
+    kk = eventTraj.trajIndex(eventTraj.event == ie); % all trajectories for selected event
+end
+k = kk(1);
 
 
+% Depth-time contour plots
 
-% Create time-depth grid for interpolation
-[depth, time] = ndgrid(abs(FixedParams.z), 1:FixedParams.(y_index).nt);
-[depthGrid, timeGrid] = ndgrid(1:1:abs(FixedParams.zw(end)), ...
-    1:FixedParams.(y_index).nt);
-
-% Should plots be smoothed by linear interpolation?
-% smooth = 'nearest'; % interpolation type
-smooth = 'linear';
-
-
-% colourMap = 'plasma';
-% nCols = 100; % number of colours. 100 is the default of tailedColourScale
-% qr = [0.025 0.975]; % focus of colour scale lies within metric quantiles qr
-
-
-% Plot forcing data
-figure(1)
-
-subplot(3,1,1)
-x = Forc.(y_index).T(:,:,kk)';
-F = griddedInterpolant(depth, time, x, smooth);
-Fsmooth = flip(F(depthGrid, timeGrid));
-contourf(Fsmooth)
-colorbar
-title('Temperature (\circC)')
-ylabel('depth (m)')
-xticks(100:100:FixedParams.(y_index).nt)
-xticklabels(yearday(FixedParams.(y_index).t(100:100:FixedParams.(y_index).nt)))
-yticks(linspace(0,abs(FixedParams.zw(end)),7))
-yticklabels(linspace(FixedParams.zw(end),0,7))
-
-subplot(3,1,2);
-x = Forc.(y_index).kv_center(:,:,kk)';
-F = griddedInterpolant(depth, time, x, smooth);
-Fsmooth = flip(F(depthGrid, timeGrid));
-% Fsmooth(Fsmooth<=0) = min(Fsmooth(Fsmooth>0));
-Fsmooth(Fsmooth<=0) = nan;
-contourf(log10(Fsmooth))
-cb = colorbar;
-for ii = 1:length(cb.TickLabels), cb.TickLabels{ii} = string(10 ^ str2num(cb.TickLabels{ii})); end
-title('Diffusivity (m^2 day^{-1})')
-ylabel('depth (m)')
-xticks(100:100:FixedParams.(y_index).nt)
-xticklabels(yearday(FixedParams.(y_index).t(100:100:FixedParams.(y_index).nt)))
-yticks(linspace(0,abs(FixedParams.zw(end)),7))
-yticklabels(linspace(FixedParams.zw(end),0,7))
-
-set(gca,'colorscale','log')
-
-subplot(3,1,3)
-
-x = outputExtra.(y_index).PAR(:,:,kk);
-F = griddedInterpolant(depth, time, x, smooth);
-Fsmooth = flip(F(depthGrid, timeGrid));
-% Fsmooth(Fsmooth<=0) = min(Fsmooth(Fsmooth>0));
-Fsmooth(Fsmooth<=0) = nan;
-% contourf(log10(Fsmooth))
-contourf(Fsmooth)
-cb = colorbar;
-% for ii = 1:length(cb.TickLabels), cb.TickLabels{ii} = string(10 ^ str2num(cb.TickLabels{ii})); end
-title('PAR (\muEin day^{-1} m^{-2})')
-xlabel('year-day')
-ylabel('depth (m)')
-xticks(100:100:FixedParams.(y_index).nt)
-xticklabels(yearday(FixedParams.(y_index).t(100:100:FixedParams.(y_index).nt)))
-yticks(linspace(0,abs(FixedParams.zw(end)),7))
-yticklabels(linspace(FixedParams.zw(end),0,7))
-
-colormap plasma
-
+% forcing data
+outputPlot('contour_DepthTime','forcing',k,out,FixedParams,Forc,auxVars,'linear');
 if save
+    fig = gcf;
     filename = 'forcing_data.png';
     figFile = fullfile(folder, filename);    
-    fig = gcf;
-    % Adjust figure window dimensions
-    fig.Units = 'inches';
-    fig.Position = [0 0 6 7];
-    fig.PaperPositionMode = 'auto'; % save figure window as-is
     print(fig, figFile, '-r300', '-dpng');
 end
 
-
-
-% Inorganic nutrient
-figure(2)
-x = N;
-% x(x==0) = nan;
-F = griddedInterpolant(depth, time, x, smooth);
-Fsmooth = flip(F(depthGrid, timeGrid));
-contourf(Fsmooth)
-colorbar
-title('DIN (mmol N / m^3)')
-xlabel('year-day')
-ylabel('depth (m)')
-xticks(100:100:FixedParams.(y_index).nt)
-xticklabels(yearday(FixedParams.(y_index).t(100:100:FixedParams.(y_index).nt)))
-yticks(linspace(0,abs(FixedParams.zw(end)),7))
-yticklabels(linspace(FixedParams.zw(end),0,7))
-colormap plasma
-
+% inorganic nutrient
+outputPlot('contour_DepthTime','inorganicNutrient',k,out,FixedParams,Forc,auxVars,'linear');
 if save
+    fig = gcf;
     filename = 'dissolved_inorganic_nutrient.png';
     figFile = fullfile(folder, filename);    
-    fig = gcf;
-    % Adjust figure window dimensions
-    fig.Units = 'inches';
-    fig.Position = [0 0 8 4];
-    fig.PaperPositionMode = 'auto'; % save figure window as-is
     print(fig, figFile, '-r300', '-dpng');
 end
 
-
-
-figure(3)
-multiPanelPlot = strcmp(returnExtras, 'auxiliary') || ...
-    strcmp(returnExtras, 'auxiliaryAndRates');
-if multiPanelPlot, subplot(3,1,1), end
-x = OM;
-blank = isnan(x);
-% x(blank) = nan;
-F = griddedInterpolant(depth, time, x, smooth);
-Fsmooth = flip(F(depthGrid, timeGrid));
-contourf(Fsmooth)
-colorbar
-title('DON (mmol N / m^3)')
-if ~multiPanelPlot, xlabel('year-day'), end
-ylabel('depth (m)')
-xticks(100:100:FixedParams.(y_index).nt)
-xticklabels(yearday(FixedParams.(y_index).t(100:100:FixedParams.(y_index).nt)))
-yticks(linspace(0,abs(FixedParams.zw(end)),7))
-yticklabels(linspace(FixedParams.zw(end),0,7))
-
-if multiPanelPlot
-    subplot(3,1,2)
-    
-    x = auxVars.(y_index).POM(:,:,kk);
-    x(blank) = nan;
-    F = griddedInterpolant(depth, time, x, smooth);
-    Fsmooth = flip(F(depthGrid, timeGrid));
-    contourf(Fsmooth)
-    colorbar
-    title('PON before sinking (mmol N / m^3)')
-    ylabel('depth (m)')
-    xticks(100:100:FixedParams.(y_index).nt)
-    xticklabels(yearday(FixedParams.(y_index).t(100:100:FixedParams.(y_index).nt)))
-    yticks(linspace(0,abs(FixedParams.zw(end)),7))
-    yticklabels(linspace(FixedParams.zw(end),0,7))
-    
-    subplot(3,1,3)
-    x = auxVars.(y_index).remin_POM(:,:,kk);
-    x(blank) = nan;
-    F = griddedInterpolant(depth, time, x, smooth);
-    Fsmooth = flip(F(depthGrid, timeGrid));
-    contourf(Fsmooth)
-    colorbar
-    title('PON after sinking (mmol N / m^3)')
-    xlabel('year-day')
-    ylabel('depth (m)')
-    xticks(100:100:FixedParams.(y_index).nt)
-    xticklabels(yearday(FixedParams.(y_index).t(100:100:FixedParams.(y_index).nt)))
-    yticks(linspace(0,abs(FixedParams.zw(end)),7))
-    yticklabels(linspace(FixedParams.zw(end),0,7))
-    
-end
-
-colormap plasma
-
+% organic nutrient
+outputPlot('contour_DepthTime','organicNutrient',k,out,FixedParams,Forc,auxVars,'linear');
 if save
+    fig = gcf;
     filename = 'organic_nutrient.png';
     figFile = fullfile(folder, filename);    
-    fig = gcf;
-    % Adjust figure window dimensions
-    fig.Units = 'inches';
-    if ~multiPanelPlot
-        fig.Position = [0 0 5 4];
-    else
-        fig.Position = [0 0 6 7];        
-    end
-    fig.PaperPositionMode = 'auto'; % save figure window as-is
     print(fig, figFile, '-r300', '-dpng');
 end
 
-
-
-
-
-
-figure(4) % phytoplankton - different panel for each size
-
-nc = floor(sqrt(FixedParams.nPP));
-nr = ceil(FixedParams.nPP / nc);
-
-index = reshape(1:FixedParams.nPP, nc, nr)';
-
-for ii = 1:FixedParams.nPP
-    subplot(nr,nc,index(ii))
-    x = squeeze(P(ii,:,:));
-%     x(x==0) = nan;
-    F = griddedInterpolant(depth, time, x, smooth);
-    Fsmooth = flip(F(depthGrid, timeGrid));
-    Fsmooth(Fsmooth<0) = 0;
-%     contourf(log10(Fsmooth))
-    contourf(Fsmooth)
-    colorbar
-%     cb = colorbar;
-%     for jj = 1:length(cb.TickLabels), cb.TickLabels{jj} = string(10 ^ str2num(cb.TickLabels{jj})); end
-    title([num2str(round(FixedParams.PPsize(ii),2,'significant')) ' \mum^3'])
-    xlabel('year-day')
-    ylabel('depth (m)')
-    xticks(100:100:FixedParams.(y_index).nt)
-    xticklabels(yearday(FixedParams.(y_index).t(100:100:FixedParams.(y_index).nt)))
-    yticks(linspace(0,abs(FixedParams.zw(end)),7))
-    yticklabels(linspace(FixedParams.zw(end),0,7))
-end
-suptitle('phytoplankton abundance given cell volume (mmol N / m^3)')
-colormap plasma
-
+% phytoplankton
+outputPlot('contour_DepthTime','phytoplankton',k,out,FixedParams,Forc,auxVars,'linear');
 if save
+    fig = gcf;
     filename = 'phytoplankton.png';
     figFile = fullfile(folder, filename);    
-    fig = gcf;
-    % Adjust figure window dimensions
-    fig.Units = 'inches';
-    fig.Position = [0 0 8 12];
-    fig.PaperPositionMode = 'auto'; % save figure window as-is
     print(fig, figFile, '-r300', '-dpng');
 end
 
-
-
-figure(5) % zooplankton
-
-x = Z;
-F = griddedInterpolant(depth, time, x, smooth);
-Fsmooth = flip(F(depthGrid, timeGrid));
-contourf(Fsmooth)
-colorbar
-title('zooplankton abundance (mmol N / m^3)')
-xlabel('year-day')
-ylabel('depth (m)')
-xticks(100:100:FixedParams.(y_index).nt)
-xticklabels(yearday(FixedParams.(y_index).t(100:100:FixedParams.(y_index).nt)))
-yticks(linspace(0,abs(FixedParams.zw(end)),7))
-yticklabels(linspace(FixedParams.zw(end),0,7))
-colormap plasma
-
+% zooplankton
+outputPlot('contour_DepthTime','zooplankton',k,out,FixedParams,Forc,auxVars,'linear');
 if save
+    fig = gcf;
     filename = 'zooplankton.png';
     figFile = fullfile(folder, filename);    
-    fig = gcf;
-    % Adjust figure window dimensions
-    fig.Units = 'inches';
-    fig.Position = [0 0 5 4];
-    fig.PaperPositionMode = 'auto'; % save figure window as-is
     print(fig, figFile, '-r300', '-dpng');
 end
+
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% Plot groups of trajectories corresponding to each event
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+close all
+
+% Choose event
+ie = 8;
+if ~ismember(ie, eventTraj.event), warning(['Choose event number within range (' num2str(min(eventTraj.event)) ', ' num2str(max(eventTraj.event)) ')']); end
+% trajectory indices
+kk = eventTraj.trajIndex(eventTraj.event == ie);
+
+outputPlot('trajectoryLine_LatLong','direction',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+outputPlot('trajectoryLine_LatLong','forcing',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+outputPlot('trajectoryLine_LatLong','inorganicNutrient',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+outputPlot('trajectoryLine_LatLong','organicNutrient',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+outputPlot('trajectoryLine_LatLong','phytoplankton',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+outputPlot('trajectoryLine_LatLong','zooplankton',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+
+
+
+%~~~~~~~~~~~~~~~
+% Time evolution
+%~~~~~~~~~~~~~~~
+
+close all
+
+% Choose event
+ie = 1;
+if ~ismember(ie, eventTraj.event), warning(['Choose event number within range (' num2str(min(eventTraj.event)) ', ' num2str(max(eventTraj.event)) ')']); end
+% trajectory indices
+kk = eventTraj.trajIndex(eventTraj.event == ie);
+
+outputPlot('trajectoryPolygon_TimeSeries','forcing',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+outputPlot('trajectoryPolygon_TimeSeries','nutrient',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+outputPlot('trajectoryPolygon_TimeSeries','phytoplankton',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+outputPlot('trajectoryPolygon_TimeSeries','phytoplanktonStacked',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+outputPlot('trajectoryPolygon_TimeSeries','phytoZooPlanktonStacked',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+
+outputPlot('barplot_TimeSeries','phytoZooPlankton',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+
 
 
 
