@@ -130,7 +130,7 @@ Params0 = Params;
 
 % Parameter values can be changed using name-value pairs in
 % updateParameters.m, eg,
-Params = updateParameters(Params, FixedParams, 'pmax_a', 30, 'pmax_b', -0.55, 'Gmax', 3);
+% Params = updateParameters(Params, FixedParams, 'pmax_a', 30, 'pmax_b', -0.55, 'Gmax', 3);
 
 
 %~~~~~~~~~~~~~
@@ -138,7 +138,7 @@ Params = updateParameters(Params, FixedParams, 'pmax_a', 30, 'pmax_b', -0.55, 'G
 %~~~~~~~~~~~~~
 
 % Interpolate forcing data over chosen depth layers
-Forc0 = prepareForcing(F,FixedParams);
+F = prepareForcing(F,FixedParams);
 
 % load fitting data
 obsDir = fullfile('DATA', 'AWI_Hausgarten');
@@ -175,7 +175,7 @@ head(dat)
 % Filter forcing data by finding trajectories close to sampling events
 maxDist = 25; % distance of particle from sample location
 maxTraj = 10; % maximum number of particles per sample event
-[Forc, eventTraj] = chooseTrajectories(Forc0, dat, maxDist, maxTraj);
+[Forc, eventTraj] = chooseTrajectories(F, dat, maxDist, maxTraj);
 % head(eventTraj) % list all trajectories selected for each sampling event
 
 % Store fitting-data in separate struct
@@ -236,7 +236,7 @@ poolObj = gcp; % integrations are parallelised over trajectories
 
 % integrating function
 tic
-[OUT, AUXVARS, RATES, namesExtra, nExtra] = ... 
+[OUT, AUXVARS, AUXVARS_2d, RATES, namesExtra, nExtra] = ... 
     integrateTrajectories(FixedParams, Params, Forc, v0, ode45options);
 toc
 
@@ -275,12 +275,18 @@ out.OM = reshape(OUT(FixedParams.OM_index,:,:), [1 nz nt nTraj]);
 if ~strcmp(returnExtras, 'none')
     switch returnExtras
         case 'auxiliary'
-            for k = 1:nExtra
+            for k = 1:nExtra(1)
                 auxVars.(namesExtra{k}) = squeeze(AUXVARS(:,k,:,:));
             end
+            for k = 1:nExtra(2)
+                auxVars.(namesExtra{nExtra(1) + k}) = squeeze(AUXVARS_2d(:,:,k,:,:));
+            end
         case 'auxiliaryAndRates'
-            for k = 1:nExtra
+            for k = 1:nExtra(1)
                 auxVars.(namesExtra{k}) = squeeze(AUXVARS(:,k,:,:));
+            end
+            for k = 1:nExtra(2)
+                auxVars.(namesExtra{nExtra(1) + k}) = squeeze(AUXVARS_2d(:,:,k,:,:));
             end
             rates.N = reshape(RATES(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
             rates.P = reshape(RATES(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);

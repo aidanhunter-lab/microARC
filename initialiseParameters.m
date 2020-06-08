@@ -38,11 +38,11 @@ FixedParams.nPP = 6; % number of phytoplankton size classes
 FixedParams.nZP = 1; % number of zooplankton classes
 % Phytoplanton sizes - smallest diameter is 0.5 mu m, volumes of successive size 
 % classes increase by factors of 32 (equally spaced on log-scale).
-PPdia = 0.5;
-FixedParams.PPsize = 4/3*pi*(PPdia/2)^3;
-FixedParams.PPsize(2:FixedParams.nPP) = 32 .^ (1:FixedParams.nPP-1) .* ...
-    FixedParams.PPsize(1);                                                  % cell volumes [mu m^3]
-FixedParams.PPsize = FixedParams.PPsize';
+PPdia = 0.5; % cell diameter [mu m]
+PPsize = 4/3*pi*(PPdia/2)^3; % cell volume [mu m^3]
+PPsize(2:FixedParams.nPP) = 32 .^ (1:FixedParams.nPP-1) .* PPsize(1);
+PPsize = PPsize(:);
+FixedParams.PPsize = PPsize;
 FixedParams.PPdia = 2 .* (3 .* FixedParams.PPsize ./ (4*pi)) .^ (1/3);
 FixedParams.diatoms = FixedParams.PPsize >= 100;                            % assume large phytoplankton are diatoms - only needed to split SINMOD output over classes during state variable initialisation
 FixedParams.phytoplankton = [true(1,FixedParams.nPP) ... 
@@ -63,6 +63,11 @@ FixedParams = createIndexes(FixedParams);
 
 FixedParams.attSW = 0.04; % light attenuation in sea water
 FixedParams.attP = 0.04;  % plankton-specific light attenuation
+
+% fixed size-based carbon quotas
+Q_C_a = 18e-12;
+Q_C_b = 0.94;
+FixedParams.Q_C = volumeDependent(Q_C_a, Q_C_b, PPsize);
 
 FixedParams.POM_is_lost = true; % is POM lost from the system by sinking below bottom modelled depth layer
 
@@ -161,6 +166,9 @@ Params.wk = 10;      % sinking rate of POM (m / day)
 % For efficiency, reshape and extend dimensions of some parameters before
 % using in model. Also calculate functions whose arguments only involve
 % parameters and not state variables.
+
+Params.Qmax = Params.Qmin .* (Params.Qmax_over_delQ ./ (Params.Qmax_over_delQ - 1));
+Params.delQ = Params.Qmax - Params.Qmin;
 
 % POM sinking and remineralisation matrix
 sinkTime = FixedParams.delz ./ Params.wk;         % time particles take to sink from center of one depth layer to the next
