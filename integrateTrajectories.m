@@ -1,4 +1,4 @@
-function [OUT, AUXVARS, RATES, namesExtra, nExtra] = ... 
+function [OUT, AUXVARS, AUXVARS_2d, RATES, namesExtra, nExtra] = ... 
     integrateTrajectories(FixedParams, Params, Forc, v0, ode45options)
 
 nt = FixedParams.nt;
@@ -31,7 +31,7 @@ OUT = nan(nEquations, nt, nTraj); % stores state variable outputs
 OUT(:,1,:) = reshape(v0, [nEquations 1 nTraj]);
 
 % Create and initialise arrays for extra output if needed
-[namesExtra, nExtra, AUXVARS, RATES] = ... 
+[namesExtra, nExtra, AUXVARS, AUXVARS_2d, RATES] = ... 
     initialiseExtraVariables(v0, parameterList, Forc);
 
 
@@ -45,7 +45,7 @@ parfor i = 1:nTraj
     % Initial state
     v_in = v0(:,i);
     % Integrate step-wise between successive data points
-    for j = 2:nt        
+    for j = 2:nt
         if deepens(:,j,i)
             % Extract state variable types from input vector
             N = v_in(N_index);
@@ -71,14 +71,19 @@ parfor i = 1:nTraj
         if ~strcmp(returnExtras, 'none')
             switch returnExtras
                 case 'auxiliary'
-                    [~, extraOutput] = ODEs(0, v_in, parameterList, forcing, j);
+                    [~, extraOutput, extraOutput_2d] = ... 
+                        ODEs(1, v_in, parameterList, forcing, j);
                     AUXVARS(:,j,i) = struct2array(extraOutput);
+                    AUXVARS_2d(:,j,i) = struct2array(structfun(@(x)x(:), ...
+                        extraOutput_2d, 'UniformOutput', false));
                 case 'auxiliaryAndRates'
-                    [dvdt, extraOutput] = ODEs(0, v_in, parameterList, forcing, j);
+                    [dvdt, extraOutput, extraOutput_2d] = ODEs(1, v_in, parameterList, forcing, j);
                     RATES(:,j,i) = dvdt;
                     AUXVARS(:,j,i) = struct2array(extraOutput);
+                    AUXVARS_2d(:,j,i) = struct2array(struct2fun(@(x)x(:), ...
+                        extraOutput_2d, 'UniformOutput', false));
                 case 'rates'
-                    RATES(:,j,i) = ODEs(0, v_in, parameterList, forcing, j);
+                    RATES(:,j,i) = ODEs(1, v_in, parameterList, forcing, j);
             end
         end            
     end
@@ -100,8 +105,10 @@ if any(dry(:))
     if ~strcmp(returnExtras, 'none')
         switch returnExtras
             case 'auxiliary'
-                AUXVARS = reshape(AUXVARS, [nz nExtra nt nTraj]);
-                AUXVARS(repmat(reshape(dry, [nz 1 nt nTraj]), [1 nExtra 1 1])) = nan;
+                AUXVARS = reshape(AUXVARS, [nz nExtra(1) nt nTraj]);
+                AUXVARS(repmat(reshape(dry, [nz 1 nt nTraj]), [1 nExtra(1) 1 1])) = nan;
+                AUXVARS_2d = reshape(AUXVARS_2d, [nPP nz nExtra(2) nt nTraj]);
+                AUXVARS_2d(repmat(reshape(dry, [1 nz 1 nt nTraj]), [nPP 1 nExtra(2) 1 1])) = nan;
             case 'rates'
                 N_rate = RATES(N_index,:,:);
                 P_rate = reshape(RATES(P_index,:,:), [nPP nz nt nTraj]);
@@ -116,6 +123,8 @@ if any(dry(:))
             case 'auxiliaryAndRates'
                 AUXVARS = reshape(AUXVARS, [nz nExtra nt nTraj]);
                 AUXVARS(repmat(reshape(dry, [nz 1 nt nTraj]), [1 nExtra 1 1])) = nan;
+                AUXVARS_2d = reshape(AUXVARS_2d, [nPP nz nExtra(2) nt nTraj]);
+                AUXVARS_2d(repmat(reshape(dry, [1 nz 1 nt nTraj]), [nPP 1 nExtra(2) 1 1])) = nan;
                 N_rate = RATES(N_index,:,:);
                 P_rate = reshape(RATES(P_index,:,:), [nPP nz nt nTraj]);
                 Z_rate = RATES(Z_index,:,:);
@@ -134,12 +143,14 @@ end
 % Tidy up
 switch returnExtras
     case 'none'
-        AUXVARS = []; RATES = []; nExtra = 0; namesExtra = [];
+        AUXVARS = []; AUXVARS_2d = []; RATES = []; nExtra = 0; namesExtra = [];
     case 'auxiliary'
-        AUXVARS = reshape(AUXVARS, [nz nExtra nt nTraj]);
+        AUXVARS = reshape(AUXVARS, [nz nExtra(1) nt nTraj]);
+        AUXVARS_2d = reshape(AUXVARS_2d, [nPP nz nExtra(2) nt nTraj]);
         RATES = [];
     case 'rates'
-        AUXVARS = []; nExtra = 0; namesExtra = [];
+        AUXVARS = []; AUXVARS_2d = []; nExtra = 0; namesExtra = [];
     case 'auxiliaryAndRates'
-        AUXVARS = reshape(AUXVARS, [nz nExtra nt nTraj]);
+        AUXVARS = reshape(AUXVARS, [nz nExtra(1) nt nTraj]);
+        AUXVARS_2d = reshape(AUXVARS_2d, [nPP nz nExtra(2) nt nTraj]);        
 end

@@ -1,4 +1,4 @@
-function [dvdt, extraOutput] = ODEs(t, v_in, parameterList, forc, timeStep)
+function [dvdt, extraOutput, extraOutput_2d] = ODEs(t, v_in, parameterList, forc, timeStep)
 
 fixedParams = parameterList.FixedParams;
 params = parameterList.Params;
@@ -60,14 +60,19 @@ gammaT = exp(params.A .* (T - params.Tref));
 %~~~~~~~~~~~
 
 % Growth depends on cellular nitrogen uptake rate and assimilation (photosynthetic) rate
+
 if all(I == 0)
     B_uptake = zeros(nPP+1,nz);
     N_uptake_losses = zeros(1, nz);    
+    Qeq = repmat(params.Qmax, [1 nz]); % equilibrium nitrogen Qeq=Qmax when I=0
 else    
     mu = params.pmax .* (1 - exp(-(params.aP .* I) ./ params.pmax));        % photosynthetic (metabolic) rate (1 / day)    
-    mumax = params.Vmax_over_Qmin ./ ((params.Qmax_over_delQ .* ... 
-        params.Vmax_over_Qmin) ./ mu + 1);                                  % maximum growth rate (1 / day) depends on nutrient uptake and photosynthetic rates
-    V = (gammaT .* N) ./ (N ./ mumax + 1 ./ params.aN_over_Qmin);           % growth rate, Michaelis-Menton form unusually written for efficiency
+    QmaxVmax_ = params.Qmax_over_delQ .* params.Vmax_over_Qmin;
+    aN = params.aN_over_Qmin .* N;
+    mumax = params.Vmax_over_Qmin ./ (QmaxVmax_ ./ mu + 1); % maximum growth rate (1 / day) depends on nutrient uptake and photosynthetic rates    
+    Q_ = (QmaxVmax_ .* aN) ./ (aN + params.Vmax_over_Qmin);
+    Qeq = (Q_ + mu) ./ (mu ./ params.Qmin + Q_ ./ params.Qmax);      % equilibrium N quota
+    V = (gammaT .* mumax .* aN) ./ (aN + mumax);           % growth rate, Michaelis-Menton form unusually written for efficiency
     B_uptake = [V; zeros(1, nz)] .* B;
     N_uptake_losses = sum(B_uptake);
 end
@@ -166,6 +171,8 @@ if fixedParams.returnExtras
     extraOutput.PAR = I;
     extraOutput.POM = SPOM;
     extraOutput.remin_POM = remin_POM';
+    
+    extraOutput_2d.Qeq = Qeq;
 end
 
 end
