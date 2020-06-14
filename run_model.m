@@ -138,7 +138,8 @@ Params0 = Params;
 %~~~~~~~~~~~~~
 
 % Interpolate forcing data over chosen depth layers
-F = prepareForcing(F,FixedParams);
+Forc0 = prepareForcing(F,FixedParams);
+% clear F
 
 % load fitting data
 obsDir = fullfile('DATA', 'AWI_Hausgarten');
@@ -175,7 +176,7 @@ head(dat)
 % Filter forcing data by finding trajectories close to sampling events
 maxDist = 25; % distance of particle from sample location
 maxTraj = 10; % maximum number of particles per sample event
-[Forc, eventTraj] = chooseTrajectories(F, dat, maxDist, maxTraj);
+[Forc, eventTraj] = chooseTrajectories(Forc0, dat, maxDist, maxTraj);
 % head(eventTraj) % list all trajectories selected for each sampling event
 
 % Store fitting-data in separate struct
@@ -217,6 +218,12 @@ returnExtras = 'auxiliary'; % return non-state variables
 % returnExtras = 'rates';   % return rates of change of state variables
 % returnExtras = 'auxiliaryAndRates';
 FixedParams.returnExtras = returnExtras;
+
+if strcmp(returnExtras, 'auxiliary') || strcmp(returnExtras, 'auxiliaryAndRates')
+    FixedParams.extraOutput = true; % ODEs.m returns structs containing non-state variables
+else
+    FixedParams.extraOutput = false;
+end
 
 
 %% Integrate
@@ -279,14 +286,14 @@ if ~strcmp(returnExtras, 'none')
                 auxVars.(namesExtra{k}) = squeeze(AUXVARS(:,k,:,:));
             end
             for k = 1:nExtra(2)
-                auxVars.(namesExtra{nExtra(1) + k}) = squeeze(AUXVARS_2d(:,:,k,:,:));
+                auxVars.(namesExtra{k+nExtra(1)}) = squeeze(AUXVARS_2d(:,:,k,:,:));
             end
         case 'auxiliaryAndRates'
             for k = 1:nExtra(1)
                 auxVars.(namesExtra{k}) = squeeze(AUXVARS(:,k,:,:));
             end
             for k = 1:nExtra(2)
-                auxVars.(namesExtra{nExtra(1) + k}) = squeeze(AUXVARS_2d(:,:,k,:,:));
+                auxVars.(namesExtra{k+nExtra(1)}) = squeeze(AUXVARS_2d(:,:,k,:,:));
             end
             rates.N = reshape(RATES(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
             rates.P = reshape(RATES(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
@@ -367,6 +374,24 @@ if save
     print(fig, figFile, '-r300', '-dpng');
 end
 
+% phytoplankton carbon
+outputPlot('contour_DepthTime','phytoplankton_C',k,out,FixedParams,Forc,auxVars,'linear');
+if save
+    fig = gcf;
+    filename = 'phytoplankton.png';
+    figFile = fullfile(folder, filename);    
+    print(fig, figFile, '-r300', '-dpng');
+end
+
+% phytoplankton N/C ratio
+outputPlot('contour_DepthTime','phytoplankton_N_C',k,out,FixedParams,Forc,auxVars,'linear');
+if save
+    fig = gcf;
+    filename = 'phytoplankton.png';
+    figFile = fullfile(folder, filename);    
+    print(fig, figFile, '-r300', '-dpng');
+end
+
 % zooplankton
 outputPlot('contour_DepthTime','zooplankton',k,out,FixedParams,Forc,auxVars,'linear');
 if save
@@ -417,9 +442,5 @@ outputPlot('trajectoryPolygon_TimeSeries','phytoplanktonStacked',ie,kk,out,Fixed
 outputPlot('trajectoryPolygon_TimeSeries','phytoZooPlanktonStacked',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
 
 outputPlot('barplot_TimeSeries','phytoZooPlankton',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
-
-
-
-
 
 

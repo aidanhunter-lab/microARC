@@ -17,6 +17,8 @@ switch type
         Z = squeeze(out.Z(:,:,:,itraj));
         OM = squeeze(out.OM(:,:,:,itraj));
         
+        P_C = squeeze(auxVars.PP_C(:,:,:,itraj));
+        
         
         % Time-depth grid for interpolation
         [depth, time] = ndgrid(abs(fixedParams.z), 1:fixedParams.nt);
@@ -183,8 +185,66 @@ switch type
                     yticks(linspace(0,abs(fixedParams.zw(end)),7))
                     yticklabels(linspace(fixedParams.zw(end),0,7))
                 end
-                suptitle('phytoplankton abundance given cell diameter')
+                suptitle('phytoplankton nitrogen concentration given cell diameter')
 %                 suptitle('phytoplankton abundance given cell volume (mmol N / m^3)')
+                colormap plasma
+                
+                %------------------------------------------------------------------
+                
+            case 'phytoplankton_C'
+                plt = figure;
+                nc = floor(sqrt(fixedParams.nPP));
+                nr = ceil(fixedParams.nPP / nc);
+                plt.Units = 'inches';
+                plt.Position = [0 0 8*nc 3*nr];
+                index = reshape(1:fixedParams.nPP, nc, nr)';
+                for ii = 1:fixedParams.nPP
+                    subplot(nr,nc,index(ii))
+                    x = squeeze(P_C(ii,:,:));
+                    F = griddedInterpolant(depth, time, x, smooth);
+                    Fsmooth = flip(F(depthGrid, timeGrid));
+                    Fsmooth(Fsmooth<0) = 0;
+                    contourf(Fsmooth)
+                    cb = colorbar;
+                    cb.Label.String = 'mmol C / m^3';
+                    title([num2str(round(fixedParams.PPdia(ii),2,'significant')) ' \mum'])
+                    xlabel('year-day')
+                    ylabel('depth (m)')
+                    xticks(100:100:fixedParams.nt)
+                    xticklabels(yearday(forcing.t(100:100:fixedParams.nt,itraj)))
+                    yticks(linspace(0,abs(fixedParams.zw(end)),7))
+                    yticklabels(linspace(fixedParams.zw(end),0,7))
+                end
+                suptitle('phytoplankton carbon concentration given cell diameter')
+                colormap plasma
+                
+                %------------------------------------------------------------------
+
+            case 'phytoplankton_N_C'
+                plt = figure;
+                nc = floor(sqrt(fixedParams.nPP));
+                nr = ceil(fixedParams.nPP / nc);
+                plt.Units = 'inches';
+                plt.Position = [0 0 8*nc 3*nr];
+                index = reshape(1:fixedParams.nPP, nc, nr)';
+                for ii = 1:fixedParams.nPP
+                    subplot(nr,nc,index(ii))
+                    x = squeeze(P(ii,:,:) ./ P_C(ii,:,:));
+                    F = griddedInterpolant(depth, time, x, smooth);
+                    Fsmooth = flip(F(depthGrid, timeGrid));
+                    Fsmooth(Fsmooth<0) = 0;
+                    contourf(Fsmooth)
+                    cb = colorbar;
+                    cb.Label.String = 'mmol N / mmol C';
+                    title([num2str(round(fixedParams.PPdia(ii),2,'significant')) ' \mum'])
+                    xlabel('year-day')
+                    ylabel('depth (m)')
+                    xticks(100:100:fixedParams.nt)
+                    xticklabels(yearday(forcing.t(100:100:fixedParams.nt,itraj)))
+                    yticks(linspace(0,abs(fixedParams.zw(end)),7))
+                    yticklabels(linspace(fixedParams.zw(end),0,7))
+                end
+                suptitle('phytoplankton N/C ratio given cell diameter')
                 colormap plasma
                 
                 %------------------------------------------------------------------
