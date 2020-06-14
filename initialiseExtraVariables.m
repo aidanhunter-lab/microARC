@@ -32,7 +32,7 @@ else
             nExtra(2) = length(namesExtra_2d);
             namesExtra = cat(1, namesExtra, namesExtra_2d);            
             AUXVARS_2d = nan(nExtra(2) * nPP * nz, nt, nTraj);
-            AUXVARS_2d(:,1,1) = struct2array(structfun(@(x)x(:), ... 
+            AUXVARS_2d(:,1,1) = struct2array(structfun(@(x)x(:)', ... 
                 extraOutput_2d, 'UniformOutput', false));
             for i = 2:nTraj
                 forcing.T = Forc.T(:,:,i);
@@ -40,7 +40,7 @@ else
                 forcing.PARsurf = Forc.PARsurf(:,:,i);
                 [~, extraOutput] = ODEs(0, v0(:,i), parameterList, forcing, 2);
                 AUXVARS(:,1,i) = struct2array(extraOutput);
-                AUXVARS_2d(:,1,i) = struct2array(structfun(@(x)x(:), ... 
+                AUXVARS_2d(:,1,i) = struct2array(structfun(@(x)x(:)', ... 
                     extraOutput_2d, 'UniformOutput', false));
             end
         case 'rates'
@@ -67,7 +67,7 @@ else
             nExtra(2) = length(namesExtra_2d);
             namesExtra = cat(1, namesExtra, namesExtra_2d);
             AUXVARS_2d = nan(nExtra(2) * nPP * nz, nt, nTraj);
-            AUXVARS_2d(:,1,1) = struct2array(structfun(@(x)x(:), ...
+            AUXVARS_2d(:,1,1) = struct2array(structfun(@(x)x(:)', ...
                 extraOutput_2d, 'UniformOutput', false));
             for i = 2:nTraj
                 forcing.T = Forc.T(:,:,i);
@@ -76,7 +76,7 @@ else
                 [dvdt, extraOutput, extraOutput_2d] = ODEs(0, v0(:,i), parameterList, forcing, 2);
                 RATES(:,1,i) = dvdt;
                 AUXVARS(:,1,i) = struct2array(extraOutput);
-                AUXVARS_2d(:,1,i) = struct2array(structfun(@(x)x(:), ...
+                AUXVARS_2d(:,1,i) = struct2array(structfun(@(x)x(:)', ...
                     extraOutput_2d, 'UniformOutput', false));
             end
     end    

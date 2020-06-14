@@ -64,11 +64,6 @@ FixedParams = createIndexes(FixedParams);
 FixedParams.attSW = 0.04; % light attenuation in sea water
 FixedParams.attP = 0.04;  % plankton-specific light attenuation
 
-% fixed size-based carbon quotas
-Q_C_a = 18e-12;
-Q_C_b = 0.94;
-FixedParams.Q_C = volumeDependent(Q_C_a, Q_C_b, PPsize);
-
 FixedParams.POM_is_lost = true; % is POM lost from the system by sinking below bottom modelled depth layer
 
 FixedParams.returnExtras = 'auxiliary'; % return extra output from ODEs
@@ -96,6 +91,8 @@ Params.sizeDependent = {
     'Qmin_b'
     'Qmax_over_delQ_a'
     'Qmax_over_delQ_b'
+    'Q_C_a'
+    'Q_C_b'
     'Vmax_over_Qmin_a'
     'Vmax_over_Qmin_b'    
     'aN_over_Qmin_a'
@@ -112,34 +109,37 @@ Params.sizeDependent = {
 
 % Size-dependent
 
-V_PP = FixedParams.PPsize(:); % cell volumes
 % minimum and maximum cellular nitrogen quota [mmol N / cell], values from Maranon et al. (2013)
 Params.Qmin_a = (1/14) * 1e-9 * 10^-1.47;
 Params.Qmin_b = 0.84;
-Params.Qmin = volumeDependent(Params.Qmin_a, Params.Qmin_b, V_PP);
+Params.Qmin = volumeDependent(Params.Qmin_a, Params.Qmin_b, PPsize);
 % maximumm quota is parameterised using the ratio
 % Qmax/(Qmax-Qmin) = 1/(1-a*V^b), where 0<a<1 and b<0
 Params.Qmax_over_delQ_a = 10^(-1.47+1.26);
 Params.Qmax_over_delQ_b = 0.84 - 0.93;
 Params.Qmax_over_delQ = 1 ./ (1 - volumeDependent(Params.Qmax_over_delQ_a, ...
-    Params.Qmax_over_delQ_b, V_PP));
+    Params.Qmax_over_delQ_b, PPsize));
+% carbon quota
+Params.Q_C_a = 18e-12;
+Params.Q_C_b = 0.94;
+Params.Q_C = volumeDependent(Params.Q_C_a, Params.Q_C_b, PPsize);
 % nitrogen specific maximum uptake rate [1/day], values from Maranon et al. (2013) scaled by qmin
 Params.Vmax_over_Qmin_a = 24 * 10^(-3 + 1.47);
 Params.Vmax_over_Qmin_b = 0.97 - 0.84;
 Params.Vmax_over_Qmin = volumeDependent(Params.Vmax_over_Qmin_a, ... 
-    Params.Vmax_over_Qmin_b, V_PP);
+    Params.Vmax_over_Qmin_b, PPsize);
 % cellular affinity for nitrogen scaled by qmin [m^3 / mmol N / day], derived using half saturation from Litchmann et al. (2007)
 Params.aN_over_Qmin_a = 24 * 10^(-3 + 0.77 + 1.26);
 Params.aN_over_Qmin_b = 0.97 - 0.27 - 0.84;
 Params.aN_over_Qmin = volumeDependent(Params.aN_over_Qmin_a, ... 
-    Params.aN_over_Qmin_b, V_PP);
+    Params.aN_over_Qmin_b, PPsize);
 % maximum photosynthetic rate [1/day] at infinite quota, values guessed based on mu_inf from Ward et al. (2017)
 Params.pmax_a = 100;
 % Params.pmax_a = 35;
 Params.pmax_b = -0.26;
-Params.pmax = volumeDependent(Params.pmax_a, Params.pmax_b, V_PP);
+Params.pmax = volumeDependent(Params.pmax_a, Params.pmax_b, PPsize);
 % partitioning of dead matter into DOM and POM
-Params.beta = 0.9 - 0.7 ./ (1 + exp(2.0 - log10(V_PP)));
+Params.beta = 0.9 - 0.7 ./ (1 + exp(2.0 - log10(PPsize)));
 Params.beta(FixedParams.nPP+1) = Params.beta(FixedParams.nPP); % assume beta for zooplankton is equivalent to largest phytoplankton size class
 
 % Size-independent
