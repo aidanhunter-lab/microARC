@@ -49,8 +49,8 @@ FixedParams.phytoplankton = [true(1,FixedParams.nPP) ...
     false(1,FixedParams.nZP)]';                                              % index phytoplankton
 FixedParams.zooplankton = [false(1,FixedParams.nPP) ... 
     true(1,FixedParams.nZP)]';                                               % index zooplankton
-% Organic matter - only DOM is explicitly modelled
-FixedParams.OMtype = {'DOM'};
+% Organic matter
+FixedParams.OMtype = {'DOM', 'POM'};
 FixedParams.nOM = length(FixedParams.OMtype);
 % All variables
 FixedParams.nVar = FixedParams.nIN + FixedParams.nPP + FixedParams.nZP + ...
@@ -170,30 +170,22 @@ Params.wk = 10;      % sinking rate of POM (m / day)
 Params.Qmax = Params.Qmin .* (Params.Qmax_over_delQ ./ (Params.Qmax_over_delQ - 1));
 Params.delQ = Params.Qmax - Params.Qmin;
 
-% POM sinking and remineralisation matrix
-sinkTime = FixedParams.delz ./ Params.wk;         % time particles take to sink from center of one depth layer to the next
-r_x_sinkTime = Params.rPOM .* sinkTime;
-nz = FixedParams.nz;
-dzm = FixedParams.zwidth(2:nz) ./ ...
-    (FixedParams.zwidth(1:nz-1) + FixedParams.zwidth(2:nz));
-dzp = FixedParams.zwidth(1:nz-1) ./ ...
-    (FixedParams.zwidth(1:nz-1) + FixedParams.zwidth(2:nz));
+Params.rOM = nan(FixedParams.nOM,1);
+Params.rOM(FixedParams.DOM_index) = Params.rDOM;
+Params.rOM(FixedParams.POM_index) = Params.rPOM;
 
-POM_to_IN_array = zeros(nz, nz); % (i,j) lower-tri matrix of proportions of POM remineralised while sinking from layer j to i
-POM_to_IN = []; % create a block-diagonal matrix - only needed when modelling multiple nutrients
-for i_nut = 1:FixedParams.nOM
-    p = r_x_sinkTime .* tril(cumprod(tril(1 - repmat(r_x_sinkTime, [1 nz-1]), -1) + triu(ones(nz-1,nz-1))));
-    POM_to_IN_array(1:nz-1,1:nz-1) = dzp .* p;
-    POM_to_IN_array(2:nz,1:nz-1) = POM_to_IN_array(2:nz,1:nz-1) + dzm .* p;
-    if ~FixedParams.POM_is_lost
-        % If POM does not sink below bottom depth layer then all that
-        % remains after sinking is remineralised on bottom layer
-        POM_to_IN_array(nz,:) = POM_to_IN_array(nz,:) + (1 - sum(POM_to_IN_array));
-    end
-    POM_to_IN = blkdiag(POM_to_IN, POM_to_IN_array);
+Params.wk = [0 Params.wk];
+
+% If state variables sink using backwards difference scheme then there's an
+% upper limit on integration time steps
+dt_max = min(FixedParams.zwidth) ./ Params.wk;
+con = true;
+tx = 1;
+while con
+    if any((1 / tx) > dt_max), tx = tx + 1; else, con = false; end
 end
+FixedParams.dt_max = 1 /tx;
 
-Params.POM_to_IN = sparse(POM_to_IN); % using sparse matrix is increasingly useful the more nutrient s are modelled...
 
 end
 

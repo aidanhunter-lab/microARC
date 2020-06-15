@@ -8,6 +8,7 @@ params = parameterList.Params;
 
 nz = fixedParams.nz;    % number of depth layers
 nPP = fixedParams.nPP;  % number of phytoplankton size classes
+nOM = fixedParams.nOM;  % number of organic matter types
 
 %% INITIAL CONDITIONS
 
@@ -20,7 +21,7 @@ ZP = v_in(fixedParams.ZP_index)';                    % zooplankton
 B = [PP; ZP];                                        % all plankton
 
 % Organic nitrogen
-OM = v_in(fixedParams.OM_index)';
+OM = reshape(v_in(fixedParams.OM_index), [nOM nz]);
 
 
 %% FORCING DATA
@@ -102,52 +103,44 @@ B_predation_gains = [zeros(nPP, nz); ...
 % Sources and sinks of organic matter
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-% Only DOM is explicitly modelled as a state variable. POM is modelled to 
-% sink and remineralise instantaneously.
-
 % Messy feeding
 lambda_m = 1 - params.lambda_max;
 beta_x_G = params.beta .* G;
 ZP_x_lambda_m = lambda_m .* ZP;
-DOM_mess = ZP_x_lambda_m .* sum(beta_x_G);
-POM_mess = ZP_x_lambda_m .* sum(G - beta_x_G);
+OM_mess = ZP_x_lambda_m .* [sum(beta_x_G); sum(G - beta_x_G)]; % OM_mess=[DOM_mess; POM_mess]
 
 % Mortality
 beta_x_m_x_B = params.beta .* B_mortality;
-DOM_mort = sum(beta_x_m_x_B);
-POM_mort = sum(B_mortality - beta_x_m_x_B);
+OM_mort = [sum(beta_x_m_x_B); sum(B_mortality - beta_x_m_x_B)]; % OM_mort=[DOM_mort; POM_mort]
 
 % Remineralisation
-remin_DOM = params.rDOM .* OM;
+OM_remin = params.rOM .* OM;
 
-SDOM = DOM_mort + DOM_mess - remin_DOM ; % sources/sinks of DOM
-SPOM = POM_mort + POM_mess;              % sources of POM
-
-
-
+SOM = OM_mort + OM_mess - OM_remin;
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-% Sources and sinks of inorganic nutrients
+% Sources of inorganic nutrients
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% POM sinking and remineralisation
-remin_POM = (params.POM_to_IN * (SPOM(:) .* fixedParams.zwidth)) ./ ... 
-    fixedParams.zwidth;  % to conserve mass, sinking of POM applies to quantity not concentration
 
 % Remineralisation
-SN = remin_DOM(:) + remin_POM; % with single nutrient model the only source of N is remineralised DOM and POM
-
+SN = sum(OM_remin);
 
 %~~~~~~~~~~
 % Diffusion
 %~~~~~~~~~~
 
-v_diffuse = diffusion_1D([N(:), B', OM(:)], K, ... 
-    fixedParams.zwidth, fixedParams.delz);
+v_diffuse = diffusion_1D([N(:), B', OM'], K, fixedParams.zwidth, fixedParams.delz);
 
 N_diffuse = v_diffuse(:,1);
 B_diffuse = v_diffuse(:,2:nPP+2)';
-OM_diffuse = v_diffuse(:,end);
+OM_diffuse = v_diffuse(:,end-nOM+1:end)';
+
+%~~~~~~~~
+% Sinking
+%~~~~~~~~
+
+v_sink = sinking(OM', params.wk, fixedParams.zwidth);
+OM_sink = v_sink';
 
 
 %~~~~~
@@ -155,17 +148,17 @@ OM_diffuse = v_diffuse(:,end);
 %~~~~~
 
 % Inorganic nutrients
-dNdt = N_diffuse - N_uptake_losses(:) + SN;
+dNdt = N_diffuse - N_uptake_losses(:) + SN(:);
 % Plankton
 dBdt = B_diffuse + B_uptake + B_predation_gains - B_predation_losses - B_mortality;
 % Organic matter
-dOMdt = OM_diffuse + SDOM(:);
+dOMdt = OM_diffuse + OM_sink + SOM;
 
 % Separate phytoplankton and zooplankton
 dPPdt = dBdt(fixedParams.phytoplankton,:);
 dZPdt = dBdt(fixedParams.zooplankton,:);
 
-dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt];
+dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)];
 
 
 
@@ -174,8 +167,6 @@ dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt];
 %% AUXILIARY OUTPUTS
 if fixedParams.extraOutput
     extraOutput.PAR = I;
-    extraOutput.POM = SPOM;
-    extraOutput.remin_POM = remin_POM';
     
     extraOutput_2d.Qeq = Qeq;
     extraOutput_2d.PP_C = PP_C;
@@ -200,4 +191,18 @@ function v = diffusion_1D(u,K,w,delz)
 padZeros = zeros(1,size(u,2));
 v = diff([padZeros; (K ./ delz) .* diff(u); padZeros]) ./ w;
 end
+
+
+function v = sinking(u,s,w)
+% Rate of change of u due to sinking.
+% Inputs: u = concentrations, size(u)=[nz nvar]
+%         s = sinking speed, size(s)=[1 nvar]
+%         w = depth layer widths, size(w)=[nz 1]
+nvar = size(u,2);
+v = ((-s) ./ w) .* diff([zeros(1,nvar); u]);
+end
+
+
+
+
 

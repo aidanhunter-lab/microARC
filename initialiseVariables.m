@@ -28,6 +28,14 @@ Z_P_frac = 0.25;
 tot_P = squeeze(sum(P_N));
 v0(FixedParams.ZP_index,:) = Z_P_frac * tot_P;
 
-% Organic matter - dimension = [depth, trajectory]
+% Organic matter - dimension = [type, depth, trajectory]
 OM_frac = 0.05;
-v0(FixedParams.OM_index,:) = OM_frac * (v0(FixedParams.ZP_index,:) + tot_P);
+DOM_frac = 0.5;
+OM = OM_frac * (v0(FixedParams.ZP_index,:) + tot_P);
+DOM = DOM_frac * OM;
+POM = OM - DOM;
+OM = nan(FixedParams.nOM, FixedParams.nz, Forc.nTraj);
+OM(FixedParams.DOM_index,:,:) = DOM;
+OM(FixedParams.POM_index,:,:) = POM;
+v0(FixedParams.OM_index,:) = reshape(OM, [FixedParams.nOM * FixedParams.nz Forc.nTraj]);
+
