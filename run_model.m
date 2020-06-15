@@ -230,8 +230,8 @@ end
 
 % Solve with ode45, called separately for each time step -- defined by
 % forcing data (daily) intervals
-odeInitTime = 12/24; % initial timestep = 12 hrs. (ode45 will automatically reduce this if required)
-odeMaxTime = 1;      % max timestep = 1 day
+odeMaxTime = FixedParams.dt_max; % max timestep (days)
+odeInitTime = 0.5 * odeMaxTime; % initial timestep (ode45 will automatically reduce this if required)
 
 % set solver options: positive definite, tolerances, initial & max time steps
 ode45options=odeset('NonNegative',[1 ones(1, FixedParams.nEquations)],...
@@ -246,6 +246,15 @@ tic
 [OUT, AUXVARS, AUXVARS_2d, RATES, namesExtra, nExtra] = ... 
     integrateTrajectories(FixedParams, Params, Forc, v0, ode45options);
 toc
+
+
+% I should figure out how to switch off extraOutput when calling ode45,
+% while still returning extraOutput at the requested timesteps. This should
+% speed up model run times and also help to prevent further slowing by
+% future extensions... might be tricky with the parallel loop
+
+
+
 
 
 % %---------------------------------
@@ -272,12 +281,13 @@ toc
 nt = FixedParams.nt;
 nz = FixedParams.nz;
 nPP = FixedParams.nPP;
+nOM = FixedParams.nOM;
 nTraj = Forc.nTraj;
 
 out.N = reshape(OUT(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
 out.P = reshape(OUT(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
 out.Z = reshape(OUT(FixedParams.ZP_index,:,:), [1 nz nt nTraj]);
-out.OM = reshape(OUT(FixedParams.OM_index,:,:), [1 nz nt nTraj]);
+out.OM = reshape(OUT(FixedParams.OM_index,:,:), [nOM nz nt nTraj]);
 
 if ~strcmp(returnExtras, 'none')
     switch returnExtras
@@ -298,12 +308,12 @@ if ~strcmp(returnExtras, 'none')
             rates.N = reshape(RATES(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
             rates.P = reshape(RATES(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
             rates.Z = reshape(RATES(FixedParams.ZP_index,:,:), [1 nz nt nTraj]);
-            rates.OM = reshape(RATES(FixedParams.OM_index,:,:), [1 nz nt nTraj]);
+            rates.OM = reshape(RATES(FixedParams.OM_index,:,:), [nOM nz nt nTraj]);
         case 'rates'
             rates.N = reshape(RATES(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
             rates.P = reshape(RATES(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
             rates.Z = reshape(RATES(FixedParams.ZP_index,:,:), [1 nz nt nTraj]);
-            rates.OM = reshape(RATES(FixedParams.OM_index,:,:), [1 nz nt nTraj]);
+            rates.OM = reshape(RATES(FixedParams.OM_index,:,:), [nOM nz nt nTraj]);
     end
 end
 
@@ -357,7 +367,7 @@ if save
 end
 
 % organic nutrient
-outputPlot('contour_DepthTime','organicNutrient',k,out,FixedParams,Forc,auxVars,'linear');
+outputPlot('contour_DepthTime','DOM_POM',k,out,FixedParams,Forc,auxVars,'linear');
 if save
     fig = gcf;
     filename = 'organic_nutrient.png';
@@ -417,7 +427,8 @@ kk = eventTraj.trajIndex(eventTraj.event == ie);
 outputPlot('trajectoryLine_LatLong','direction',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
 outputPlot('trajectoryLine_LatLong','forcing',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
 outputPlot('trajectoryLine_LatLong','inorganicNutrient',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
-outputPlot('trajectoryLine_LatLong','organicNutrient',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+% outputPlot('trajectoryLine_LatLong','organicNutrient',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+outputPlot('trajectoryLine_LatLong','DOM_POM',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
 outputPlot('trajectoryLine_LatLong','phytoplankton',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
 outputPlot('trajectoryLine_LatLong','zooplankton',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
 
@@ -436,7 +447,8 @@ if ~ismember(ie, eventTraj.event), warning(['Choose event number within range ('
 kk = eventTraj.trajIndex(eventTraj.event == ie);
 
 outputPlot('trajectoryPolygon_TimeSeries','forcing',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
-outputPlot('trajectoryPolygon_TimeSeries','nutrient',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+% outputPlot('trajectoryPolygon_TimeSeries','nutrient',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+outputPlot('trajectoryPolygon_TimeSeries','DOM_POM',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
 outputPlot('trajectoryPolygon_TimeSeries','phytoplankton',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
 outputPlot('trajectoryPolygon_TimeSeries','phytoplanktonStacked',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
 outputPlot('trajectoryPolygon_TimeSeries','phytoZooPlanktonStacked',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
