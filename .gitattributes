@@ -1,3 +1,7 @@
 DATA/particle_trajectories/sinmod/FramStrait_dep0-100/particles_sinmod_FramStrait_dep0-100_AWI-Hausgarten-2017_2017_t736696-736999_iSub03.mat filter=lfs diff=lfs merge=lfs -text
 DATA/particle_trajectories/sinmod/FramStrait_dep0-100/particles_sinmod_FramStrait_dep0-100_AWI-Hausgarten-2018_2018_t737061-737364_iSub03.mat filter=lfs diff=lfs merge=lfs -text
 *.mat filter=lfs diff=lfs merge=lfs -text
+<<<<<<< master
+=======
+
+>>>>>>> LFS track .mat files
