@@ -26,6 +26,12 @@ if ~isempty(varargin)
         end
         
         
+        if any(strcmp('Qmin_a', parnames)) || any(strcmp('Qmin_b', parnames)) || ...
+                any(strcmp('Qmax_over_delQ_a', parnames)) || any(strcmp('Qmax_over_delQ_b', parnames))
+            Params.Qmax = Params.Qmin .* (Params.Qmax_over_delQ ./ (Params.Qmax_over_delQ - 1));
+            Params.delQ = Params.Qmax - Params.Qmin;
+        end
+        
         if any(strcmp('wk', parnames)) || any(strcmp('rPOM', parnames))
             % POM sinking and remineralisation matrix
             sinkTime = FixedParams.delz ./ Params.wk; % sinking time of particles moving between centers of adjacent depth layers
@@ -92,6 +98,12 @@ if ~isempty(varargin)
             end
         end
         
+        
+        if any(strcmp('Qmin_a', varargin)) || any(strcmp('Qmin_b', varargin)) || ...
+                any(strcmp('Qmax_over_delQ_a', varargin)) || any(strcmp('Qmax_over_delQ_b', varargin))
+            Params.Qmax = Params.Qmin .* (Params.Qmax_over_delQ ./ (Params.Qmax_over_delQ - 1));
+            Params.delQ = Params.Qmax - Params.Qmin;
+        end
         
         if any(strcmp('wk', varargin)) || any(strcmp('rPOM', varargin))
             % POM sinking and remineralisation matrix

@@ -38,11 +38,11 @@ FixedParams.nPP = 6; % number of phytoplankton size classes
 FixedParams.nZP = 1; % number of zooplankton classes
 % Phytoplanton sizes - smallest diameter is 0.5 mu m, volumes of successive size 
 % classes increase by factors of 32 (equally spaced on log-scale).
-PPdia = 0.5;
-FixedParams.PPsize = 4/3*pi*(PPdia/2)^3;
-FixedParams.PPsize(2:FixedParams.nPP) = 32 .^ (1:FixedParams.nPP-1) .* ...
-    FixedParams.PPsize(1);                                                  % cell volumes [mu m^3]
-FixedParams.PPsize = FixedParams.PPsize';
+PPdia = 0.5; % cell diameter [mu m]
+PPsize = 4/3*pi*(PPdia/2)^3; % cell volume [mu m^3]
+PPsize(2:FixedParams.nPP) = 32 .^ (1:FixedParams.nPP-1) .* PPsize(1);
+PPsize = PPsize(:);
+FixedParams.PPsize = PPsize;
 FixedParams.PPdia = 2 .* (3 .* FixedParams.PPsize ./ (4*pi)) .^ (1/3);
 FixedParams.diatoms = FixedParams.PPsize >= 100;                            % assume large phytoplankton are diatoms - only needed to split SINMOD output over classes during state variable initialisation
 FixedParams.phytoplankton = [true(1,FixedParams.nPP) ... 
@@ -91,6 +91,8 @@ Params.sizeDependent = {
     'Qmin_b'
     'Qmax_over_delQ_a'
     'Qmax_over_delQ_b'
+    'Q_C_a'
+    'Q_C_b'
     'Vmax_over_Qmin_a'
     'Vmax_over_Qmin_b'    
     'aN_over_Qmin_a'
@@ -107,34 +109,37 @@ Params.sizeDependent = {
 
 % Size-dependent
 
-V_PP = FixedParams.PPsize(:); % cell volumes
 % minimum and maximum cellular nitrogen quota [mmol N / cell], values from Maranon et al. (2013)
 Params.Qmin_a = (1/14) * 1e-9 * 10^-1.47;
 Params.Qmin_b = 0.84;
-Params.Qmin = volumeDependent(Params.Qmin_a, Params.Qmin_b, V_PP);
+Params.Qmin = volumeDependent(Params.Qmin_a, Params.Qmin_b, PPsize);
 % maximumm quota is parameterised using the ratio
 % Qmax/(Qmax-Qmin) = 1/(1-a*V^b), where 0<a<1 and b<0
 Params.Qmax_over_delQ_a = 10^(-1.47+1.26);
 Params.Qmax_over_delQ_b = 0.84 - 0.93;
 Params.Qmax_over_delQ = 1 ./ (1 - volumeDependent(Params.Qmax_over_delQ_a, ...
-    Params.Qmax_over_delQ_b, V_PP));
+    Params.Qmax_over_delQ_b, PPsize));
+% carbon quota
+Params.Q_C_a = 18e-12;
+Params.Q_C_b = 0.94;
+Params.Q_C = volumeDependent(Params.Q_C_a, Params.Q_C_b, PPsize);
 % nitrogen specific maximum uptake rate [1/day], values from Maranon et al. (2013) scaled by qmin
 Params.Vmax_over_Qmin_a = 24 * 10^(-3 + 1.47);
 Params.Vmax_over_Qmin_b = 0.97 - 0.84;
 Params.Vmax_over_Qmin = volumeDependent(Params.Vmax_over_Qmin_a, ... 
-    Params.Vmax_over_Qmin_b, V_PP);
+    Params.Vmax_over_Qmin_b, PPsize);
 % cellular affinity for nitrogen scaled by qmin [m^3 / mmol N / day], derived using half saturation from Litchmann et al. (2007)
 Params.aN_over_Qmin_a = 24 * 10^(-3 + 0.77 + 1.26);
 Params.aN_over_Qmin_b = 0.97 - 0.27 - 0.84;
 Params.aN_over_Qmin = volumeDependent(Params.aN_over_Qmin_a, ... 
-    Params.aN_over_Qmin_b, V_PP);
+    Params.aN_over_Qmin_b, PPsize);
 % maximum photosynthetic rate [1/day] at infinite quota, values guessed based on mu_inf from Ward et al. (2017)
 Params.pmax_a = 100;
 % Params.pmax_a = 35;
 Params.pmax_b = -0.26;
-Params.pmax = volumeDependent(Params.pmax_a, Params.pmax_b, V_PP);
+Params.pmax = volumeDependent(Params.pmax_a, Params.pmax_b, PPsize);
 % partitioning of dead matter into DOM and POM
-Params.beta = 0.9 - 0.7 ./ (1 + exp(2.0 - log10(V_PP)));
+Params.beta = 0.9 - 0.7 ./ (1 + exp(2.0 - log10(PPsize)));
 Params.beta(FixedParams.nPP+1) = Params.beta(FixedParams.nPP); % assume beta for zooplankton is equivalent to largest phytoplankton size class
 
 % Size-independent
@@ -161,6 +166,9 @@ Params.wk = 10;      % sinking rate of POM (m / day)
 % For efficiency, reshape and extend dimensions of some parameters before
 % using in model. Also calculate functions whose arguments only involve
 % parameters and not state variables.
+
+Params.Qmax = Params.Qmin .* (Params.Qmax_over_delQ ./ (Params.Qmax_over_delQ - 1));
+Params.delQ = Params.Qmax - Params.Qmin;
 
 % POM sinking and remineralisation matrix
 sinkTime = FixedParams.delz ./ Params.wk;         % time particles take to sink from center of one depth layer to the next

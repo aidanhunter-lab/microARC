@@ -1,4 +1,4 @@
-function [dvdt, extraOutput] = ODEs(t, v_in, parameterList, forc, timeStep)
+function [dvdt, extraOutput, extraOutput_2d] = ODEs(t, v_in, parameterList, forc, timeStep)
 
 fixedParams = parameterList.FixedParams;
 params = parameterList.Params;
@@ -11,7 +11,7 @@ nPP = fixedParams.nPP;  % number of phytoplankton size classes
 
 %% INITIAL CONDITIONS
 
-% Inorganic nutrient
+% Inorganic nitrogen
 N = v_in(fixedParams.IN_index)';
 
 % Plankton
@@ -19,7 +19,7 @@ PP = reshape(v_in(fixedParams.PP_index), [nPP nz]);  % phytoplankton
 ZP = v_in(fixedParams.ZP_index)';                    % zooplankton
 B = [PP; ZP];                                        % all plankton
 
-% Organic matter
+% Organic nitrogen
 OM = v_in(fixedParams.OM_index)';
 
 
@@ -60,17 +60,25 @@ gammaT = exp(params.A .* (T - params.Tref));
 %~~~~~~~~~~~
 
 % Growth depends on cellular nitrogen uptake rate and assimilation (photosynthetic) rate
+
 if all(I == 0)
     B_uptake = zeros(nPP+1,nz);
     N_uptake_losses = zeros(1, nz);    
+    Qeq = repmat(params.Qmax, [1 nz]); % equilibrium nitrogen Qeq=Qmax when I=0
 else    
     mu = params.pmax .* (1 - exp(-(params.aP .* I) ./ params.pmax));        % photosynthetic (metabolic) rate (1 / day)    
-    mumax = params.Vmax_over_Qmin ./ ((params.Qmax_over_delQ .* ... 
-        params.Vmax_over_Qmin) ./ mu + 1);                                  % maximum growth rate (1 / day) depends on nutrient uptake and photosynthetic rates
-    V = (gammaT .* N) ./ (N ./ mumax + 1 ./ params.aN_over_Qmin);           % growth rate, Michaelis-Menton form unusually written for efficiency
+    QmaxVmax_ = params.Qmax_over_delQ .* params.Vmax_over_Qmin;
+    aN = params.aN_over_Qmin .* N;
+    mumax = params.Vmax_over_Qmin ./ (QmaxVmax_ ./ mu + 1); % maximum growth rate (1 / day) depends on nutrient uptake and photosynthetic rates    
+    Q_ = (QmaxVmax_ .* aN) ./ (aN + params.Vmax_over_Qmin);
+    Qeq = (Q_ + mu) ./ (mu ./ params.Qmin + Q_ ./ params.Qmax);      % equilibrium N quota    
+    V = (gammaT .* mumax .* aN) ./ (aN + mumax); % growth rate
     B_uptake = [V; zeros(1, nz)] .* B;
     N_uptake_losses = sum(B_uptake);
 end
+
+PP_C = params.Q_C  .* (PP ./ Qeq); % phytoplankton carbon biomass (mmol C / m^3)
+
 
 %~~~~~~~~~~~~~
 % Heterotrophy
@@ -114,6 +122,8 @@ remin_DOM = params.rDOM .* OM;
 
 SDOM = DOM_mort + DOM_mess - remin_DOM ; % sources/sinks of DOM
 SPOM = POM_mort + POM_mess;              % sources of POM
+
+
 
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -162,10 +172,13 @@ dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt];
 
 
 %% AUXILIARY OUTPUTS
-if fixedParams.returnExtras
+if fixedParams.extraOutput
     extraOutput.PAR = I;
     extraOutput.POM = SPOM;
     extraOutput.remin_POM = remin_POM';
+    
+    extraOutput_2d.Qeq = Qeq;
+    extraOutput_2d.PP_C = PP_C;
 end
 
 end
