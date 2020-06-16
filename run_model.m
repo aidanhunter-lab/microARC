@@ -130,7 +130,7 @@ Params0 = Params;
 
 % Parameter values can be changed using name-value pairs in
 % updateParameters.m, eg,
-% Params = updateParameters(Params, FixedParams, 'pmax_a', 30, 'pmax_b', -0.55, 'Gmax', 3);
+Params = updateParameters(Params, FixedParams, 'pmax_a', 30, 'pmax_b', -0.55, 'Gmax', 3);
 
 
 %~~~~~~~~~~~~~
@@ -207,25 +207,6 @@ end
 v0 = initialiseVariables(FixedParams,Forc); % v0 stores initial input vectors
 
 
-%~~~~~~~~~~~~~~~~~~~~~~~
-% Optional extra outputs
-%~~~~~~~~~~~~~~~~~~~~~~~
-
-% Can return extra output along with the integrated state variables. Four
-% options (so far) for returnExtras.
-% returnExtras = 'none';
-returnExtras = 'auxiliary'; % return non-state variables
-% returnExtras = 'rates';   % return rates of change of state variables
-% returnExtras = 'auxiliaryAndRates';
-FixedParams.returnExtras = returnExtras;
-
-if strcmp(returnExtras, 'auxiliary') || strcmp(returnExtras, 'auxiliaryAndRates')
-    FixedParams.extraOutput = true; % ODEs.m returns structs containing non-state variables
-else
-    FixedParams.extraOutput = false;
-end
-
-
 %% Integrate
 
 % Solve with ode45, called separately for each time step -- defined by
@@ -243,17 +224,9 @@ poolObj = gcp; % integrations are parallelised over trajectories
 
 % integrating function
 tic
-[OUT, AUXVARS, AUXVARS_2d, RATES, namesExtra, nExtra] = ... 
+[OUT, AUXVARS, AUXVARS_2d, namesExtra, nExtra] = ... 
     integrateTrajectories(FixedParams, Params, Forc, v0, ode45options);
 toc
-
-
-% I should figure out how to switch off extraOutput when calling ode45,
-% while still returning extraOutput at the requested timesteps. This should
-% speed up model run times and also help to prevent further slowing by
-% future extensions... might be tricky with the parallel loop
-
-
 
 
 
@@ -289,31 +262,12 @@ out.P = reshape(OUT(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
 out.Z = reshape(OUT(FixedParams.ZP_index,:,:), [1 nz nt nTraj]);
 out.OM = reshape(OUT(FixedParams.OM_index,:,:), [nOM nz nt nTraj]);
 
-if ~strcmp(returnExtras, 'none')
-    switch returnExtras
-        case 'auxiliary'
-            for k = 1:nExtra(1)
-                auxVars.(namesExtra{k}) = squeeze(AUXVARS(:,k,:,:));
-            end
-            for k = 1:nExtra(2)
-                auxVars.(namesExtra{k+nExtra(1)}) = squeeze(AUXVARS_2d(:,:,k,:,:));
-            end
-        case 'auxiliaryAndRates'
-            for k = 1:nExtra(1)
-                auxVars.(namesExtra{k}) = squeeze(AUXVARS(:,k,:,:));
-            end
-            for k = 1:nExtra(2)
-                auxVars.(namesExtra{k+nExtra(1)}) = squeeze(AUXVARS_2d(:,:,k,:,:));
-            end
-            rates.N = reshape(RATES(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
-            rates.P = reshape(RATES(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
-            rates.Z = reshape(RATES(FixedParams.ZP_index,:,:), [1 nz nt nTraj]);
-            rates.OM = reshape(RATES(FixedParams.OM_index,:,:), [nOM nz nt nTraj]);
-        case 'rates'
-            rates.N = reshape(RATES(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
-            rates.P = reshape(RATES(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
-            rates.Z = reshape(RATES(FixedParams.ZP_index,:,:), [1 nz nt nTraj]);
-            rates.OM = reshape(RATES(FixedParams.OM_index,:,:), [nOM nz nt nTraj]);
+if sum(nExtra) > 0
+    for k = 1:nExtra(1)
+        auxVars.(namesExtra{k}) = squeeze(AUXVARS(:,k,:,:));
+    end
+    for k = 1:nExtra(2)
+        auxVars.(namesExtra{k+nExtra(1)}) = squeeze(AUXVARS_2d(:,:,k,:,:));
     end
 end
 

@@ -66,9 +66,6 @@ FixedParams.attP = 0.04;  % plankton-specific light attenuation
 
 FixedParams.POM_is_lost = true; % is POM lost from the system by sinking below bottom modelled depth layer
 
-FixedParams.returnExtras = 'auxiliary'; % return extra output from ODEs
-
-
 
 %% Variable Parameters
 
