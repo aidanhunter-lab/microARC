@@ -1,8 +1,7 @@
-function [dvdt, extraOutput, extraOutput_2d] = ODEs(t, v_in, parameterList, forc, timeStep)
+function [dvdt, extraOutput, extraOutput_2d] = ODEs(t, v_in, parameterList, forc, timeStep, returnExtra)
 
 fixedParams = parameterList.FixedParams;
 params = parameterList.Params;
-% forc = parameterList.Forc;
 
 %% MODEL DIMENSIONS
 
@@ -65,20 +64,15 @@ gammaT = exp(params.A .* (T - params.Tref));
 if all(I == 0)
     B_uptake = zeros(nPP+1,nz);
     N_uptake_losses = zeros(1, nz);    
-    Qeq = repmat(params.Qmax, [1 nz]); % equilibrium nitrogen Qeq=Qmax when I=0
 else    
     mu = params.pmax .* (1 - exp(-(params.aP .* I) ./ params.pmax));        % photosynthetic (metabolic) rate (1 / day)    
     QmaxVmax_ = params.Qmax_over_delQ .* params.Vmax_over_Qmin;
     aN = params.aN_over_Qmin .* N;
     mumax = params.Vmax_over_Qmin ./ (QmaxVmax_ ./ mu + 1); % maximum growth rate (1 / day) depends on nutrient uptake and photosynthetic rates    
-    Q_ = (QmaxVmax_ .* aN) ./ (aN + params.Vmax_over_Qmin);
-    Qeq = (Q_ + mu) ./ (mu ./ params.Qmin + Q_ ./ params.Qmax);      % equilibrium N quota    
     V = (gammaT .* mumax .* aN) ./ (aN + mumax); % growth rate
     B_uptake = [V; zeros(1, nz)] .* B;
     N_uptake_losses = sum(B_uptake);
 end
-
-PP_C = params.Q_C  .* (PP ./ Qeq); % phytoplankton carbon biomass (mmol C / m^3)
 
 
 %~~~~~~~~~~~~~
@@ -161,15 +155,19 @@ dZPdt = dBdt(fixedParams.zooplankton,:);
 dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)];
 
 
-
-
-
 %% AUXILIARY OUTPUTS
-if fixedParams.extraOutput
+if returnExtra
+    % 1D
     extraOutput.PAR = I;
     
-    extraOutput_2d.Qeq = Qeq;
-    extraOutput_2d.PP_C = PP_C;
+    % 2D (vectorised over cell size)
+    if all(I == 0)
+        extraOutput_2d.Qeq = repmat(params.Qmax, [1 nz]); % equilibrium nitrogen Qeq=Qmax when I=0
+    else
+        Q_ = (QmaxVmax_ .* aN) ./ (aN + params.Vmax_over_Qmin);
+        extraOutput_2d.Qeq = (Q_ + mu) ./ (mu ./ params.Qmin + Q_ ./ params.Qmax); % equilibrium N quota
+    end
+    extraOutput_2d.PP_C = params.Q_C  .* (PP ./ extraOutput_2d.Qeq); % phytoplankton carbon biomass (mmol C / m^3)
 end
 
 end
@@ -178,16 +176,11 @@ end
 %% Functions
 
 function v = diffusion_1D(u,K,w,delz)
-% Returns rate of change of u due to diffusion.
-% Inputs: array of concentrations u,
-%         array of diffusivities K,
-%         depth layer widths w,
-%         distance between depth layer centers delz.
-%         The 1st dimension of each array is space (modelled depths of
-%         water column).
-% Function assumes zero flux boundary conditions.
-% Diffusivities K are at midpoints of spatial grid used for u, so 
-% size(K,1)=size(u,1)-1.
+% Rate of change of u due to diffusion, assuming zero flux boundary conditions.
+% Inputs: u = concentrations, size(u)=[nz nvar]
+%         K = diffusivities, size(K)=[nz-1 1]
+%         w = depth layer widths, size(w)=[nz 1]
+%         delz = distance between depth layer centers, size(delz)=[nz-1 1]
 padZeros = zeros(1,size(u,2));
 v = diff([padZeros; (K ./ delz) .* diff(u); padZeros]) ./ w;
 end
