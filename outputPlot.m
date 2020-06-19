@@ -283,8 +283,8 @@ switch type
         OM = squeeze(out.OM(:,:,:,itraj));
         
         % Event position
-        elat = dat.lat(dat.event == ie);
-        elon = dat.lon(dat.event == ie);
+        elat = dat.Latitude(dat.Event == ie);
+        elon = dat.Longitude(dat.Event == ie);
 
         switch var
             case 'direction'                
@@ -544,7 +544,7 @@ switch type
         % Extract times
         day = yearday(forcing.t(:,itraj));
         x = day(:,1);
-        etime = dat.yearday(dat.event == ie,:);
+        etime = dat.Yearday(dat.Event == ie,:);
         
         % Extract outputs
         N = squeeze(out.N(:,:,:,itraj));

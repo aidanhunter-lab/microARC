@@ -10,24 +10,24 @@ nTraj = length(Forc.iTraj);
 
 % particle times as year and yearday
 time = yearday(Forc.t);
-year = datevec(Forc.t);
-year = reshape(year(:,1), [nt nTraj]);
+[year,~] = datevec(Forc.t);
 
 % Find distance between particles and event at event time
-nEvent = length(unique(dat.event));
+nEvent = length(unique(dat.Event));
 Dist = nan(nTraj, nEvent);
 Rank = nan(size(Dist));
 Keep = nan(size(Dist));
 
 for i = 1:nEvent
-    ie = dat.event == i;
-    sYear = dat.year(ie);
-    sLat = dat.lat(ie);
-    sLon = dat.lon(ie);
-    sTime = dat.yearday(ie);
+    ie = find(dat.Event == i,1);
+    sYear = dat.Year(ie);
+    sLat = dat.Latitude(ie);
+    sLon = dat.Longitude(ie);
+    sTime = dat.Yearday(ie);
     samplePos_rads = deg2rad([sLon sLat]);
 
-    keep2d = sTime == time & sYear == year;    
+%     keep2d = sTime == time & sYear == year;    
+    keep2d = sTime == time;    
     keep = any(keep2d);
     
     particlePos_rads = deg2rad([Forc.x(keep2d) Forc.y(keep2d)]);

@@ -184,6 +184,35 @@ end
 FixedParams.dt_max = 1 /tx;
 
 
+%% Parameter bounds
+
+% Choose bounds to restrict numerical optimisers
+
+Params.lowerBound.A = 0.01; Params.upperBound.A = 0.2;
+Params.lowerBound.m = 0.01; Params.upperBound.m = 0.1;
+Params.lowerBound.aP = 0.01; Params.upperBound.aP = 5;
+Params.lowerBound.Gmax = 0.1; Params.upperBound.Gmax = 5;
+Params.lowerBound.k_G = 0.01; Params.upperBound.k_G = 3;
+Params.lowerBound.Lambda = -1.5; Params.upperBound.Lambda = -0.5;
+Params.lowerBound.lambda_max = 0.5; Params.upperBound.lambda_max = 0.9;
+Params.lowerBound.rDOM = 0.01; Params.upperBound.rDOM = 0.15;
+Params.lowerBound.rPOM = 0.01; Params.upperBound.rPOM = 0.15;
+
+Params.lowerBound.Qmin_a = 1e-14; Params.upperBound.Qmin_a = 1e-10;
+Params.lowerBound.Qmin_b = 0.5; Params.upperBound.Qmin_b = 1;
+Params.lowerBound.Qmax_over_delQ_a = 0.1; Params.upperBound.Qmax_over_delQ_a = 1;
+Params.lowerBound.Qmax_over_delQ_b = -1; Params.upperBound.Qmax_over_delQ_b = 0;
+Params.lowerBound.Vmax_over_Qmin_a = 0.5; Params.upperBound.Vmax_over_Qmin_a = 1;
+Params.lowerBound.Vmax_over_Qmin_b = 0; Params.upperBound.Vmax_over_Qmin_b = 0.5;
+Params.lowerBound.aN_over_Qmin_a = 0.1; Params.upperBound.aN_over_Qmin_a = 5;
+Params.lowerBound.aN_over_Qmin_b = -0.5; Params.upperBound.aN_over_Qmin_b = 0;
+Params.lowerBound.pmax_a = 1; Params.upperBound.pmax_a = 200;
+Params.lowerBound.pmax_b = -1; Params.upperBound.pmax_b = 0;
+Params.lowerBound.Q_C_a = 1e-12; Params.upperBound.Q_C_a = 1e-10;
+Params.lowerBound.Q_C_b = 0.5; Params.upperBound.Q_C_b = 1.5;
+
+
+
 end
 
 %%
