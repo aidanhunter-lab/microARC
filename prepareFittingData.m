@@ -2,7 +2,10 @@ function Data = prepareFittingData(obsDir, FixedParams)
 
 % Load and clean fitting data, output as struct
 
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 % Inorganic nutrient
+
 nutrientObsFile = 'PS99_2_nutrients_rev.csv';
 
 dat_nut = readtable(fullfile(obsDir,nutrientObsFile));
@@ -15,8 +18,13 @@ dat_nut = movevars(dat_nut, 'Year', 'After', 'Time');
 dat_nut.Yearday = yearday(datenum(dat_nut.Date));
 dat_nut = movevars(dat_nut, 'Yearday', 'After', 'Year');
 % filter out data columns
-dat_nut = dat_nut(:,{'Year','Yearday','Event','Event_2','Latitude','Longitude','Depth','NO3_NO2_corrected'});
+dat_nut = dat_nut(:,{'Year','Yearday','Event','Event_2','Latitude','Longitude','Depth','NO3_NO2_corrected','Flag_NO3_NO2_c'});
+% remove rows flagged as (potentially) poor quality measurements
+dat_nut(dat_nut.Flag_NO3_NO2_c ~= 0,:) = [];
+dat_nut.Flag_NO3_NO2_c = [];
 dat_nut.Properties.VariableNames{'NO3_NO2_corrected'} = 'N';
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 % POM and Chl_a
 OMObsFile = 'copy_data_Engel_etal2019.csv';
@@ -60,7 +68,11 @@ dat_OM = dat_OM(:,{'Year','Yearday','ARK_oder_PS','HG_stations','Station','Event
 dat_OM.PON = dat_OM.PON ./ 14;
 dat_OM.POC = dat_OM.POC ./ 12;
 
-% Regularise these 2 data sets to have the same column names...
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+% Merge data sets
+
+% Match column names
 dat_nut.Properties.VariableNames{'Event_2'} = 'Station';
 dat_nut.Properties.VariableNames{'Event'} = 'EventLabel';
 dat_nut = movevars(dat_nut, 'EventLabel', 'After', 'Station');
@@ -68,7 +80,7 @@ dat_OM = removevars(dat_OM, {'ARK_oder_PS','Station'});
 dat_OM.Properties.VariableNames{'EventNumber'} = 'EventLabel';
 dat_OM.Properties.VariableNames{'HG_stations'} = 'Station';
 
-% Station names used in each data set are written inconsistently...
+% Station names used in each data set are written inconsistently
 % disp(unique(dat_nut.Station)')
 % disp(unique(dat_OM.Station)')
 dat_OM.Station = strrep(dat_OM.Station,' shallow','');
@@ -87,14 +99,15 @@ dat_OM = stack(dat_OM, {'chl_a','POC','PON'}, ...
     'IndexVariableName','Variable','NewDataVariableName','Value');
 dat_nut = stack(dat_nut, 'N', ... 
     'IndexVariableName','Variable','NewDataVariableName','Value');
+
 dat = [dat_nut; dat_OM];
 
 % Remove samples from below the maximum modelled depth
 dat = dat(dat.Depth < -min(FixedParams.z),:);
 
-% Remove rows with non-positive measures -- maybe the 'flag' columns should 
-% be used for filtering, but it's not clear what the flag values represent...
-dat(dat.Value <= 0,:) = [];
+% Remove NaNs & rows with non-positive measures -- maybe the 'flag' columns
+% should be used for filtering...
+dat(dat.Value <= 0 | isnan(dat.Value),:) = [];
 
 % Index each unique sampling event
 EventLabel = unique(dat.EventLabel, 'stable');
