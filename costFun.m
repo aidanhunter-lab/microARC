@@ -35,45 +35,44 @@ end
 
 
 % Compare model to observations
-
-% I think i should scale the misfits by standard deviations measured across
-% events
-
 cost_N = nan(1,nEvent);
 cost_PON = nan(1,nEvent);
 for i = 1:nEvent
     iObs = Data.Event == i; % index data
     time = Data.Yearday(find(iObs,1)); % sample time    
     ti = Data.EventTraj(i,:); % index trajectories
-    % inorganic nitrogen    
-    N = squeeze(out.N(:,:,time,ti)); % modelled values
-    iN = iObs & strcmp('N',Data.Variable);
-    N_obs = Data.Value(iN); % measured values
-    N_depth = Data.Depth(iN);
-    N = interp1(depths_mod, N, N_depth); % interpolate modelled output to match observation depths
     
-    cost_N(i) = sum(sum((log(N ./ N_obs)).^2, 2) ./ size(N,2)) ./ size(N,1);
-
+    vars = unique(Data.Variable(Data.Event == i));
+    
+    % inorganic nitrogen
+    if any(strcmp(vars,'N'))
+        ind = iObs & strcmp('N',Data.Variable);
+        y_obs = Data.Value(ind); % measured values
+%         y_obs = Data.log_Value(ind); % measured values
+        depths_obs = Data.Depth(ind); % measurement depths
+        y_mod = squeeze(out.N(:,:,time,ti)); % modelled values
+        y_mod = interp1(depths_mod, y_mod, depths_obs); % interpolate modelled output to match observation depths
+        stdDev = Data.scale_stdDev(ind);
+        sqErr = ((y_obs - y_mod) ./ stdDev) .^2; % normal error
+%         sqErr = (y_obs - log(y_mod) ./ stdDev) .^2; % log-normal error
+        cost_N(i) = sum(sqErr(:)) / numel(y_mod);
+    end
+    
     % PON
-    PON = squeeze(out.OM(FixedParams.POM_index,:,time,ti));
-    iPON = iObs & strcmp('PON',Data.Variable);
-    PON_obs = Data.Value(iPON);
-    PON_depth = Data.Depth(iPON);
-    keep = PON_depth < max(depths_mod);
-    PON_obs = PON_obs(keep);
-    PON_depth = PON_depth(keep);
-    PON = interp1(depths_mod, PON, PON_depth);
-
-    cost_PON(i) = sum(sum((log(PON ./ PON_obs)).^2, 2) ./ size(PON,2)) ./ size(PON,1);
-        
+    if any(strcmp(vars,'PON'))
+        ind = iObs & strcmp('PON',Data.Variable);
+        y_obs = Data.Value(ind); % measured values
+%         y_obs = Data.log_Value(ind); % measured values
+        depths_obs = Data.Depth(ind); % measurement depths
+        y_mod = squeeze(out.OM(FixedParams.POM_index,:,time,ti)); % modelled values
+        y_mod = interp1(depths_mod, y_mod, depths_obs); % interpolate modelled output to match observation depths
+        stdDev = Data.scale_stdDev(ind);
+        sqErr = ((y_obs - y_mod) ./ stdDev) .^2; % normal error
+%         sqErr = (y_obs - log(y_mod) ./ stdDev) .^2; % log-normal error
+        cost_PON(i) = sum(sqErr(:)) / numel(y_mod);
+    end    
 end
 
-cost_N = cost_N(~isnan(cost_N));
-cost_PON = cost_PON(~isnan(cost_PON));
-
-cost = mean(cost_N) + mean(cost_PON);
-
-
-
+cost = nanmean(cost_N) + nanmean(cost_PON);
 
 

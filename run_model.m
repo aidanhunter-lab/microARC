@@ -128,7 +128,7 @@ end
 [FixedParams, Params] = initialiseParameters(F);
 Params0 = Params;
 
-% Parameter values can be changed using name-value pairs in
+% Parameter values can be changed using name-value pair arguments in 
 % updateParameters.m, eg,
 % Params = updateParameters(Params, FixedParams, 'pmax_a', 30, 'pmax_b', -0.55, 'Gmax', 3);
 
@@ -147,7 +147,7 @@ Data = prepareFittingData(obsDir, FixedParams); % tailor this function to specif
 
 % Use forcing data from years corresponding to samples
 iy = ismember(Forc0.years, unique(Data.Year));
-disp(['use particle trajectories from ' num2str(Forc.years(iy))])
+disp(['use particle trajectories from ' num2str(Forc0.years(iy))])
 % Filter out unused years
 [Y,~] = datevec(Forc0.t);
 ind = any(Y == Forc0.years(iy));
@@ -200,6 +200,15 @@ for i = 1:Data.nEvents
 end
 
 
+% Group sampling events by origin of particles: Arctic or Atlantic.
+[Forc, Data] = particleOrigin(Forc, Data, ...
+    'trajectoryPlot', true, 'dendrogram', true);
+
+% Standardise the fitting data using linear mixed models to adjust for
+% variability due to depth and sampling event.
+Data = standardiseFittingData(Data,'plotScaledPON', true, 'plotScaledPOC', ...
+    true, 'plotScaledN', true, 'plotAllData', true);
+
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % State variable initial condition
@@ -230,13 +239,15 @@ ode45options=odeset('NonNegative',[1 ones(1, FixedParams.nEquations)],...
   'InitialStep',odeInitTime,'MaxStep',odeMaxTime);
 
 poolObj = gcp; % integrations are parallelised over trajectories
-
+numcores = poolObj.NumWorkers;
 
 % Integrate using default or manually selected parameters
 tic
 [OUT, AUXVARS, AUXVARS_2d, namesExtra, nExtra] = ... 
     integrateTrajectories(FixedParams, Params, Forc, v0, ode45options);
-toc
+runtime = toc;
+disp([num2str(runtime) ' seconds to integrate ' num2str(Forc.nTraj) ' trajectories'])
+runtime = runtime / Forc.nTraj * numcores; % average integration time of single trajectory on single processor
 
 % Extract solutions from array, OUT, into a more readable struct, out.
 % Same for extra outputs...
@@ -263,6 +274,8 @@ end
 
 %% Parameter tuning
 
+clear OUT out AUXVARS AUXVARS_2d auxVars
+
 poolObj = gcp; % integrations are parallelised over trajectories
 numcores = poolObj.NumWorkers;
 
@@ -278,49 +291,61 @@ for i = 1:npars
     ub(i) = Params.upperBound.(parnames{i});
 end
 
-approxRunTime = @(ncores, ntraj, popsize, niter) ... % assuming integrating over a single trajectory takes 1 sec on a single processor
-    disp(['optimisation run-time ~' ...
-    num2str(round(ntraj / ncores * popsize * niter / 60 / 60, 2, 'significant')) ' hrs']);
+approxRunTime = @(runtime, ncores, ntraj, popsize, niter) ... % assuming integrating over a single trajectory takes 1 sec on a single processor
+    round(runtime * ntraj * (niter+1) * popsize / ncores / 60 / 60, 2, 'significant');
 
 popSize = 50;
 niter = 10;
 
-approxRunTime(numcores, Forc.nTraj, popSize, niter)
+approxOptimisationTime = approxRunTime(runtime, numcores, Forc.nTraj, popSize, niter);
+disp(['predicted optimsation run-time ~ ' num2str(approxOptimisationTime) ' hrs'])
 
 gaOptions = optimoptions('ga','Display','iter','PlotFcn',@gaplotbestf, ...
     'MaxGenerations',niter,'PopulationSize',popSize);
 
 % tune parameters
-[optPar, fval, exitflag, output, population, scores] = ga(@(x)costFun(x, FixedParams, Params, Forc, Data, v0, ode45options), ...
+tic; disp('.. started at'); disp(datetime('now'))
+[optPar, fval, exitflag, output, population, scores] = ... 
+    ga(@(x)costFun(x, FixedParams, Params, Forc, Data, v0, ode45options), ...
     npars, [], [], [], [], lb, ub, [], gaOptions);
+optimisationTime = toc / 60 / 60; disp('.. finished at'); disp(datetime('now'))
+
+% % continue parameter-tuning from where the algorithm stopped...
+% niter = 10;
+% gaOptions = optimoptions('ga','Display','iter','PlotFcn',@gaplotbestf, ...
+%     'MaxGenerations',niter,'InitialPopulation',population);
+% tic; disp('.. started at'); disp(datetime('now'))
+% [optPar, fval, exitflag, output, population, scores] = ... 
+%     ga(@(x)costFun(x, FixedParams, Params, Forc, Data, v0, ode45options), ...
+%     npars, [], [], [], [], lb, ub, [], gaOptions);
+% optimisationTime = toc / 60 / 60; disp('.. finished at'); disp(datetime('now'))
 
 
-% cost = costFun(pars, FixedParams, Params, Forc, Data, v0, ode45options);
+% generate output using fitted parameters
+Params = updateParameters(Params, FixedParams, optPar);
 
-%---------------------------------
+[OUT, AUXVARS, AUXVARS_2d, namesExtra, nExtra] = ... 
+    integrateTrajectories(FixedParams, Params, Forc, v0, ode45options);
 
+% Extract solutions
+nt = FixedParams.nt;
+nz = FixedParams.nz;
+nPP = FixedParams.nPP;
+nOM = FixedParams.nOM;
+nTraj = Forc.nTraj;
+out.N = reshape(OUT(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
+out.P = reshape(OUT(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
+out.Z = reshape(OUT(FixedParams.ZP_index,:,:), [1 nz nt nTraj]);
+out.OM = reshape(OUT(FixedParams.OM_index,:,:), [nOM nz nt nTraj]);
+if sum(nExtra) > 0
+    for k = 1:nExtra(1)
+        auxVars.(namesExtra{k}) = squeeze(AUXVARS(:,k,:,:));
+    end
+    for k = 1:nExtra(2)
+        auxVars.(namesExtra{k+nExtra(1)}) = squeeze(AUXVARS_2d(:,:,k,:,:));
+    end
+end
 
-% % Extract solutions from array, OUT, into a more readable struct, out.
-% % Same for extra outputs...
-% nt = FixedParams.nt;
-% nz = FixedParams.nz;
-% nPP = FixedParams.nPP;
-% nOM = FixedParams.nOM;
-% nTraj = Forc.nTraj;
-% 
-% out.N = reshape(OUT(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
-% out.P = reshape(OUT(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
-% out.Z = reshape(OUT(FixedParams.ZP_index,:,:), [1 nz nt nTraj]);
-% out.OM = reshape(OUT(FixedParams.OM_index,:,:), [nOM nz nt nTraj]);
-% 
-% if sum(nExtra) > 0
-%     for k = 1:nExtra(1)
-%         auxVars.(namesExtra{k}) = squeeze(AUXVARS(:,k,:,:));
-%     end
-%     for k = 1:nExtra(2)
-%         auxVars.(namesExtra{k+nExtra(1)}) = squeeze(AUXVARS_2d(:,:,k,:,:));
-%     end
-% end
 
 
 %% Plot some output...
@@ -442,13 +467,12 @@ if ~ismember(ie, 1:Data.nEvents), warning(['Choose event number within range (1,
 % trajectory indices
 kk = find(Data.EventTraj(ie,:));
 
-outputPlot('trajectoryPolygon_TimeSeries','forcing',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
-% outputPlot('trajectoryPolygon_TimeSeries','nutrient',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
-outputPlot('trajectoryPolygon_TimeSeries','DOM_POM',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
-outputPlot('trajectoryPolygon_TimeSeries','phytoplankton',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
-outputPlot('trajectoryPolygon_TimeSeries','phytoplanktonStacked',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
-outputPlot('trajectoryPolygon_TimeSeries','phytoZooPlanktonStacked',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+outputPlot('trajectoryPolygon_TimeSeries','forcing',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
+outputPlot('trajectoryPolygon_TimeSeries','DOM_POM',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
+outputPlot('trajectoryPolygon_TimeSeries','phytoplankton',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
+outputPlot('trajectoryPolygon_TimeSeries','phytoplanktonStacked',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
+outputPlot('trajectoryPolygon_TimeSeries','phytoZooPlanktonStacked',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 
-outputPlot('barplot_TimeSeries','phytoZooPlankton',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+outputPlot('barplot_TimeSeries','phytoZooPlankton',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 
 

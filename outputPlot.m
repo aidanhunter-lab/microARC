@@ -544,7 +544,7 @@ switch type
         % Extract times
         day = yearday(forcing.t(:,itraj));
         x = day(:,1);
-        etime = dat.Yearday(dat.Event == ie,:);
+        etime = unique(dat.Yearday(dat.Event == ie,:));
         
         % Extract outputs
         N = squeeze(out.N(:,:,:,itraj));
