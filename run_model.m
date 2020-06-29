@@ -128,9 +128,9 @@ end
 [FixedParams, Params] = initialiseParameters(F);
 Params0 = Params;
 
-% Parameter values can be changed using name-value pairs in
+% Parameter values can be changed using name-value pair arguments in 
 % updateParameters.m, eg,
-Params = updateParameters(Params, FixedParams, 'pmax_a', 30, 'pmax_b', -0.55, 'Gmax', 3);
+% Params = updateParameters(Params, FixedParams, 'pmax_a', 30, 'pmax_b', -0.55, 'Gmax', 3);
 
 
 %~~~~~~~~~~~~~
@@ -139,55 +139,75 @@ Params = updateParameters(Params, FixedParams, 'pmax_a', 30, 'pmax_b', -0.55, 'G
 
 % Interpolate forcing data over chosen depth layers
 Forc0 = prepareForcing(F,FixedParams);
+% clear F
 
-% load fitting data
+% Load and prepare fitting data
 obsDir = fullfile('DATA', 'AWI_Hausgarten');
-obsFile = 'AWI-Hausgarten.xlsx';
-dat = readtable(fullfile(obsDir,obsFile));
-% rename variables
-vn = dat.Properties.VariableNames;
-vn{strcmp(vn, 'PangaeaEventLabel')} = 'eventLabel';
-vn{strcmp(vn, 'lat_degN')} = 'lat';
-vn{strcmp(vn, 'long_degE')} = 'lon';
-vn{strcmp(vn, 'Sample')} = 'sample';
-vn{strcmp(vn, 'depth_m')} = 'depth';
-vn{strcmp(vn, 'StationName')} = 'station';
-dat.Properties.VariableNames = vn;
-% use years with samples and forcing data
-clear year
-iForc = ismember(year(dat.SamplingDate), FixedParams.years);
-dat = dat(iForc,:);
-dat.year = year(dat.SamplingDate);
-dat.month = month(dat.SamplingDate);
-dat.day = day(dat.SamplingDate);
-dat.yearday = floor(yearday(datenum(dat.SamplingDate)));
-eventLabel = unique(dat.eventLabel, 'stable');
-event = (1:length(eventLabel))';
-events = table(event, eventLabel);
-dat = join(dat, events);
-% remove duplicate event numbers corresponding to samples at different depths
-dat0 = dat;
-dat.depth = [];
-dat.sample = [];
-dat = unique(dat, 'stable');
-head(dat)
+Data = prepareFittingData(obsDir, FixedParams); % tailor this function to specific data sets
+
+% Use forcing data from years corresponding to samples
+iy = ismember(Forc0.years, unique(Data.Year));
+disp(['use particle trajectories from ' num2str(Forc0.years(iy))])
+% Filter out unused years
+[Y,~] = datevec(Forc0.t);
+ind = any(Y == Forc0.years(iy));
+ntraj = length(ind);
+ntraj_new = sum(ind);
+fields = fieldnames(Forc0);
+for i = 1:length(fields)
+    x = Forc0.(fields{i});
+    s = size(x);
+    if any(s == ntraj)
+        nd = length(s);
+        ind_ = repmat(reshape(ind, [ones(1,nd-1) ntraj]), [s(1:end-1) 1]);
+        Forc.(fields{i}) = reshape(x(ind_), [s(1:end-1) ntraj_new]);
+    else
+        Forc.(fields{i}) = Forc0.(fields{i});
+    end
+end
+Forc.years = Forc.years(iy);
+FixedParams.years = FixedParams.years(iy);
+
 
 % Filter forcing data by finding trajectories close to sampling events
 maxDist = 25; % distance of particle from sample location
 maxTraj = 10; % maximum number of particles per sample event
-[Forc, eventTraj] = chooseTrajectories(Forc0, dat, maxDist, maxTraj);
-% head(eventTraj) % list all trajectories selected for each sampling event
+[Forc, eventTraj] = chooseTrajectories(Forc, Data, maxDist, maxTraj);
 
-% Store fitting-data in separate struct
-events = unique(eventTraj.event);
-Data.nEvent = length(events);
-Data.label = dat.eventLabel(ismember(dat.event,events));
-Data.t = datenum(dat.SamplingDate(ismember(dat.event,events)));
-Data.eventTraj = false(Data.nEvent, Forc.nTraj);
-for i = 1:Data.nEvent
-    ti = eventTraj.trajIndex(eventTraj.event == events(i));
-    Data.eventTraj(i,ti) = true;
+% If any sampling events have not been ascribed trajectories then either
+% refilter using above code, or omit those events
+if Data.nEvents > length(unique(eventTraj.event))
+    Data.nEvents = length(unique(eventTraj.event));
+    keep = ismember(Data.Event, eventTraj.event);
+    fields = fieldnames(Data);
+    for i = 1:length(fields)
+        if size(Data.(fields{i}), 1) == Data.nSamples
+            Data.(fields{i}) = Data.(fields{i})(keep);
+        end
+    end
+    Data.nSamples = size(Data.Value,1);
+    adj = [unique(Data.Event) (1:Data.nEvents)'];
+    for i = 1:size(adj,1)
+        Data.Event(Data.Event == adj(i,1)) = adj(i,2);
+        eventTraj.event(eventTraj.event == adj(i,1)) = adj(i,2);
+    end
+end    
+
+Data.EventTraj = false(Data.nEvents, Forc.nTraj); % match samples to trajectories
+for i = 1:Data.nEvents
+    ti = eventTraj.trajIndex(eventTraj.event == i);
+    Data.EventTraj(i,ti) = true;
 end
+
+
+% Group sampling events by origin of particles: Arctic or Atlantic.
+[Forc, Data] = particleOrigin(Forc, Data, ...
+    'trajectoryPlot', true, 'dendrogram', true);
+
+% Standardise the fitting data using linear mixed models to adjust for
+% variability due to depth and sampling event.
+Data = standardiseFittingData(Data,'plotScaledPON', true, 'plotScaledPOC', ...
+    true, 'plotScaledN', true, 'plotAllData', true);
 
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -206,25 +226,12 @@ end
 v0 = initialiseVariables(FixedParams,Forc); % v0 stores initial input vectors
 
 
-%~~~~~~~~~~~~~~~~~~~~~~~
-% Optional extra outputs
-%~~~~~~~~~~~~~~~~~~~~~~~
-
-% Can return extra output along with the integrated state variables. Four
-% options (so far) for returnExtras.
-% returnExtras = 'none';
-returnExtras = 'auxiliary'; % return non-state variables
-% returnExtras = 'rates';   % return rates of change of state variables
-% returnExtras = 'auxiliaryAndRates';
-FixedParams.returnExtras = returnExtras;
-
-
 %% Integrate
 
 % Solve with ode45, called separately for each time step -- defined by
 % forcing data (daily) intervals
-odeInitTime = 12/24; % initial timestep = 12 hrs. (ode45 will automatically reduce this if required)
-odeMaxTime = 1;      % max timestep = 1 day
+odeMaxTime = FixedParams.dt_max; % max timestep (days)
+odeInitTime = 0.5 * odeMaxTime; % initial timestep (ode45 will automatically reduce this if required)
 
 % set solver options: positive definite, tolerances, initial & max time steps
 ode45options=odeset('NonNegative',[1 ones(1, FixedParams.nEquations)],...
@@ -232,67 +239,113 @@ ode45options=odeset('NonNegative',[1 ones(1, FixedParams.nEquations)],...
   'InitialStep',odeInitTime,'MaxStep',odeMaxTime);
 
 poolObj = gcp; % integrations are parallelised over trajectories
+numcores = poolObj.NumWorkers;
 
-
-% integrating function
+% Integrate using default or manually selected parameters
 tic
-[OUT, AUXVARS, RATES, namesExtra, nExtra] = ... 
+[OUT, AUXVARS, AUXVARS_2d, namesExtra, nExtra] = ... 
     integrateTrajectories(FixedParams, Params, Forc, v0, ode45options);
-toc
-
-
-% %---------------------------------
-% % Parameters to tune
-% parnames = {'A', 'm', 'aP', 'Gmax', 'k_G', 'Lambda', 'lambda_max', 'wk', ...
-%     'rPOM', 'rDOM', 'Qmin_a', 'Qmin_b', 'Qmax_over_delQ_a', ... 
-%     'Qmax_over_delQ_a', 'Vmax_over_Qmin_a', 'Vmax_over_Qmin_b', ... 
-%     'aN_over_Qmin_a', 'aN_over_Qmin_b', 'pmax_a', 'pmax_b'};
-% FixedParams.tunePars = parnames;
-% npars = length(parnames);
-% pars = nan(1, npars);
-% for i = 1:npars
-%     pars(i) = Params.(parnames{i});
-% end
-% 
-% % tune parameters
-% ga(@(x)costFun(x, FixedParams, Params, Forc, Data, v0, ode45options), npars)
-% 
-% %---------------------------------
-
+runtime = toc;
+disp([num2str(runtime) ' seconds to integrate ' num2str(Forc.nTraj) ' trajectories'])
+runtime = runtime / Forc.nTraj * numcores; % average integration time of single trajectory on single processor
 
 % Extract solutions from array, OUT, into a more readable struct, out.
 % Same for extra outputs...
 nt = FixedParams.nt;
 nz = FixedParams.nz;
 nPP = FixedParams.nPP;
+nOM = FixedParams.nOM;
 nTraj = Forc.nTraj;
 
 out.N = reshape(OUT(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
 out.P = reshape(OUT(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
 out.Z = reshape(OUT(FixedParams.ZP_index,:,:), [1 nz nt nTraj]);
-out.OM = reshape(OUT(FixedParams.OM_index,:,:), [1 nz nt nTraj]);
+out.OM = reshape(OUT(FixedParams.OM_index,:,:), [nOM nz nt nTraj]);
 
-if ~strcmp(returnExtras, 'none')
-    switch returnExtras
-        case 'auxiliary'
-            for k = 1:nExtra
-                auxVars.(namesExtra{k}) = squeeze(AUXVARS(:,k,:,:));
-            end
-        case 'auxiliaryAndRates'
-            for k = 1:nExtra
-                auxVars.(namesExtra{k}) = squeeze(AUXVARS(:,k,:,:));
-            end
-            rates.N = reshape(RATES(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
-            rates.P = reshape(RATES(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
-            rates.Z = reshape(RATES(FixedParams.ZP_index,:,:), [1 nz nt nTraj]);
-            rates.OM = reshape(RATES(FixedParams.OM_index,:,:), [1 nz nt nTraj]);
-        case 'rates'
-            rates.N = reshape(RATES(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
-            rates.P = reshape(RATES(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
-            rates.Z = reshape(RATES(FixedParams.ZP_index,:,:), [1 nz nt nTraj]);
-            rates.OM = reshape(RATES(FixedParams.OM_index,:,:), [1 nz nt nTraj]);
+if sum(nExtra) > 0
+    for k = 1:nExtra(1)
+        auxVars.(namesExtra{k}) = squeeze(AUXVARS(:,k,:,:));
+    end
+    for k = 1:nExtra(2)
+        auxVars.(namesExtra{k+nExtra(1)}) = squeeze(AUXVARS_2d(:,:,k,:,:));
     end
 end
+
+
+%% Parameter tuning
+
+clear OUT out AUXVARS AUXVARS_2d auxVars
+
+poolObj = gcp; % integrations are parallelised over trajectories
+numcores = poolObj.NumWorkers;
+
+% Choose tuning parameters from Params.scalars and Params.sizeDependent
+parnames = {'pmax_a','pmax_b','aP', ... 
+    'Gmax','k_G', ... 
+    'aN_over_Qmin_a','aN_over_Qmin_b'};
+npars = length(parnames);
+FixedParams.tunePars = parnames;
+lb = nan(1,npars); ub = nan(1,npars);
+for i = 1:npars
+    lb(i) = Params.lowerBound.(parnames{i});
+    ub(i) = Params.upperBound.(parnames{i});
+end
+
+approxRunTime = @(runtime, ncores, ntraj, popsize, niter) ... % assuming integrating over a single trajectory takes 1 sec on a single processor
+    round(runtime * ntraj * (niter+1) * popsize / ncores / 60 / 60, 2, 'significant');
+
+popSize = 50;
+niter = 10;
+
+approxOptimisationTime = approxRunTime(runtime, numcores, Forc.nTraj, popSize, niter);
+disp(['predicted optimsation run-time ~ ' num2str(approxOptimisationTime) ' hrs'])
+
+gaOptions = optimoptions('ga','Display','iter','PlotFcn',@gaplotbestf, ...
+    'MaxGenerations',niter,'PopulationSize',popSize);
+
+% tune parameters
+tic; disp('.. started at'); disp(datetime('now'))
+[optPar, fval, exitflag, output, population, scores] = ... 
+    ga(@(x)costFun(x, FixedParams, Params, Forc, Data, v0, ode45options), ...
+    npars, [], [], [], [], lb, ub, [], gaOptions);
+optimisationTime = toc / 60 / 60; disp('.. finished at'); disp(datetime('now'))
+
+% % continue parameter-tuning from where the algorithm stopped...
+% niter = 10;
+% gaOptions = optimoptions('ga','Display','iter','PlotFcn',@gaplotbestf, ...
+%     'MaxGenerations',niter,'InitialPopulation',population);
+% tic; disp('.. started at'); disp(datetime('now'))
+% [optPar, fval, exitflag, output, population, scores] = ... 
+%     ga(@(x)costFun(x, FixedParams, Params, Forc, Data, v0, ode45options), ...
+%     npars, [], [], [], [], lb, ub, [], gaOptions);
+% optimisationTime = toc / 60 / 60; disp('.. finished at'); disp(datetime('now'))
+
+
+% generate output using fitted parameters
+Params = updateParameters(Params, FixedParams, optPar);
+
+[OUT, AUXVARS, AUXVARS_2d, namesExtra, nExtra] = ... 
+    integrateTrajectories(FixedParams, Params, Forc, v0, ode45options);
+
+% Extract solutions
+nt = FixedParams.nt;
+nz = FixedParams.nz;
+nPP = FixedParams.nPP;
+nOM = FixedParams.nOM;
+nTraj = Forc.nTraj;
+out.N = reshape(OUT(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
+out.P = reshape(OUT(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
+out.Z = reshape(OUT(FixedParams.ZP_index,:,:), [1 nz nt nTraj]);
+out.OM = reshape(OUT(FixedParams.OM_index,:,:), [nOM nz nt nTraj]);
+if sum(nExtra) > 0
+    for k = 1:nExtra(1)
+        auxVars.(namesExtra{k}) = squeeze(AUXVARS(:,k,:,:));
+    end
+    for k = 1:nExtra(2)
+        auxVars.(namesExtra{k+nExtra(1)}) = squeeze(AUXVARS_2d(:,:,k,:,:));
+    end
+end
+
 
 
 %% Plot some output...
@@ -309,19 +362,11 @@ folder = 'OUTPUT/plots/';
 close all
 
 % Choose trajectory
-k = 1;
-% Or, first, filter by year or sampling event 
-iy = 1;  % year index
+% k = 1;
+% Or, first, filter by sampling event 
 ie = 10; % sampling event
-
-if FixedParams.years(iy) ~= dat.year(dat.event == ie)
-    kk = nan;
-    warning('Selected sampling event must occur during selected year')
-else
-    kk = eventTraj.trajIndex(eventTraj.event == ie); % all trajectories for selected event
-end
+kk = find(Data.EventTraj(ie,:)); % all trajectories for selected event
 k = kk(1);
-
 
 % Depth-time contour plots
 
@@ -344,7 +389,7 @@ if save
 end
 
 % organic nutrient
-outputPlot('contour_DepthTime','organicNutrient',k,out,FixedParams,Forc,auxVars,'linear');
+outputPlot('contour_DepthTime','DOM_POM',k,out,FixedParams,Forc,auxVars,'linear');
 if save
     fig = gcf;
     filename = 'organic_nutrient.png';
@@ -354,6 +399,24 @@ end
 
 % phytoplankton
 outputPlot('contour_DepthTime','phytoplankton',k,out,FixedParams,Forc,auxVars,'linear');
+if save
+    fig = gcf;
+    filename = 'phytoplankton.png';
+    figFile = fullfile(folder, filename);    
+    print(fig, figFile, '-r300', '-dpng');
+end
+
+% phytoplankton carbon
+outputPlot('contour_DepthTime','phytoplankton_C',k,out,FixedParams,Forc,auxVars,'linear');
+if save
+    fig = gcf;
+    filename = 'phytoplankton.png';
+    figFile = fullfile(folder, filename);    
+    print(fig, figFile, '-r300', '-dpng');
+end
+
+% phytoplankton N/C ratio
+outputPlot('contour_DepthTime','phytoplankton_N_C',k,out,FixedParams,Forc,auxVars,'linear');
 if save
     fig = gcf;
     filename = 'phytoplankton.png';
@@ -378,17 +441,17 @@ end
 close all
 
 % Choose event
-ie = 8;
-if ~ismember(ie, eventTraj.event), warning(['Choose event number within range (' num2str(min(eventTraj.event)) ', ' num2str(max(eventTraj.event)) ')']); end
+ie = 2;
+if ~ismember(ie, 1:Data.nEvents), warning(['Choose event number within range (1, ' num2str(Data.nEvents) ')']); end
 % trajectory indices
-kk = eventTraj.trajIndex(eventTraj.event == ie);
+kk = find(Data.EventTraj(ie,:));
 
-outputPlot('trajectoryLine_LatLong','direction',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
-outputPlot('trajectoryLine_LatLong','forcing',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
-outputPlot('trajectoryLine_LatLong','inorganicNutrient',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
-outputPlot('trajectoryLine_LatLong','organicNutrient',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
-outputPlot('trajectoryLine_LatLong','phytoplankton',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
-outputPlot('trajectoryLine_LatLong','zooplankton',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+outputPlot('trajectoryLine_LatLong','direction',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
+outputPlot('trajectoryLine_LatLong','forcing',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
+outputPlot('trajectoryLine_LatLong','inorganicNutrient',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
+outputPlot('trajectoryLine_LatLong','DOM_POM',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
+outputPlot('trajectoryLine_LatLong','phytoplankton',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
+outputPlot('trajectoryLine_LatLong','zooplankton',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 
 
 
@@ -400,20 +463,16 @@ close all
 
 % Choose event
 ie = 1;
-if ~ismember(ie, eventTraj.event), warning(['Choose event number within range (' num2str(min(eventTraj.event)) ', ' num2str(max(eventTraj.event)) ')']); end
+if ~ismember(ie, 1:Data.nEvents), warning(['Choose event number within range (1, ' num2str(Data.nEvents) ')']); end
 % trajectory indices
-kk = eventTraj.trajIndex(eventTraj.event == ie);
+kk = find(Data.EventTraj(ie,:));
 
-outputPlot('trajectoryPolygon_TimeSeries','forcing',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
-outputPlot('trajectoryPolygon_TimeSeries','nutrient',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
-outputPlot('trajectoryPolygon_TimeSeries','phytoplankton',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
-outputPlot('trajectoryPolygon_TimeSeries','phytoplanktonStacked',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
-outputPlot('trajectoryPolygon_TimeSeries','phytoZooPlanktonStacked',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
+outputPlot('trajectoryPolygon_TimeSeries','forcing',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
+outputPlot('trajectoryPolygon_TimeSeries','DOM_POM',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
+outputPlot('trajectoryPolygon_TimeSeries','phytoplankton',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
+outputPlot('trajectoryPolygon_TimeSeries','phytoplanktonStacked',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
+outputPlot('trajectoryPolygon_TimeSeries','phytoZooPlanktonStacked',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 
-outputPlot('barplot_TimeSeries','phytoZooPlankton',ie,kk,out,FixedParams,Forc,auxVars,dat,0.1);
-
-
-
-
+outputPlot('barplot_TimeSeries','phytoZooPlankton',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 
 

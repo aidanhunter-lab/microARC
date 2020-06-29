@@ -26,4 +26,10 @@ FixedParams.ZP_index = ZP_index;
 OM_index = [false(1, (nIN + nPP + nZP) * nz) true(1, nOM * nz)]';
 FixedParams.OM_index = OM_index;
 
+if FixedParams.nOM > 1
+    % index OM types
+    for i =1:FixedParams.nOM
+        FixedParams.([FixedParams.OMtype{i} '_index']) = ... 
+            strcmp(FixedParams.OMtype{i}, FixedParams.OMtype);
+    end
 end

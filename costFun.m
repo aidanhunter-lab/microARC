@@ -6,59 +6,73 @@ function cost = costFun(x, FixedParams, Params, Forc, Data, v0, ode45options)
 nt = FixedParams.nt;
 nz = FixedParams.nz;
 nPP = FixedParams.nPP;
+nOM = FixedParams.nOM;
 nTraj = Forc.nTraj;
+nEvent = Data.nEvents;
+depths_mod = abs(FixedParams.z);
 
 % Set parameter values
-Params = updateParameters2(Params, FixedParams, x);
+Params = updateParameters(Params, FixedParams, x);
 
-% Integrate model
-[OUT, AUXVARS, RATES, namesExtra, nExtra] = ... 
+% Integrate
+[OUT, AUXVARS, AUXVARS_2d, namesExtra, nExtra] = ... 
     integrateTrajectories(FixedParams, Params, Forc, v0, ode45options);
 
 % Extract solutions
 out.N = reshape(OUT(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
 out.P = reshape(OUT(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
 out.Z = reshape(OUT(FixedParams.ZP_index,:,:), [1 nz nt nTraj]);
-out.OM = reshape(OUT(FixedParams.OM_index,:,:), [1 nz nt nTraj]);
+out.OM = reshape(OUT(FixedParams.OM_index,:,:), [nOM nz nt nTraj]);
 
-returnExtras = FixedParams.returnExtras;
-if ~strcmp(returnExtras, 'none')
-    switch returnExtras
-        case 'auxiliary'
-            for k = 1:nExtra
-                auxVars.(namesExtra{k}) = squeeze(AUXVARS(:,k,:,:));
-            end
-        case 'auxiliaryAndRates'
-            for k = 1:nExtra
-                auxVars.(namesExtra{k}) = squeeze(AUXVARS(:,k,:,:));
-            end
-            rates.N = reshape(RATES(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
-            rates.P = reshape(RATES(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
-            rates.Z = reshape(RATES(FixedParams.ZP_index,:,:), [1 nz nt nTraj]);
-            rates.OM = reshape(RATES(FixedParams.OM_index,:,:), [1 nz nt nTraj]);
-        case 'rates'
-            rates.N = reshape(RATES(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
-            rates.P = reshape(RATES(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
-            rates.Z = reshape(RATES(FixedParams.ZP_index,:,:), [1 nz nt nTraj]);
-            rates.OM = reshape(RATES(FixedParams.OM_index,:,:), [1 nz nt nTraj]);
+if sum(nExtra) > 0
+    for k = 1:nExtra(1)
+        auxVars.(namesExtra{k}) = squeeze(AUXVARS(:,k,:,:));
+    end
+    for k = 1:nExtra(2)
+        auxVars.(namesExtra{k+nExtra(1)}) = squeeze(AUXVARS_2d(:,:,k,:,:));
     end
 end
 
 
 % Compare model to observations
-for i = 1:Data.nEvent
-    ti = Data.eventTraj(i,:);
-    N = out.N(:,:,:,ti);
-    P = out.P(:,:,:,ti);
-    Z = out.Z(:,:,:,ti);
-    OM = out.OM(:,:,:,ti);
+cost_N = nan(1,nEvent);
+cost_PON = nan(1,nEvent);
+for i = 1:nEvent
+    iObs = Data.Event == i; % index data
+    time = Data.Yearday(find(iObs,1)); % sample time    
+    ti = Data.EventTraj(i,:); % index trajectories
+    
+    vars = unique(Data.Variable(Data.Event == i));
+    
+    % inorganic nitrogen
+    if any(strcmp(vars,'N'))
+        ind = iObs & strcmp('N',Data.Variable);
+        y_obs = Data.Value(ind); % measured values
+%         y_obs = Data.log_Value(ind); % measured values
+        depths_obs = Data.Depth(ind); % measurement depths
+        y_mod = squeeze(out.N(:,:,time,ti)); % modelled values
+        y_mod = interp1(depths_mod, y_mod, depths_obs); % interpolate modelled output to match observation depths
+        stdDev = Data.scale_stdDev(ind);
+        sqErr = ((y_obs - y_mod) ./ stdDev) .^2; % normal error
+%         sqErr = (y_obs - log(y_mod) ./ stdDev) .^2; % log-normal error
+        cost_N(i) = sum(sqErr(:)) / numel(y_mod);
+    end
+    
+    % PON
+    if any(strcmp(vars,'PON'))
+        ind = iObs & strcmp('PON',Data.Variable);
+        y_obs = Data.Value(ind); % measured values
+%         y_obs = Data.log_Value(ind); % measured values
+        depths_obs = Data.Depth(ind); % measurement depths
+        y_mod = squeeze(out.OM(FixedParams.POM_index,:,time,ti)); % modelled values
+        y_mod = interp1(depths_mod, y_mod, depths_obs); % interpolate modelled output to match observation depths
+        stdDev = Data.scale_stdDev(ind);
+        sqErr = ((y_obs - y_mod) ./ stdDev) .^2; % normal error
+%         sqErr = (y_obs - log(y_mod) ./ stdDev) .^2; % log-normal error
+        cost_PON(i) = sum(sqErr(:)) / numel(y_mod);
+    end    
 end
 
-
-
-
-
-
-
+cost = nanmean(cost_N) + nanmean(cost_PON);
 
 
