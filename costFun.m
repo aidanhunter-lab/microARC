@@ -47,28 +47,24 @@ for i = 1:nEvent
     % inorganic nitrogen
     if any(strcmp(vars,'N'))
         ind = iObs & strcmp('N',Data.Variable);
-        y_obs = Data.Value(ind); % measured values
-%         y_obs = Data.log_Value(ind); % measured values
+        y_obs = Data.scaled_Value(ind); % measured values
         depths_obs = Data.Depth(ind); % measurement depths
         y_mod = squeeze(out.N(:,:,time,ti)); % modelled values
-        y_mod = interp1(depths_mod, y_mod, depths_obs); % interpolate modelled output to match observation depths
-        stdDev = Data.scale_stdDev(ind);
-        sqErr = ((y_obs - y_mod) ./ stdDev) .^2; % normal error
-%         sqErr = (y_obs - log(y_mod) ./ stdDev) .^2; % log-normal error
+        y_mod = interp1(depths_mod, y_mod, depths_obs); % interpolate modelled output to match observation depths        
+        y_mod = Data.scaleFun_N(Data.scale_mu(ind), Data.scale_sig(ind), y_mod); % scale model output using same functions that scaled the data
+        sqErr = (y_obs - y_mod) .^2; % normal error
         cost_N(i) = sum(sqErr(:)) / numel(y_mod);
     end
     
     % PON
     if any(strcmp(vars,'PON'))
         ind = iObs & strcmp('PON',Data.Variable);
-        y_obs = Data.Value(ind); % measured values
-%         y_obs = Data.log_Value(ind); % measured values
+        y_obs = Data.scaled_Value(ind); % measured values
         depths_obs = Data.Depth(ind); % measurement depths
         y_mod = squeeze(out.OM(FixedParams.POM_index,:,time,ti)); % modelled values
         y_mod = interp1(depths_mod, y_mod, depths_obs); % interpolate modelled output to match observation depths
-        stdDev = Data.scale_stdDev(ind);
-        sqErr = ((y_obs - y_mod) ./ stdDev) .^2; % normal error
-%         sqErr = (y_obs - log(y_mod) ./ stdDev) .^2; % log-normal error
+        y_mod = Data.scaleFun_PON(Data.scale_mu(ind), Data.scale_sig(ind), y_mod); % scale model output using same functions that scaled the data
+        sqErr = (y_obs - y_mod) .^2; % normal error
         cost_PON(i) = sum(sqErr(:)) / numel(y_mod);
     end    
 end
