@@ -206,8 +206,8 @@ end
 
 % Standardise the fitting data using linear mixed models to adjust for
 % variability due to depth and sampling event.
-Data = standardiseFittingData(Data,'plotScaledPON', true, 'plotScaledPOC', ...
-    true, 'plotScaledN', true, 'plotAllData', true);
+Data = standardiseFittingData(Data,'plotScaledPON', true, 'plotScaledPOC', true, ...
+    'plotScaledchl_a', true, 'plotScaledN', true, 'plotAllData', true);
 
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -241,7 +241,7 @@ ode45options=odeset('NonNegative',[1 ones(1, FixedParams.nEquations)],...
 poolObj = gcp; % integrations are parallelised over trajectories
 numcores = poolObj.NumWorkers;
 
-% Integrate using default or manually selected parameters
+% Integrate model specified by Params
 tic
 [OUT, AUXVARS, AUXVARS_2d, namesExtra, nExtra] = ... 
     integrateTrajectories(FixedParams, Params, Forc, v0, ode45options);

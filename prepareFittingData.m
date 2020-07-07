@@ -64,9 +64,13 @@ dat_OM = dat_OM(dat_OM.Year == 2017,:);
 dat_OM.Yearday = yearday(datenum(dat_OM.Date));
 % filter out data columns
 dat_OM = dat_OM(:,{'Year','Yearday','ARK_oder_PS','HG_stations','Station','EventNumber','Latitude','Longitude','Depth','chl_a','POC','PON'});
-% Convert POM units from (mu g / L) to (mu mol / L)
+% Convert POM units from (mu g / L) to (m mol / m^3)
 dat_OM.PON = dat_OM.PON ./ 14;
 dat_OM.POC = dat_OM.POC ./ 12;
+% % Convert chl units from mu g / L to mu g / m^3
+% dat_OM.chl_a = dat_OM.chl_a * 1000;
+% dat_OM.Properties.VariableNames{'chl_a'} = 'Chl';
+
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -105,8 +109,7 @@ dat = [dat_nut; dat_OM];
 % Remove samples from below the maximum modelled depth
 dat = dat(dat.Depth < -min(FixedParams.z),:);
 
-% Remove NaNs & rows with non-positive measures -- maybe the 'flag' columns
-% should be used for filtering...
+% Remove NaNs & rows with non-positive measures
 dat(dat.Value <= 0 | isnan(dat.Value),:) = [];
 
 % Index each unique sampling event
