@@ -5,14 +5,15 @@ function [Forc, events] = chooseTrajectories(Forc, dat, maxDist, maxTraj)
 % Filter out any unused forcing data.
 % Return a table linking event numbers to particle indexes.
 
-nt = size(Forc.t,1);
+% nt = size(Forc.t,1);
 nTraj = length(Forc.iTraj);
 
 % particle times as year and yearday
 time = yearday(Forc.t);
-[year,~] = datevec(Forc.t);
+% [year,~] = datevec(Forc.t);
 
-% Find distance between particles and event at event time
+% For each event, filter out all particles further than maxDist from event
+% location at event time.
 nEvent = length(unique(dat.Event));
 Dist = nan(nTraj, nEvent);
 Rank = nan(size(Dist));
@@ -20,7 +21,7 @@ Keep = nan(size(Dist));
 
 for i = 1:nEvent
     ie = find(dat.Event == i,1);
-    sYear = dat.Year(ie);
+%     sYear = dat.Year(ie);
     sLat = dat.Latitude(ie);
     sLon = dat.Longitude(ie);
     sTime = dat.Yearday(ie);
@@ -43,14 +44,56 @@ for i = 1:nEvent
     [~,rankDist] = sort(I);    
     Rank(keep,i) = rankDist;
     
-    % Limit number of trajectories to maxTraj per event
-    nbest = Rank(:,i) <= maxTraj;
-    keep = keep(:) & nbest(:);
-    Dist(~keep,i) = nan;
-    Rank(~keep,i) = nan;
+%     % Limit number of trajectories to maxTraj per event
+%     nbest = Rank(:,i) <= maxTraj;
+%     keep = keep(:) & nbest(:);
+%     Dist(~keep,i) = nan;
+%     Rank(~keep,i) = nan;
     
     Keep(:,i) = keep;
     
+end
+
+% For each sampling event choose, at most, maxTraj particle trajectories
+% from those within maxDist of the event.
+% Use a clustering method to choose the most dissimilar trajectories,
+% thereby maximising variability in the forcing data.
+
+for i = 1:nEvent
+    i_traj = Keep(:,i);
+    f_traj = find(i_traj);
+    n_traj = sum(i_traj);
+    if n_traj == 0, continue; end    
+    if n_traj ~= 1
+        % We're only interested in measuring trajectory dissimilarities
+        % leading up to the sampling event... where the trajectories travel
+        % after that is irrelevant.
+        times = 1:unique(dat.Yearday(dat.Event == i));
+        dist_dtw = zeros(n_traj); % distances between particles
+        for j = 2:n_traj
+            for k = 1:j-1
+                s1 = [Forc.T(1,times,f_traj(j))' Forc.K(1,times,f_traj(j))' ...
+                    Forc.PARsurf(1,times,f_traj(j))'];
+                s2 = [Forc.T(1,times,f_traj(k))' Forc.K(1,times,f_traj(k))' ...
+                    Forc.PARsurf(1,times,f_traj(k))'];
+                dist_dtw(j,k) = dtw(s1,s2);
+            end
+        end
+        lat_link = linkage(dist_dtw);
+        clust = cluster(lat_link,'maxclust',maxTraj);
+        % Select the 1st trajectory from each cluster
+        uc = unique(clust);
+        nc = length(uc);
+        useTrajectories = nan(nc,1);
+        for j = 1:nc
+            useTrajectories(j) = f_traj(find(clust == j, 1));
+        end
+        Keep(:,i) = false;
+        Keep(useTrajectories,i) = true;
+    else
+        Keep(:,i) = false;
+        Keep(f_traj,i) = true;
+    end
 end
 
 

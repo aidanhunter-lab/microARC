@@ -1,7 +1,7 @@
 function plt = outputPlot(type, varargin)
 
 switch type
-    
+
     case 'contour_DepthTime'
         var = varargin{1}; % variables to plot
         itraj = varargin{2}; % trajectory
@@ -13,12 +13,9 @@ switch type
         
         % Extract outputs
         N = squeeze(out.N(:,:,:,itraj));
-        P = squeeze(out.P(:,:,:,itraj));
+        P = squeeze(out.P(:,:,:,:,itraj));
         Z = squeeze(out.Z(:,:,:,itraj));
-        OM = squeeze(out.OM(:,:,:,itraj));
-        
-        P_C = squeeze(auxVars.PP_C(:,:,:,itraj));
-        
+        OM = squeeze(out.OM(:,:,:,:,itraj));
         
         % Time-depth grid for interpolation
         [depth, time] = ndgrid(abs(fixedParams.z), 1:fixedParams.nt);
@@ -104,11 +101,23 @@ switch type
             case 'DOM_POM'
                 plt = figure;
                 plt.Units = 'inches';
-                plt.Position = [0 0 8 6];
-                subplot(2,1,1)
-                x = squeeze(OM(fixedParams.DOM_index,:,:));
-                blank = isnan(x);
-                % x(blank) = nan;
+                plt.Position = [0 0 2*8 2*3];
+                subplot(2,2,1)
+                x = squeeze(OM(fixedParams.DOM_index,:,fixedParams.OM_C_index,:));
+                F = griddedInterpolant(depth, time, x, smooth);
+                Fsmooth = flip(F(depthGrid, timeGrid));
+                contourf(Fsmooth)
+                cb = colorbar;
+                cb.Label.String = 'mmol C / m^3';
+                title('DOC')
+                ylabel('depth (m)')
+                xticks(100:100:fixedParams.nt)
+                xticklabels(yearday(forcing.t(100:100:fixedParams.nt,itraj)))
+                yticks(linspace(0,abs(fixedParams.zw(end)),7))
+                yticklabels(linspace(fixedParams.zw(end),0,7))
+                
+                subplot(2,2,2)
+                x = squeeze(OM(fixedParams.DOM_index,:,fixedParams.OM_N_index,:));
                 F = griddedInterpolant(depth, time, x, smooth);
                 Fsmooth = flip(F(depthGrid, timeGrid));
                 contourf(Fsmooth)
@@ -121,9 +130,23 @@ switch type
                 yticks(linspace(0,abs(fixedParams.zw(end)),7))
                 yticklabels(linspace(fixedParams.zw(end),0,7))
                 
-                subplot(2,1,2)
-                x = squeeze(OM(fixedParams.POM_index,:,:));
-                x(blank) = nan;
+                subplot(2,2,3)
+                x = squeeze(OM(fixedParams.POM_index,:,fixedParams.OM_C_index,:));
+                F = griddedInterpolant(depth, time, x, smooth);
+                Fsmooth = flip(F(depthGrid, timeGrid));
+                contourf(Fsmooth)
+                cb = colorbar;
+                cb.Label.String = 'mmol C / m^3';
+                title('POC')
+                xlabel('year-day')
+                ylabel('depth (m)')
+                xticks(100:100:fixedParams.nt)
+                xticklabels(yearday(forcing.t(100:100:fixedParams.nt,itraj)))
+                yticks(linspace(0,abs(fixedParams.zw(end)),7))
+                yticklabels(linspace(fixedParams.zw(end),0,7))
+                
+                subplot(2,2,4)
+                x = squeeze(OM(fixedParams.POM_index,:,fixedParams.OM_N_index,:));
                 F = griddedInterpolant(depth, time, x, smooth);
                 Fsmooth = flip(F(depthGrid, timeGrid));
                 contourf(Fsmooth)
@@ -140,16 +163,16 @@ switch type
                 
                 %------------------------------------------------------------------
                 
-            case 'phytoplankton'
+            case 'phytoplankton_N'
                 plt = figure;
-                nc = floor(sqrt(fixedParams.nPP));
-                nr = ceil(fixedParams.nPP / nc);
+                nc = floor(sqrt(fixedParams.nPP_size));
+                nr = ceil(fixedParams.nPP_size / nc);
                 plt.Units = 'inches';
                 plt.Position = [0 0 8*nc 3*nr];
-                index = reshape(1:fixedParams.nPP, nc, nr)';
-                for ii = 1:fixedParams.nPP
+                index = reshape(1:fixedParams.nPP_size, nc, nr)';
+                for ii = 1:fixedParams.nPP_size
                     subplot(nr,nc,index(ii))
-                    x = squeeze(P(ii,:,:));
+                    x = squeeze(P(ii,:,fixedParams.PP_N_index,:));
                     F = griddedInterpolant(depth, time, x, smooth);
                     Fsmooth = flip(F(depthGrid, timeGrid));
                     Fsmooth(Fsmooth<0) = 0;
@@ -170,17 +193,48 @@ switch type
                 colormap plasma
                 
                 %------------------------------------------------------------------
+            
+            case 'phytoplankton_Chl'
+                plt = figure;
+                nc = floor(sqrt(fixedParams.nPP_size));
+                nr = ceil(fixedParams.nPP_size / nc);
+                plt.Units = 'inches';
+                plt.Position = [0 0 8*nc 3*nr];
+                index = reshape(1:fixedParams.nPP_size, nc, nr)';
+                for ii = 1:fixedParams.nPP_size
+                    subplot(nr,nc,index(ii))
+                    x = squeeze(P(ii,:,fixedParams.PP_Chl_index ,:));
+                    F = griddedInterpolant(depth, time, x, smooth);
+                    Fsmooth = flip(F(depthGrid, timeGrid));
+                    Fsmooth(Fsmooth<0) = 0;
+                    contourf(Fsmooth)
+                    cb = colorbar;
+                    cb.Label.String = 'mg Chl / m^3';
+                    title([num2str(round(fixedParams.PPdia(ii),2,'significant')) ' \mum'])
+%                     title([num2str(round(fixedParams.PPsize(ii),2,'significant')) ' \mum^3'])
+                    xlabel('year-day')
+                    ylabel('depth (m)')
+                    xticks(100:100:fixedParams.nt)
+                    xticklabels(yearday(forcing.t(100:100:fixedParams.nt,itraj)))
+                    yticks(linspace(0,abs(fixedParams.zw(end)),7))
+                    yticklabels(linspace(fixedParams.zw(end),0,7))
+                end
+                suptitle('phytoplankton chlorophyll_a concentration given cell diameter')
+%                 suptitle('phytoplankton abundance given cell volume (mmol N / m^3)')
+                colormap plasma
+                
+                %------------------------------------------------------------------
                 
             case 'phytoplankton_C'
                 plt = figure;
-                nc = floor(sqrt(fixedParams.nPP));
-                nr = ceil(fixedParams.nPP / nc);
+                nc = floor(sqrt(fixedParams.nPP_size));
+                nr = ceil(fixedParams.nPP_size / nc);
                 plt.Units = 'inches';
                 plt.Position = [0 0 8*nc 3*nr];
-                index = reshape(1:fixedParams.nPP, nc, nr)';
-                for ii = 1:fixedParams.nPP
+                index = reshape(1:fixedParams.nPP_size, nc, nr)';
+                for ii = 1:fixedParams.nPP_size
                     subplot(nr,nc,index(ii))
-                    x = squeeze(P_C(ii,:,:));
+                    x = squeeze(P(ii,:,fixedParams.PP_C_index ,:));
                     F = griddedInterpolant(depth, time, x, smooth);
                     Fsmooth = flip(F(depthGrid, timeGrid));
                     Fsmooth(Fsmooth<0) = 0;
@@ -197,19 +251,19 @@ switch type
                 end
                 suptitle('phytoplankton carbon concentration given cell diameter')
                 colormap plasma
-                
+                                
                 %------------------------------------------------------------------
 
             case 'phytoplankton_N_C'
                 plt = figure;
-                nc = floor(sqrt(fixedParams.nPP));
-                nr = ceil(fixedParams.nPP / nc);
+                nc = floor(sqrt(fixedParams.nPP_size));
+                nr = ceil(fixedParams.nPP_size / nc);
                 plt.Units = 'inches';
                 plt.Position = [0 0 8*nc 3*nr];
-                index = reshape(1:fixedParams.nPP, nc, nr)';
-                for ii = 1:fixedParams.nPP
+                index = reshape(1:fixedParams.nPP_size, nc, nr)';
+                for ii = 1:fixedParams.nPP_size
                     subplot(nr,nc,index(ii))
-                    x = squeeze(P(ii,:,:) ./ P_C(ii,:,:));
+                    x = squeeze(P(ii,:,fixedParams.PP_N_index,:) ./ P(ii,:,fixedParams.PP_C_index,:));
                     F = griddedInterpolant(depth, time, x, smooth);
                     Fsmooth = flip(F(depthGrid, timeGrid));
                     Fsmooth(Fsmooth<0) = 0;
@@ -228,6 +282,36 @@ switch type
                 colormap plasma
                 
                 %------------------------------------------------------------------
+            
+            case 'phytoplankton_Chl_N'
+                plt = figure;
+                nc = floor(sqrt(fixedParams.nPP_size));
+                nr = ceil(fixedParams.nPP_size / nc);
+                plt.Units = 'inches';
+                plt.Position = [0 0 8*nc 3*nr];
+                index = reshape(1:fixedParams.nPP_size, nc, nr)';
+                for ii = 1:fixedParams.nPP_size
+                    subplot(nr,nc,index(ii))
+                    x = squeeze(P(ii,:,fixedParams.PP_Chl_index,:) ./ ... 
+                        P(ii,:,fixedParams.PP_N_index,:));
+                    F = griddedInterpolant(depth, time, x, smooth);
+                    Fsmooth = flip(F(depthGrid, timeGrid));
+                    Fsmooth(Fsmooth<0) = 0;
+                    contourf(Fsmooth)
+                    cb = colorbar;
+                    cb.Label.String = 'mg Chl / mmol N';
+                    title([num2str(round(fixedParams.PPdia(ii),2,'significant')) ' \mum'])
+                    xlabel('year-day')
+                    ylabel('depth (m)')
+                    xticks(100:100:fixedParams.nt)
+                    xticklabels(yearday(forcing.t(100:100:fixedParams.nt,itraj)))
+                    yticks(linspace(0,abs(fixedParams.zw(end)),7))
+                    yticklabels(linspace(fixedParams.zw(end),0,7))
+                end
+                suptitle('phytoplankton Chl/N ratio given cell diameter')
+                colormap plasma
+                
+                %------------------------------------------------------------------
 
             case 'zooplankton'                
                 plt = figure;                
@@ -238,7 +322,7 @@ switch type
                 Fsmooth = flip(F(depthGrid, timeGrid));
                 contourf(Fsmooth)
                 cb = colorbar;
-                cb.Label.String = 'mmol N / m^3';
+                cb.Label.String = 'mmol C / m^3';
                 title('zooplankton abundance')
                 xlabel('year-day')
                 ylabel('depth (m)')
@@ -278,9 +362,9 @@ switch type
 
         % Extract outputs
         N = squeeze(out.N(:,:,:,itraj));
-        P = squeeze(out.P(:,:,:,itraj));
+        P = squeeze(out.P(:,:,:,:,itraj));
         Z = squeeze(out.Z(:,:,:,itraj));
-        OM = squeeze(out.OM(:,:,:,itraj));
+        OM = squeeze(out.OM(:,:,:,:,itraj));
         
         % Event position
         elat = dat.Latitude(dat.Event == ie);
@@ -316,6 +400,7 @@ switch type
 
                 subplot(3,1,1) % temperature
                 col = squeeze(forcing.T(1,:,itraj));
+                if length(itraj) == 1, col = col'; end 
                 col = [nan(1,size(col,2)); col; nan(1,size(col,2))];
                 col = reshape(col, [1 numel(col)]);                
                 s = surface([x;x],[y;y],[z;z],[col;col], ...
@@ -331,6 +416,7 @@ switch type
 
                 subplot(3,1,2) % diffusivity                
                 col = squeeze(forcing.K(1,:,itraj));
+                if length(itraj) == 1, col = col'; end
                 col = [nan(1,size(col,2)); col; nan(1,size(col,2))];
                 col = reshape(col, [1 numel(col)]);                
                 s = surface([x;x],[y;y],[z;z],[col;col], ...
@@ -346,6 +432,7 @@ switch type
 
                 subplot(3,1,3)
                 col = squeeze(forcing.PARsurf(1,:,itraj));
+                if length(itraj) == 1, col = col'; end
                 col = [nan(1,size(col,2)); col; nan(1,size(col,2))];
                 col = reshape(col, [1 numel(col)]);
                 s = surface([x;x],[y;y],[z;z],[col;col], ...
@@ -369,6 +456,7 @@ switch type
                 plt.Units = 'inches';
                 plt.Position = [0 0 6 4];
                 col = squeeze(sum(fixedParams.zwidth .* N) / fixedParams.Htot);
+                if length(itraj) == 1, col = col'; end
                 col = [nan(1,size(col,2)); col; nan(1,size(col,2))];
                 col = reshape(col, [1 numel(col)]);                
                 s = surface([x;x],[y;y],[z;z],[col;col], ...
@@ -385,56 +473,32 @@ switch type
                 colormap plasma
                 
                 %----------------------------------------------------------
-                
-%             case 'organicNutrient'
-%                 plt = figure;
-%                 plt.Units = 'inches';
-%                 plt.Position = [0 0 6 8];
-%                 multiPanelPlot = strcmp(fixedParams.returnExtras, 'auxiliary') || ...
-%                     strcmp(fixedParams.returnExtras, 'auxiliaryAndRates');
-%                 if multiPanelPlot, subplot(2,1,1), end
-%                 col = squeeze(sum(fixedParams.zwidth .* OM) / fixedParams.Htot);
-%                 % col = squeeze(sum(OM));
-%                 col = [nan(1,size(col,2)); col; nan(1,size(col,2))];
-%                 col = reshape(col, [1 numel(col)]);
-%                 s = surface([x;x],[y;y],[z;z],[col;col], ...
-%                     'facecol', 'no', 'edgecol', 'interp', 'linew', 1);
-%                 s.EdgeAlpha = alpha;
-%                 cb = colorbar;
-%                 cb.Label.String = 'mmol N / m^3';
-%                 title('DON')
-%                 if multiPanelPlot, xlabel([]); else, xlabel([char(176) 'E']); end
-%                 ylabel([char(176) 'N'])
-%                 hold on
-%                 scatter(elon,elat,'pr','filled')
-%                 hold off
-%                 if multiPanelPlot
-%                     subplot(2,1,2)
-%                     col = squeeze(sum(fixedParams.zwidth .* auxVars.POM(:,:,itraj)) / fixedParams.Htot);
-%                     col = [nan(1,size(col,2)); col; nan(1,size(col,2))];
-%                     col = reshape(col, [1 numel(col)]);
-%                     s = surface([x;x],[y;y],[z;z],[col;col], ...
-%                         'facecol', 'no', 'edgecol', 'interp', 'linew', 1);
-%                     s.EdgeAlpha = alpha;
-%                     cb = colorbar;
-%                     cb.Label.String = 'mmol N / m^3';
-%                     title('PON')
-%                     xlabel([char(176) 'E'])
-%                     ylabel([char(176) 'N'])
-%                     hold on
-%                     scatter(elon,elat,'pr','filled')
-%                     hold off
-%                 end
-%                 colormap plasma
-                
-                %----------------------------------------------------------
 
             case 'DOM_POM'
                 plt = figure;
                 plt.Units = 'inches';
-                plt.Position = [0 0 6 8];
-                subplot(2,1,1)
-                col = squeeze(sum(fixedParams.zwidth .* squeeze(OM(fixedParams.DOM_index,:,:,:))) / fixedParams.Htot);
+                plt.Position = [0 0 2*6 2*4];
+                subplot(2,2,1)
+                col = squeeze(sum(fixedParams.zwidth .* squeeze(OM(fixedParams.DOM_index,:,fixedParams.OM_C_index,:,:))) / fixedParams.Htot);
+                if length(itraj) == 1, col = col'; end
+                % col = squeeze(sum(OM));
+                col = [nan(1,size(col,2)); col; nan(1,size(col,2))];
+                col = reshape(col, [1 numel(col)]);
+                s = surface([x;x],[y;y],[z;z],[col;col], ...
+                    'facecol', 'no', 'edgecol', 'interp', 'linew', 1);
+                s.EdgeAlpha = alpha;
+                cb = colorbar;
+                cb.Label.String = 'mmol C / m^3';
+                title('DOC')
+                xlabel([])
+                ylabel([char(176) 'N'])
+                hold on
+                scatter(elon,elat,'pr','filled')
+                hold off
+                
+                subplot(2,2,2)
+                col = squeeze(sum(fixedParams.zwidth .* squeeze(OM(fixedParams.DOM_index,:,fixedParams.OM_N_index,:,:))) / fixedParams.Htot);
+                if length(itraj) == 1, col = col'; end
                 % col = squeeze(sum(OM));
                 col = [nan(1,size(col,2)); col; nan(1,size(col,2))];
                 col = reshape(col, [1 numel(col)]);
@@ -450,8 +514,26 @@ switch type
                 scatter(elon,elat,'pr','filled')
                 hold off
 
-                subplot(2,1,2)
-                col = squeeze(sum(fixedParams.zwidth .* squeeze(OM(fixedParams.POM_index,:,:,:))) / fixedParams.Htot);
+                subplot(2,2,3)
+                col = squeeze(sum(fixedParams.zwidth .* squeeze(OM(fixedParams.POM_index,:,fixedParams.OM_C_index,:,:))) / fixedParams.Htot);
+                if length(itraj) == 1, col = col'; end
+                col = [nan(1,size(col,2)); col; nan(1,size(col,2))];
+                col = reshape(col, [1 numel(col)]);
+                s = surface([x;x],[y;y],[z;z],[col;col], ...
+                    'facecol', 'no', 'edgecol', 'interp', 'linew', 1);
+                s.EdgeAlpha = alpha;
+                cb = colorbar;
+                cb.Label.String = 'mmol C / m^3';
+                title('POC')
+                xlabel([char(176) 'E'])
+                ylabel([char(176) 'N'])
+                hold on
+                scatter(elon,elat,'pr','filled')
+                hold off
+                
+                subplot(2,2,4)
+                col = squeeze(sum(fixedParams.zwidth .* squeeze(OM(fixedParams.POM_index,:,fixedParams.OM_N_index,:,:))) / fixedParams.Htot);
+                if length(itraj) == 1, col = col'; end
                 col = [nan(1,size(col,2)); col; nan(1,size(col,2))];
                 col = reshape(col, [1 numel(col)]);
                 s = surface([x;x],[y;y],[z;z],[col;col], ...
@@ -469,18 +551,21 @@ switch type
 
                 %----------------------------------------------------------
                 
-            case 'phytoplankton'
+            case 'phytoplankton_N'
                 plt = figure;
-                nTraj = size(P,4);
-                Col = squeeze(max(P,[],2));
-                nc = floor(sqrt(fixedParams.nPP));
-                nr = ceil(fixedParams.nPP / nc);
+                nTraj = length(itraj);
+                ind_nut = fixedParams.PP_N_index;
+                Col = squeeze(max(P(:,:,ind_nut,:),[],2));
+                nc = floor(sqrt(fixedParams.nPP_size));
+                nr = ceil(fixedParams.nPP_size / nc);
                 plt.Units = 'inches';
                 plt.Position = [0 0 6*nc 4*nr];
-                index = reshape(1:fixedParams.nPP, nc, nr)';
-                for ii = 1:fixedParams.nPP
+                index = reshape(1:fixedParams.nPP_size, nc, nr)';
+                for ii = 1:fixedParams.nPP_size
                     subplot(nr,nc,index(ii))
-                    col = [nan(1,nTraj); squeeze(Col(ii,:,:)); nan(1,nTraj)];
+                    col = squeeze(Col(ii,:,:));
+                    if nTraj == 1, col=col'; end
+                    col = [nan(1,nTraj); col; nan(1,nTraj)];
                     col = reshape(col, [1 numel(col)]);
                     s = surface([x;x],[y;y],[z;z],[col;col], ...
                         'facecol', 'no', 'edgecol', 'interp', 'linew', 1);
@@ -506,13 +591,14 @@ switch type
                 plt.Units = 'inches';
                 plt.Position = [0 0 6 4];
                 col = squeeze(max(Z));
+                if length(itraj) == 1, col = col'; end
                 col = [nan(1,size(col,2)); col; nan(1,size(col,2))];
                 col = reshape(col, [1 numel(col)]);
                 s = surface([x;x],[y;y],[z;z],[col;col], ...
                     'facecol', 'no', 'edgecol', 'interp', 'linew', 1);
                 s.EdgeAlpha = alpha;
                 cb = colorbar;
-                cb.Label.String = 'mmol N / m^3';
+                cb.Label.String = 'mmol C / m^3';
                 title('zooplankton abundance')
                 xlabel([char(176) 'E'])
                 ylabel([char(176) 'N'])
@@ -527,6 +613,7 @@ switch type
         %------------------------------------------------------------------
         
     case 'trajectoryPolygon_TimeSeries'
+        
         var = varargin{1}; % variables to plot
         ie = varargin{2}; % event number
         itraj = varargin{3}; % trajectories
@@ -539,7 +626,7 @@ switch type
         
         nt = fixedParams.nt;
         nz = fixedParams.nz;
-        nPP = fixedParams.nPP;
+        nPP_size = fixedParams.nPP_size;
         
         % Extract times
         day = yearday(forcing.t(:,itraj));
@@ -548,9 +635,9 @@ switch type
         
         % Extract outputs
         N = squeeze(out.N(:,:,:,itraj));
-        P = squeeze(out.P(:,:,:,itraj));
+        P = squeeze(out.P(:,:,:,:,itraj));
         Z = squeeze(out.Z(:,:,:,itraj));
-        OM = squeeze(out.OM(:,:,:,itraj));
+        OM = squeeze(out.OM(:,:,:,:,itraj));
 
         
         switch var
@@ -565,8 +652,12 @@ switch type
                 hi = max(y,[],3);
                 ym = median(y,3);
                 lo = lo(:); hi = hi(:); ym = ym(:);
-                pgon = polyshape([x; flip(x)], [lo; flip(hi)]);
+                pgon = polyshape([x; flip(x); x(1)], [lo; flip(hi); lo(1)]);
                 plot(pgon);
+%                 % remove duplicate vertices from polygon... probably not
+%                 % necessary but MatLab complains with warning messages
+%                 % otherwise...
+%                 dupl = diff(lo) == 0 | diff(hi) == 0;
                 xlim([min(x) max(x)])
                 ylim([min(lo) max(hi)])
                 yl = ylim;
@@ -584,8 +675,8 @@ switch type
                 hi = max(y,[],3);
                 ym = median(y,3);
                 lo = lo(:); hi = hi(:); ym = ym(:);
-                pgon = polyshape([x; flip(x)], [lo; flip(hi)]);
-                plot(pgon)
+                pgon = polyshape([x; flip(x); x(1)], [lo; flip(hi); lo(1)]);
+                plot(pgon)                
                 xlim([min(x) max(x)])
                 ylim([min(lo) max(hi)])
                 yl = ylim;
@@ -601,7 +692,7 @@ switch type
                 hi = max(y,[],3);
                 ym = median(y,3);
                 lo = lo(:); hi = hi(:); ym = ym(:);
-                pgon = polyshape([x; flip(x)], [lo; flip(hi)]);
+                pgon = polyshape([x; flip(x); x(1)], [lo; flip(hi); lo(1)]);
                 plot(pgon)
                 xlim([min(x) max(x)])
                 ylim([min(lo) max(hi)])
@@ -614,79 +705,18 @@ switch type
                 ylabel('PAR (\muEin day^{-1} m^{-2})')
                 
                 %----------------------------------------------------------
-                
-%             case 'nutrient'
-%                 plt = figure;
-%                 plt.Units = 'inches';
-%                 plt.Position = [0 0 12 12];
-% 
-%                 subplot(3,1,1)                
-%                 y = sum(fixedParams.zwidth .* N) / fixedParams.Htot;
-%                 lo = min(y,[],3);
-%                 hi = max(y,[],3);
-%                 ym = median(y,3);
-%                 lo = lo(:); hi = hi(:); ym = ym(:);
-%                 pgon = polyshape([x; flip(x)], [lo; flip(hi)]);
-%                 plot(pgon)
-%                 xlim([min(x) max(x)])
-%                 ylim([min(lo) max(hi)])
-%                 yl = ylim;
-%                 hold on
-%                 plot(x,ym,'k')
-%                 plot([etime etime],[yl(1) yl(2)],':k')
-%                 text(max(x)-0.1*(max(x)-min(x)),yl(2)-0.1*diff(yl),['sample ' num2str(ie)])
-%                 plot([max(x)-0.15*(max(x)-min(x)), max(x)-0.11*(max(x)-min(x))], [yl(2)-0.1*diff(yl), yl(2)-0.1*diff(yl)], ':k')
-%                 hold off
-%                 ylabel('DIN (mmol N m^{-3})')
-%                 
-%                 subplot(3,1,2)                
-%                 y = sum(fixedParams.zwidth .* OM) / fixedParams.Htot;
-%                 lo = min(y,[],3);
-%                 hi = max(y,[],3);
-%                 ym = median(y,3);
-%                 lo = lo(:); hi = hi(:); ym = ym(:);
-%                 pgon = polyshape([x; flip(x)], [lo; flip(hi)]);
-%                 plot(pgon)
-%                 xlim([min(x) max(x)])
-%                 ylim([min(lo) max(hi)])
-%                 yl = ylim;
-%                 hold on
-%                 plot(x,ym,'k')
-%                 plot([etime etime],[yl(1) yl(2)],':k')
-%                 hold off
-%                 ylabel('DOM (mmol N m^{-3})')
-%                 
-%                 subplot(3,1,3)                
-%                 y = sum(fixedParams.zwidth .* auxVars.POM(:,:,itraj)) / fixedParams.Htot;
-%                 lo = min(y,[],3);
-%                 hi = max(y,[],3);
-%                 ym = median(y,3);
-%                 lo = lo(:); hi = hi(:); ym = ym(:);
-%                 pgon = polyshape([x; flip(x)], [lo; flip(hi)]);
-%                 plot(pgon)
-%                 xlim([min(x) max(x)])
-%                 ylim([min(lo) max(hi)])
-%                 yl = ylim;
-%                 hold on
-%                 plot(x,ym,'k')
-%                 plot([etime etime],[yl(1) yl(2)],':k')
-%                 hold off
-%                 ylabel('POM (mmol N m^{-3})')
 
-                %----------------------------------------------------------
-
-            case 'DOM_POM'
+            case 'DIN'
                 plt = figure;
                 plt.Units = 'inches';
-                plt.Position = [0 0 12 12];
-
-                subplot(3,1,1)                
+                plt.Position = [0 0 12 4];
+                
                 y = sum(fixedParams.zwidth .* N) / fixedParams.Htot;
                 lo = min(y,[],3);
                 hi = max(y,[],3);
                 ym = median(y,3);
                 lo = lo(:); hi = hi(:); ym = ym(:);
-                pgon = polyshape([x; flip(x)], [lo; flip(hi)]);
+                pgon = polyshape([x; flip(x); x(1)], [lo; flip(hi); lo(1)]);
                 plot(pgon)
                 xlim([min(x) max(x)])
                 ylim([min(lo) max(hi)])
@@ -697,15 +727,44 @@ switch type
                 text(max(x)-0.1*(max(x)-min(x)),yl(2)-0.1*diff(yl),['sample ' num2str(ie)])
                 plot([max(x)-0.15*(max(x)-min(x)), max(x)-0.11*(max(x)-min(x))], [yl(2)-0.1*diff(yl), yl(2)-0.1*diff(yl)], ':k')
                 hold off
+                xlabel('year-day')
                 ylabel('DIN (mmol N m^{-3})')
                 
-                subplot(3,1,2)                
-                y = sum(fixedParams.zwidth .* squeeze(OM(fixedParams.DOM_index,:,:,:))) / fixedParams.Htot;
+                %----------------------------------------------------------
+
+            case 'DOM_POM'
+                plt = figure;
+                plt.Units = 'inches';
+                plt.Position = [0 0 2*12 2*4];
+                
+                subplot(2,2,1)                
+                y = squeeze(OM(fixedParams.DOM_index,:,fixedParams.OM_C_index,:,:));                
+                y = sum(fixedParams.zwidth .* y) / fixedParams.Htot;
                 lo = min(y,[],3);
                 hi = max(y,[],3);
                 ym = median(y,3);
                 lo = lo(:); hi = hi(:); ym = ym(:);
-                pgon = polyshape([x; flip(x)], [lo; flip(hi)]);
+                pgon = polyshape([x; flip(x); x(1)], [lo; flip(hi); lo(1)]);
+                plot(pgon)                
+                xlim([min(x) max(x)])
+                ylim([min(lo) max(hi)])
+                yl = ylim;
+                hold on
+                plot(x,ym,'k')
+                plot([etime etime],[yl(1) yl(2)],':k')
+                text(max(x)-0.1*(max(x)-min(x)),yl(2)-0.1*diff(yl),['sample ' num2str(ie)])
+                plot([max(x)-0.15*(max(x)-min(x)), max(x)-0.11*(max(x)-min(x))], [yl(2)-0.1*diff(yl), yl(2)-0.1*diff(yl)], ':k')
+                hold off
+                ylabel('DOC (mmol C m^{-3})')
+
+                subplot(2,2,2)
+                y = squeeze(OM(fixedParams.DOM_index,:,fixedParams.OM_N_index,:,:));
+                y = sum(fixedParams.zwidth .* y) / fixedParams.Htot;
+                lo = min(y,[],3);
+                hi = max(y,[],3);
+                ym = median(y,3);
+                lo = lo(:); hi = hi(:); ym = ym(:);
+                pgon = polyshape([x; flip(x); x(1)], [lo; flip(hi); lo(1)]);
                 plot(pgon)
                 xlim([min(x) max(x)])
                 ylim([min(lo) max(hi)])
@@ -713,16 +772,40 @@ switch type
                 hold on
                 plot(x,ym,'k')
                 plot([etime etime],[yl(1) yl(2)],':k')
+                text(max(x)-0.1*(max(x)-min(x)),yl(2)-0.1*diff(yl),['sample ' num2str(ie)])
+                plot([max(x)-0.15*(max(x)-min(x)), max(x)-0.11*(max(x)-min(x))], [yl(2)-0.1*diff(yl), yl(2)-0.1*diff(yl)], ':k')
                 hold off
                 ylabel('DON (mmol N m^{-3})')
                 
-                subplot(3,1,3)                
-                y = sum(fixedParams.zwidth .* squeeze(OM(fixedParams.POM_index,:,:,:))) / fixedParams.Htot;
+                subplot(2,2,3)
+                y = squeeze(OM(fixedParams.POM_index,:,fixedParams.OM_C_index,:,:));
+                y = sum(fixedParams.zwidth .* y) / fixedParams.Htot;
                 lo = min(y,[],3);
                 hi = max(y,[],3);
                 ym = median(y,3);
                 lo = lo(:); hi = hi(:); ym = ym(:);
-                pgon = polyshape([x; flip(x)], [lo; flip(hi)]);
+                pgon = polyshape([x; flip(x); x(1)], [lo; flip(hi); lo(1)]);
+                plot(pgon)                
+                xlim([min(x) max(x)])
+                ylim([min(lo) max(hi)])
+                yl = ylim;
+                hold on
+                plot(x,ym,'k')
+                plot([etime etime],[yl(1) yl(2)],':k')
+                text(max(x)-0.1*(max(x)-min(x)),yl(2)-0.1*diff(yl),['sample ' num2str(ie)])
+                plot([max(x)-0.15*(max(x)-min(x)), max(x)-0.11*(max(x)-min(x))], [yl(2)-0.1*diff(yl), yl(2)-0.1*diff(yl)], ':k')
+                hold off
+                xlabel('year-day')
+                ylabel('POC (mmol C m^{-3})')
+
+                subplot(2,2,4)
+                y = squeeze(OM(fixedParams.POM_index,:,fixedParams.OM_N_index,:,:));
+                y = sum(fixedParams.zwidth .* y) / fixedParams.Htot;
+                lo = min(y,[],3);
+                hi = max(y,[],3);
+                ym = median(y,3);
+                lo = lo(:); hi = hi(:); ym = ym(:);
+                pgon = polyshape([x; flip(x); x(1)], [lo; flip(hi); lo(1)]);
                 plot(pgon)
                 xlim([min(x) max(x)])
                 ylim([min(lo) max(hi)])
@@ -730,28 +813,34 @@ switch type
                 hold on
                 plot(x,ym,'k')
                 plot([etime etime],[yl(1) yl(2)],':k')
+                text(max(x)-0.1*(max(x)-min(x)),yl(2)-0.1*diff(yl),['sample ' num2str(ie)])
+                plot([max(x)-0.15*(max(x)-min(x)), max(x)-0.11*(max(x)-min(x))], [yl(2)-0.1*diff(yl), yl(2)-0.1*diff(yl)], ':k')
                 hold off
+                xlabel('year-day')
                 ylabel('PON (mmol N m^{-3})')
 
-                %----------------------------------------------------------
+                suptitle('organic matter')
+                
 
-            case 'phytoplankton'
+                %----------------------------------------------------------
+                
+            case 'phytoplankton_C'
                 plt = figure;
                 plt.Units = 'inches';
-                plt.Position = [0 0 12 12];
-                
-                Y = squeeze(max(P,[],2));
-                nc = floor(sqrt(fixedParams.nPP));
-                nr = ceil(fixedParams.nPP / nc);
-                index = reshape(1:fixedParams.nPP, nc, nr)';
-                for ii = 1:fixedParams.nPP
+                plt.Position = [0 0 12 12];                
+                Y = squeeze(P(:,:,fixedParams.PP_C_index,:,:));                
+                Y = squeeze(max(Y,[],2));
+                nc = floor(sqrt(nPP_size));
+                nr = ceil(nPP_size / nc);
+                index = reshape(1:nPP_size, nc, nr)';
+                for ii = 1:nPP_size
                     subplot(nr,nc,index(ii))
                     y = Y(ii,:,:);
                     lo = min(y,[],3);
                     hi = max(y,[],3);
                     ym = median(y,3);
                     lo = lo(:); hi = hi(:); ym = ym(:);
-                    pgon = polyshape([x; flip(x)], [lo; flip(hi)]);
+                    pgon = polyshape([x; flip(x); x(1)], [lo; flip(hi); lo(1)]);
                     plot(pgon)
                     xlim([min(x) max(x)])
                     ylim([min(lo) max(hi)])
@@ -765,9 +854,8 @@ switch type
                     end
                     hold off
                     if ismember(index(ii),index(end,:)), xlabel('year-day'); else, xlabel([]); end
-                    if ismember(index(ii),index(:,1)), ylabel('mmol N m^{-3}'); else, ylabel([]); end
-                    title([num2str(round(fixedParams.PPdia(ii),2,'significant')) ' \mum'])                    
-%                     title([num2str(round(fixedParams.PPsize(ii),2,'significant')) ' \mum^3'])                    
+                    if ismember(index(ii),index(:,1)), ylabel('mmol C m^{-3}'); else, ylabel([]); end
+                    title([num2str(round(fixedParams.PPdia(ii),2,'significant')) ' \mum'])
                 end
                 
                 %----------------------------------------------------------
@@ -777,18 +865,19 @@ switch type
                 plt = figure;
                 plt.Units = 'inches';
                 plt.Position = [0 0 12 4];
-
-                Y = squeeze(sum(repmat(reshape(fixedParams.zwidth, [1 nz]), [nPP 1]) .* P, 2));
+                
+                Y = squeeze(P(:,:,fixedParams.PP_C_index,:,:));
+                Y = squeeze(sum(repmat(reshape(fixedParams.zwidth, [1 nz]), [nPP_size 1]) .* Y, 2));
                 % polygon vertices
                 xpgon = [x(:); flip(x(:))];
-                ypgon = zeros(nPP+1, nt);
+                ypgon = zeros(nPP_size + 1, nt);
                 ypgon(2:end,:) = mean(Y,3);
                 ypgonc = cumsum(ypgon);                
                 % color scale - red --> blue
                 rb_hsv = rgb2hsv([1 0 0; 0 0 1]);
-                r2b_hsv =  [linspace(rb_hsv(1,1), rb_hsv(2,1), nPP)' ...
-                    linspace(rb_hsv(1,2), rb_hsv(2,2), nPP)' ...
-                    linspace(rb_hsv(1,3), rb_hsv(2,3), nPP)'];
+                r2b_hsv =  [linspace(rb_hsv(1,1), rb_hsv(2,1), nPP_size)' ...
+                    linspace(rb_hsv(1,2), rb_hsv(2,2), nPP_size)' ...
+                    linspace(rb_hsv(1,3), rb_hsv(2,3), nPP_size)'];
                 r2b = hsv2rgb(r2b_hsv);
                 cols = r2b;                
                 pgon = polyshape(xpgon, [ypgonc(1,:) flip(ypgonc(2,:))]');
@@ -797,14 +886,14 @@ switch type
                 xlim([min(x) max(x)])
                 ylim([0 max(ypgonc(:))])
                 xl = xlim; yl = ylim;
-                yleg = linspace(yl(1)+0.95*diff(yl), yl(1)+0.5*diff(yl), nPP+1);
+                yleg = linspace(yl(1)+0.95*diff(yl), yl(1)+0.5*diff(yl), nPP_size + 1);
                 hold on
                 text(xl(1)+0.05*diff(xl), yleg(1), 'cell diameter')
                 ps = scatter(xl(1)+0.05*diff(xl), yleg(2), 'filled');
                 ps.MarkerFaceColor = cols(1,:);
                 text(xl(1)+0.07*diff(xl), yleg(2), ... 
                     [num2str(round(fixedParams.PPdia(1),2,'significant')) ' \mum'])
-                for i = 2:nPP
+                for i = 2:nPP_size
                     pgon = polyshape(xpgon, [ypgonc(i,:) flip(ypgonc(i+1,:))]');
                     ps = plot(pgon);
                     ps.FaceColor = cols(i,:);
@@ -815,8 +904,8 @@ switch type
                 end
                 hold off
                 xlabel('year-day')
-                ylabel('abundance (mmol N)')
-                title(['phytoplankton nitrogen in ' num2str(fixedParams.Htot) 'm deep (1m^2) water column'])
+                ylabel('abundance (mmol C)')
+                title(['phytoplankton carbon in ' num2str(fixedParams.Htot) 'm deep (1m^2) water column'])
 
                 %----------------------------------------------------------
             
@@ -825,23 +914,24 @@ switch type
                 plt = figure;
                 plt.Units = 'inches';
                 plt.Position = [0 0 12 4];
-
-                Y = squeeze(sum(repmat(reshape(fixedParams.zwidth, [1 nz]), [nPP 1]) .* P, 2));
+                
+                Y = squeeze(P(:,:,fixedParams.PP_C_index,:,:));
+                Y = squeeze(sum(repmat(reshape(fixedParams.zwidth, [1 nz]), [nPP_size 1]) .* Y, 2));
                 Y = cat(1, Y, sum(fixedParams.zwidth .* Z));
                 
                 % polygon vertices
                 xpgon = [x(:); flip(x(:))];
-                ypgon = zeros(nPP+2, nt);
+                ypgon = zeros(nPP_size + 2, nt);
                 ypgon(2:end,:) = mean(Y,3);
                 ypgonc = cumsum(ypgon);                
                 % color scale - red --> blue
                 rb_hsv = rgb2hsv([1 0 0; 0 0 1]);
-                r2b_hsv =  [linspace(rb_hsv(1,1), rb_hsv(2,1), nPP)' ...
-                    linspace(rb_hsv(1,2), rb_hsv(2,2), nPP)' ...
-                    linspace(rb_hsv(1,3), rb_hsv(2,3), nPP)'];
+                r2b_hsv =  [linspace(rb_hsv(1,1), rb_hsv(2,1), nPP_size)' ...
+                    linspace(rb_hsv(1,2), rb_hsv(2,2), nPP_size)' ...
+                    linspace(rb_hsv(1,3), rb_hsv(2,3), nPP_size)'];
                 r2b = hsv2rgb(r2b_hsv);
                 cols = r2b;                
-                cols(nPP+1,:) = [0 0 0]; % black for zooplankton
+                cols(nPP_size + 1,:) = [0 0 0]; % black for zooplankton
                 pgon = polyshape(xpgon, [ypgonc(1,:) flip(ypgonc(2,:))]');
                 ps = plot(pgon);
                 ps.FaceColor = cols(1,:);
@@ -849,20 +939,20 @@ switch type
                 ylim([0 max(ypgonc(:))])
                 xl = xlim; yl = ylim;
                 
-                yleg = linspace(yl(1)+0.95*diff(yl), yl(1)+0.5*diff(yl), nPP+2);
+                yleg = linspace(yl(1)+0.95*diff(yl), yl(1)+0.5*diff(yl), nPP_size + 2);
                 hold on
                 text(xl(1)+0.05*diff(xl), yleg(1), 'cell diameter')
                 ps = scatter(xl(1)+0.05*diff(xl), yleg(2), 'filled');
                 ps.MarkerFaceColor = cols(1,:);
                 text(xl(1)+0.07*diff(xl), yleg(2), ...
                     [num2str(round(fixedParams.PPdia(1),2,'significant')) ' \mum'])
-                for i = 2:nPP+1
+                for i = 2:nPP_size+1
                     pgon = polyshape(xpgon, [ypgonc(i,:) flip(ypgonc(i+1,:))]');
                     ps = plot(pgon);
                     ps.FaceColor = cols(i,:);
                     ps = scatter(xl(1)+0.05*diff(xl), yleg(i+1), 'filled');
                     ps.MarkerFaceColor = cols(i,:);
-                    if i < nPP+1
+                    if i < nPP_size+1
                         text(xl(1)+0.07*diff(xl), yleg(i+1), ...
                             [num2str(round(fixedParams.PPdia(i),2,'significant')) ' \mum'])
                     else
@@ -871,9 +961,8 @@ switch type
                 end
                 hold off
                 xlabel('year-day')
-                ylabel('abundance (mmol N)')
-                title(['plankton nitrogen in ' num2str(fixedParams.Htot) 'm deep (1m^2) water column'])
-
+                ylabel('abundance (mmol C)')
+                title(['plankton carbon in ' num2str(fixedParams.Htot) 'm deep (1m^2) water column'])
         end
         
         %------------------------------------------------------------------
@@ -892,39 +981,37 @@ switch type
 
         nt = fixedParams.nt;
         nz = fixedParams.nz;
-        nPP = fixedParams.nPP;
+        nPP_size = fixedParams.nPP_size;
         
         % Extract outputs
         N = squeeze(out.N(:,:,:,itraj));
-        P = squeeze(out.P(:,:,:,itraj));
+        P = squeeze(out.P(:,:,:,:,itraj));
         Z = squeeze(out.Z(:,:,:,itraj));
-        OM = squeeze(out.OM(:,:,:,itraj));
+        OM = squeeze(out.OM(:,:,:,:,itraj));
 
         switch var
             case 'phytoZooPlankton'                
                 plt = figure;
                 plt.Units = 'inches';
                 plt.Position = [0 0 8 6];
-
-                % Y = squeeze(max(P,[],2));
-                % abundance summed over depth
-                Y = squeeze(sum(repmat(reshape(fixedParams.zwidth, [1 nz]), [nPP 1]) .* P, 2));                
+                % abundance summed over depth                
+                Y = P(:,:,fixedParams.PP_C_index,:,:);                
+                Y = squeeze(sum(repmat(reshape(fixedParams.zwidth, [1 nz]), [nPP_size 1]) .* Y, 2));
                 Y = cat(1, Y, sum(fixedParams.zwidth .* Z));
-%                 Y = Y ./ fixedParams.Htot; % concentration over modelled water columnn
                 mY = median(Y, 3);
                 % color scale - red --> blue
                 rb_hsv = rgb2hsv([1 0 0; 0 0 1]);
-                r2b_hsv =  [linspace(rb_hsv(1,1), rb_hsv(2,1), nPP)' ...
-                    linspace(rb_hsv(1,2), rb_hsv(2,2), nPP)' ...
-                    linspace(rb_hsv(1,3), rb_hsv(2,3), nPP)'];
+                r2b_hsv =  [linspace(rb_hsv(1,1), rb_hsv(2,1), nPP_size)' ...
+                    linspace(rb_hsv(1,2), rb_hsv(2,2), nPP_size)' ...
+                    linspace(rb_hsv(1,3), rb_hsv(2,3), nPP_size)'];
                 r2b = hsv2rgb(r2b_hsv);
                 cols = r2b;
-                cols(nPP+1,:) = [0 0 0]; % black for zooplankton
+                cols(nPP_size+1,:) = [0 0 0]; % black for zooplankton
                 % group output into intervals of nd days
                 nd = 50;
                 int = 0:nd:ceil(nt/nd)*nd;
                 intn = length(int)-1;
-                y = nan(intn, nPP+1);
+                y = nan(intn, nPP_size+1);
                 for i = 1:intn
                     j0 = int(i)+1; j1 = min(int(i+1), nt);
                     iY = mY(:,j0:j1);
@@ -932,26 +1019,25 @@ switch type
                 end                
                 bp = bar(y,'grouped');
                 xl = xlim; yl = ylim;
-                yleg = linspace(yl(1)+0.95*diff(yl), yl(1)+0.5*diff(yl), nPP+2);
+                yleg = linspace(yl(1)+0.95*diff(yl), yl(1)+0.5*diff(yl), nPP_size+2);
                 hold on
-                text(xl(1)+0.05*diff(xl), yleg(1), 'cell diameter')
-                for i = 1:nPP+1
+                text(xl(1)+0.8*diff(xl), yleg(1), 'cell diameter')
+                for i = 1:nPP_size+1
                     bp(i).FaceColor = cols(i,:);
-                    ps = scatter(xl(1)+0.05*diff(xl), yleg(i+1), 'filled');
+                    ps = scatter(xl(1)+0.8*diff(xl), yleg(i+1), 'filled');
                     ps.MarkerFaceColor = cols(i,:);
-                    if i < nPP+1
-                        text(xl(1)+0.07*diff(xl), yleg(i+1), ...
+                    if i < nPP_size+1
+                        text(xl(1)+0.82*diff(xl), yleg(i+1), ...
                             [num2str(round(fixedParams.PPdia(i),2,'significant')) ' \mum'])
                     else
-                        text(xl(1)+0.07*diff(xl), yleg(i+1), 'zooplankton')
+                        text(xl(1)+0.82*diff(xl), yleg(i+1), 'zooplankton')
                     end
                 end
                 hold off
                 xticklabels(strcat(string(int(1:end-1)), '-', string(int(2:end))))
                 xlabel('year-day')
-                ylabel('abundance (mmol N)')
-                title(['planktonic nitrogen in ' num2str(fixedParams.Htot) 'm deep (1m^2) water column'])
-        
+                ylabel('abundance (mmol C)')
+                title(['planktonic carbon in ' num2str(fixedParams.Htot) 'm deep (1m^2) water column'])
         end
         
 end

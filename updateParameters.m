@@ -25,18 +25,18 @@ if ~isempty(varargin)
             end
         end
         
-        if any(strcmp('Qmin_a', parnames)) || any(strcmp('Qmin_b', parnames)) || ...
-                any(strcmp('Qmax_over_delQ_a', parnames)) || any(strcmp('Qmax_over_delQ_b', parnames))
-            Params.Qmax = Params.Qmin .* (Params.Qmax_over_delQ ./ (Params.Qmax_over_delQ - 1));
-            Params.delQ = Params.Qmax - Params.Qmin;
+        if any(strcmp('Qmin_QC_a', parnames)) || any(strcmp('Qmin_QC_b', parnames)) || ...
+                any(strcmp('Qmax_delQ_a', parnames)) || any(strcmp('Qmax_delQ_b', parnames))
+            Params.Qmax_QC = Params.Qmin_QC .* (1 ./ (1 - 1 ./ Params.Qmax_delQ));
+            Params.delQ_QC = Params.Qmax_QC - Params.Qmin_QC;
         end
         
-        if any(strcmp('rDOM', parnames)) || any(strcmp('rPOM', parnames))
-            Params.rOM = nan(FixedParams.nOM,1);
-            Params.rOM(FixedParams.DOM_index) = Params.rDOM;
-            Params.rOM(FixedParams.POM_index) = Params.rPOM;
-        end
         
+        if any(strcmp('rDOC', parnames)), Params.rOM(FixedParams.DOM_index,1,FixedParams.OM_C_index) = Params.rDOC; end
+        if any(strcmp('rDON', parnames)), Params.rOM(FixedParams.DOM_index,1,FixedParams.OM_N_index) = Params.rDON; end
+        if any(strcmp('rPOC', parnames)), Params.rOM(FixedParams.POM_index,1,FixedParams.OM_C_index) = Params.rPOC; end
+        if any(strcmp('rPON', parnames)), Params.rOM(FixedParams.POM_index,1,FixedParams.OM_N_index) = Params.rPON; end
+
         if any(strcmp('wk', parnames))
             % wk probably shouldn't be numerically optimised because it's
             % related to the maximum permissible integration time step
@@ -73,7 +73,7 @@ if ~isempty(varargin)
                     Name = name(1:length(name)-2);
                     param_a = Params.([Name '_a']);
                     param_b = Params.([Name '_b']);
-                    if ~any(strcmp(Name, {'Qmax_over_delQ'}))
+                    if ~any(strcmp(Name, {'Qmax_delQ'}))
                         Params.(Name) = volumeDependent(param_a, param_b, V_PP);
                     else
                         Params.(Name) = 1 ./ (1 - volumeDependent(param_a, param_b, V_PP));
@@ -83,17 +83,16 @@ if ~isempty(varargin)
         end
         
         
-        if any(strcmp('Qmin_a', varargin)) || any(strcmp('Qmin_b', varargin)) || ...
-                any(strcmp('Qmax_over_delQ_a', varargin)) || any(strcmp('Qmax_over_delQ_b', varargin))
-            Params.Qmax = Params.Qmin .* (Params.Qmax_over_delQ ./ (Params.Qmax_over_delQ - 1));
-            Params.delQ = Params.Qmax - Params.Qmin;
+        if any(strcmp('Qmin_QC_a', varargin)) || any(strcmp('Qmin_QC_b', varargin)) || ...
+                any(strcmp('Qmax_delQ_a', varargin)) || any(strcmp('Qmax_delQ_b', varargin))
+            Params.Qmax_QC = Params.Qmin_QC ./ (1 - 1 ./ Params.Qmax_delQ);
+            Params.delQ_QC = Params.Qmax_QC - Params.Qmin_QC;
         end
         
-        if any(strcmp('rDOM', varargin)) || any(strcmp('rPOM', varargin))
-            Params.rOM = nan(FixedParams.nOM,1);
-            Params.rOM(FixedParams.DOM_index) = Params.rDOM;
-            Params.rOM(FixedParams.POM_index) = Params.rPOM;
-        end
+        if any(strcmp('rDOC', varargin)), Params.rOM(FixedParams.DOM_index,1,FixedParams.OM_C_index) = Params.rDOC; end        
+        if any(strcmp('rDON', varargin)), Params.rOM(FixedParams.DOM_index,1,FixedParams.OM_N_index) = Params.rDON; end        
+        if any(strcmp('rPOC', varargin)), Params.rOM(FixedParams.POM_index,1,FixedParams.OM_C_index) = Params.rPOC; end        
+        if any(strcmp('rPON', varargin)), Params.rOM(FixedParams.POM_index,1,FixedParams.OM_N_index) = Params.rPON; end        
         
         if any(strcmp('wk', varargin))
             % wk probably shouldn't be numerically optimised because it's

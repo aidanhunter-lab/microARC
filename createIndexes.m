@@ -7,8 +7,11 @@ FixedParams = fixedParams;
 nz  = FixedParams.nz;
 nIN = FixedParams.nIN;
 nPP = FixedParams.nPP;
+nPP_nut = FixedParams.nPP_nut;
 nZP = FixedParams.nZP;
 nOM = FixedParams.nOM;
+nOM_type = FixedParams.nOM_type;
+nOM_nut = FixedParams.nOM_nut;
 
 % Inorganic nutrients
 IN_index = [true(1, nIN * nz) false(1, (nPP + nZP + nOM) * nz)]';
@@ -17,7 +20,15 @@ FixedParams.IN_index = IN_index;
 % Phytoplankton
 PP_index = [false(1, nIN * nz)  true(1, nPP * nz) false(1, (nZP + nOM) * nz)]';
 FixedParams.PP_index = PP_index;
-                    
+
+if nPP_nut > 1
+    % index phytoplankton nutrients
+    for i = 1:FixedParams.nPP_nut
+        FixedParams.(['PP_' FixedParams.PP_nut{i} '_index']) = ...
+            strcmp(FixedParams.PP_nut{i}, FixedParams.PP_nut);
+    end
+end
+
 % Zooplankton
 ZP_index = [false(1, (nIN + nPP) * nz) true(1, nZP * nz) false(1, nOM * nz)]';
 FixedParams.ZP_index = ZP_index;
@@ -26,10 +37,23 @@ FixedParams.ZP_index = ZP_index;
 OM_index = [false(1, (nIN + nPP + nZP) * nz) true(1, nOM * nz)]';
 FixedParams.OM_index = OM_index;
 
-if FixedParams.nOM > 1
-    % index OM types
-    for i =1:FixedParams.nOM
-        FixedParams.([FixedParams.OMtype{i} '_index']) = ... 
-            strcmp(FixedParams.OMtype{i}, FixedParams.OMtype);
+if nOM_type > 1
+    % index DOM and POM
+    for i =1:FixedParams.nOM_type
+        FixedParams.([FixedParams.OM_type{i} '_index']) = ... 
+            strcmp(FixedParams.OM_type{i}, FixedParams.OM_type);
     end
 end
+if nOM_nut > 1
+    % index OM nutrients
+    for i =1:FixedParams.nOM_nut
+        FixedParams.(['OM_' FixedParams.OM_nut{i} '_index']) = ... 
+            strcmp(FixedParams.OM_nut{i}, FixedParams.OM_nut);
+    end
+end
+
+
+
+
+
+

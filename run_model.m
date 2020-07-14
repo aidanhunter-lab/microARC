@@ -131,6 +131,7 @@ Params0 = Params;
 % Parameter values can be changed using name-value pair arguments in 
 % updateParameters.m, eg,
 % Params = updateParameters(Params, FixedParams, 'pmax_a', 30, 'pmax_b', -0.55, 'Gmax', 3);
+% v= {'pmax_a', 30, 'pmax_b', -0.55, 'Gmax', 3}
 
 
 %~~~~~~~~~~~~~
@@ -206,8 +207,10 @@ end
 
 % Standardise the fitting data using linear mixed models to adjust for
 % variability due to depth and sampling event.
-Data = standardiseFittingData(Data,'plotScaledPON', true, 'plotScaledPOC', ...
-    true, 'plotScaledN', true, 'plotAllData', true);
+Data = standardiseFittingData(Data,'plotScaledPON', true, 'plotScaledPOC', true, ...
+    'plotScaledchl_a', true, 'plotScaledN', true, 'plotAllData', true);
+
+% close all
 
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -218,12 +221,12 @@ Data = standardiseFittingData(Data,'plotScaledPON', true, 'plotScaledPOC', ...
 %                                    2nd dimension = location (trajectory)
 % 
 % Order of variables = inorganic nutrients [depth]
-%                      phytoplankton       [size, depth]
+%                      phytoplankton       [size, depth, nutrient]
 %                      zooplankton         [depth]
-%                      organic matter      [depth]
+%                      organic matter      [type, depth, nutrient]
 %
 
-v0 = initialiseVariables(FixedParams,Forc); % v0 stores initial input vectors
+v0 = initialiseVariables(FixedParams, Params, Forc); % v0 stores initial input vectors
 
 
 %% Integrate
@@ -241,7 +244,9 @@ ode45options=odeset('NonNegative',[1 ones(1, FixedParams.nEquations)],...
 poolObj = gcp; % integrations are parallelised over trajectories
 numcores = poolObj.NumWorkers;
 
-% Integrate using default or manually selected parameters
+% Params = updateParameters(Params, FixedParams, 'Gmax', 10);
+
+% Integrate model specified by Params
 tic
 [OUT, AUXVARS, AUXVARS_2d, namesExtra, nExtra] = ... 
     integrateTrajectories(FixedParams, Params, Forc, v0, ode45options);
@@ -253,14 +258,18 @@ runtime = runtime / Forc.nTraj * numcores; % average integration time of single 
 % Same for extra outputs...
 nt = FixedParams.nt;
 nz = FixedParams.nz;
-nPP = FixedParams.nPP;
-nOM = FixedParams.nOM;
+% nPP = FixedParams.nPP;
+nPP_size = FixedParams.nPP_size;
+nPP_nut = FixedParams.nPP_nut;
+% nOM = FixedParams.nOM;
+nOM_type = FixedParams.nOM_type;
+nOM_nut = FixedParams.nOM_nut;
 nTraj = Forc.nTraj;
 
 out.N = reshape(OUT(FixedParams.IN_index,:,:), [1 nz nt nTraj]);
-out.P = reshape(OUT(FixedParams.PP_index,:,:), [nPP nz nt nTraj]);
+out.P = reshape(OUT(FixedParams.PP_index,:,:), [nPP_size nz nPP_nut nt nTraj]);
 out.Z = reshape(OUT(FixedParams.ZP_index,:,:), [1 nz nt nTraj]);
-out.OM = reshape(OUT(FixedParams.OM_index,:,:), [nOM nz nt nTraj]);
+out.OM = reshape(OUT(FixedParams.OM_index,:,:), [nOM_type nz nOM_nut nt nTraj]);
 
 if sum(nExtra) > 0
     for k = 1:nExtra(1)
@@ -282,7 +291,7 @@ numcores = poolObj.NumWorkers;
 % Choose tuning parameters from Params.scalars and Params.sizeDependent
 parnames = {'pmax_a','pmax_b','aP', ... 
     'Gmax','k_G', ... 
-    'aN_over_Qmin_a','aN_over_Qmin_b'};
+    'aN_QC_a','aN_QC_b'};
 npars = length(parnames);
 FixedParams.tunePars = parnames;
 lb = nan(1,npars); ub = nan(1,npars);
@@ -290,6 +299,14 @@ for i = 1:npars
     lb(i) = Params.lowerBound.(parnames{i});
     ub(i) = Params.upperBound.(parnames{i});
 end
+
+% Test the cost function
+xpar = nan(1,npars);
+for i = 1:npars
+    xpar(i) = Params.(parnames{i});
+end
+[cost, costComponents] = costFun(xpar, FixedParams, Params, Forc, Data, v0, ode45options);
+disp(costComponents)
 
 approxRunTime = @(runtime, ncores, ntraj, popsize, niter) ... % assuming integrating over a single trajectory takes 1 sec on a single processor
     round(runtime * ntraj * (niter+1) * popsize / ncores / 60 / 60, 2, 'significant');
@@ -358,13 +375,14 @@ end
 save = false;
 % save = true;
 folder = 'OUTPUT/plots/';
+% folder = '/home/aidan/Desktop/temp/outputPlots/';
 
 close all
 
 % Choose trajectory
 % k = 1;
 % Or, first, filter by sampling event 
-ie = 10; % sampling event
+ie = 7; % sampling event
 kk = find(Data.EventTraj(ie,:)); % all trajectories for selected event
 k = kk(1);
 
@@ -397,11 +415,20 @@ if save
     print(fig, figFile, '-r300', '-dpng');
 end
 
-% phytoplankton
-outputPlot('contour_DepthTime','phytoplankton',k,out,FixedParams,Forc,auxVars,'linear');
+% phytoplankton nitrogen
+outputPlot('contour_DepthTime','phytoplankton_N',k,out,FixedParams,Forc,auxVars,'linear');
 if save
     fig = gcf;
-    filename = 'phytoplankton.png';
+    filename = 'phytoplankton_N.png';
+    figFile = fullfile(folder, filename);    
+    print(fig, figFile, '-r300', '-dpng');
+end
+
+% phytoplankton chlorophyll
+outputPlot('contour_DepthTime','phytoplankton_Chl',k,out,FixedParams,Forc,auxVars,'linear');
+if save
+    fig = gcf;
+    filename = 'phytoplankton_Chl.png';
     figFile = fullfile(folder, filename);    
     print(fig, figFile, '-r300', '-dpng');
 end
@@ -410,7 +437,7 @@ end
 outputPlot('contour_DepthTime','phytoplankton_C',k,out,FixedParams,Forc,auxVars,'linear');
 if save
     fig = gcf;
-    filename = 'phytoplankton.png';
+    filename = 'phytoplankton_C.png';
     figFile = fullfile(folder, filename);    
     print(fig, figFile, '-r300', '-dpng');
 end
@@ -419,10 +446,21 @@ end
 outputPlot('contour_DepthTime','phytoplankton_N_C',k,out,FixedParams,Forc,auxVars,'linear');
 if save
     fig = gcf;
-    filename = 'phytoplankton.png';
+    filename = 'phytoplankton_N_C_ratio.png';
     figFile = fullfile(folder, filename);    
     print(fig, figFile, '-r300', '-dpng');
 end
+
+% phytoplankton Chl/N ratio
+outputPlot('contour_DepthTime','phytoplankton_Chl_N',k,out,FixedParams,Forc,auxVars,'linear');
+if save
+    fig = gcf;
+    filename = 'phytoplankton_Chl_N_ratio.png';
+    figFile = fullfile(folder, filename);    
+    print(fig, figFile, '-r300', '-dpng');
+end
+
+
 
 % zooplankton
 outputPlot('contour_DepthTime','zooplankton',k,out,FixedParams,Forc,auxVars,'linear');
@@ -441,7 +479,7 @@ end
 close all
 
 % Choose event
-ie = 2;
+ie = 7;
 if ~ismember(ie, 1:Data.nEvents), warning(['Choose event number within range (1, ' num2str(Data.nEvents) ')']); end
 % trajectory indices
 kk = find(Data.EventTraj(ie,:));
@@ -450,7 +488,7 @@ outputPlot('trajectoryLine_LatLong','direction',ie,kk,out,FixedParams,Forc,auxVa
 outputPlot('trajectoryLine_LatLong','forcing',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 outputPlot('trajectoryLine_LatLong','inorganicNutrient',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 outputPlot('trajectoryLine_LatLong','DOM_POM',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
-outputPlot('trajectoryLine_LatLong','phytoplankton',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
+outputPlot('trajectoryLine_LatLong','phytoplankton_N',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 outputPlot('trajectoryLine_LatLong','zooplankton',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 
 
@@ -468,11 +506,11 @@ if ~ismember(ie, 1:Data.nEvents), warning(['Choose event number within range (1,
 kk = find(Data.EventTraj(ie,:));
 
 outputPlot('trajectoryPolygon_TimeSeries','forcing',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
+outputPlot('trajectoryPolygon_TimeSeries','DIN',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 outputPlot('trajectoryPolygon_TimeSeries','DOM_POM',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
-outputPlot('trajectoryPolygon_TimeSeries','phytoplankton',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
+outputPlot('trajectoryPolygon_TimeSeries','phytoplankton_C',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 outputPlot('trajectoryPolygon_TimeSeries','phytoplanktonStacked',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 outputPlot('trajectoryPolygon_TimeSeries','phytoZooPlanktonStacked',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
-
 outputPlot('barplot_TimeSeries','phytoZooPlankton',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 
 
