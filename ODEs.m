@@ -6,8 +6,12 @@ params = parameterList.Params;
 %% MODEL DIMENSIONS
 
 nz = fixedParams.nz;    % number of depth layers
-nPP = fixedParams.nPP;  % number of phytoplankton size classes
-nOM = fixedParams.nOM;  % number of organic matter types
+nPP_size = fixedParams.nPP_size;  % number of phytoplankton size classes
+nPP_nut = fixedParams.nPP_nut;  % number of phytoplankton nutrient classes
+nOM_type = fixedParams.nOM_type;  % number of organic matter types
+nOM_nut = fixedParams.nOM_nut;  % number of organic nutrient classes
+phyto = fixedParams.phytoplankton;
+zoo = fixedParams.zooplankton;
 
 %% INITIAL CONDITIONS
 
@@ -15,12 +19,14 @@ nOM = fixedParams.nOM;  % number of organic matter types
 N = v_in(fixedParams.IN_index)';
 
 % Plankton
-PP = reshape(v_in(fixedParams.PP_index), [nPP nz]);  % phytoplankton
-ZP = v_in(fixedParams.ZP_index)';                    % zooplankton
-B = [PP; ZP];                                        % all plankton
+PP = reshape(v_in(fixedParams.PP_index), [nPP_size nz nPP_nut]); % phytoplankton (all nutrients)
+P_C = PP(:,:,fixedParams.PP_C_index);
+Z_C = v_in(fixedParams.ZP_index)'; % zooplankton (carbon)
+B_C = [P_C; Z_C]; % all planktonic carbon
 
-% Organic nitrogen
-OM = reshape(v_in(fixedParams.OM_index), [nOM nz]);
+% Organic matter
+OM =reshape(v_in(fixedParams.OM_index), [nOM_type nz nOM_nut]);
+OM_C = OM(:,:,fixedParams.OM_C_index); % DOC and POC
 
 
 %% FORCING DATA
@@ -37,7 +43,7 @@ Isurf = (Isurf(:,1) + diff(Isurf,1,2) .* t)';
 % Calculate light levels at depth -- within each depth layer light
 % attenuates over half the layer width plus the combined widths of all
 % shallower layers.
-att = (fixedParams.attSW + fixedParams.attP .* sum(PP)) .* fixedParams.zwidth';
+att = (fixedParams.attSW + fixedParams.attP .* sum(PP(:,:,fixedParams.PP_Chl_index))) .* fixedParams.zwidth';
 att = 0.5 * att + [0 cumsum(att(1:nz-1))];
 I = Isurf * exp(-att);
 
@@ -48,30 +54,47 @@ I = Isurf * exp(-att);
 % Physiology
 %~~~~~~~~~~~
 
-% Background mortality
-B_mortality = params.m .* B;
+% Phytoplankton N and Chl quotas relative to C
+Q_N = PP(:,:,fixedParams.PP_N_index) ./ P_C;
+Q_Chl = PP(:,:,fixedParams.PP_Chl_index) ./ P_C;
+% Q_Chl_N = PP(:,:,fixedParams.PP_Chl_index) ./ PP(:,:,fixedParams.PP_N_index); % Chl:N ratio
+
+% Nutrient limitation
+gammaN = max(0, min(1, (Q_N - params.Qmin_QC) ./ params.delQ_QC));
+
+% Uptake regulation
+Qstat = 1 - gammaN .^ params.h;
 
 % Temperature dependence
 gammaT = exp(params.A .* (T - params.Tref));
+
+% Background mortality
+B_C_mortality = params.m .* B_C;
 
 
 %~~~~~~~~~~~
 % Autotrophy
 %~~~~~~~~~~~
 
-% Growth depends on cellular nitrogen uptake rate and assimilation (photosynthetic) rate
+zeros_size_nz = zeros(nPP_size, nz);
 
+% Nutrient uptake
+V_N = params.Vmax_QC ./ (1 + params.Vmax_QC ./ (params.aN_QC .* N)) .* ... 
+    gammaT .* Qstat; % nitrogen uptake rate (mmol N / mmol C / day)
+N_uptake = V_N .* P_C; % mmol N / m^3 / day
+N_uptake_losses = sum(N_uptake);
+
+% Photosynthesis
 if all(I == 0)
-    B_uptake = zeros(nPP+1,nz);
-    N_uptake_losses = zeros(1, nz);    
-else    
-    mu = params.pmax .* (1 - exp(-(params.aP .* I) ./ params.pmax));        % photosynthetic (metabolic) rate (1 / day)    
-    QmaxVmax_ = params.Qmax_over_delQ .* params.Vmax_over_Qmin;
-    aN = params.aN_over_Qmin .* N;
-    mumax = params.Vmax_over_Qmin ./ (QmaxVmax_ ./ mu + 1); % maximum growth rate (1 / day) depends on nutrient uptake and photosynthetic rates    
-    V = (gammaT .* mumax .* aN) ./ (aN + mumax); % growth rate
-    B_uptake = [V; zeros(1, nz)] .* B;
-    N_uptake_losses = sum(B_uptake);
+    V_Chl = zeros_size_nz;
+    V_C = zeros(nPP_size+1, nz);
+else
+    psat = params.pmax .* gammaT .* gammaN; % light saturated photosynthetic rate
+    aP_Q_I = (params.aP .* I) .* Q_Chl;
+    pc = psat .* (1 - exp(-aP_Q_I ./ psat )); % photosynthetic (carbon production) rate (1 / day)
+    rho = params.theta .* pc ./ aP_Q_I;  % proportion of new nitrogen prodcution allocated to chlorophyll (mg Chl / mmol N)
+    V_Chl = rho .* V_N; % chlorophyll production rate (mg Chl / mmol C / day)
+    V_C = [max(0, pc - params.xi .* V_N); zeros(1, nz)];
 end
 
 
@@ -80,62 +103,72 @@ end
 %~~~~~~~~~~~~~
 
 % Grazing - single predator class, with cannibalism
-F = sum(B);
-B2 = B.^2;
-Phi = B2 ./ sum(B2);
+F = sum(B_C); % total prey carbon
+BC2 = B_C .^ 2;
+Phi = BC2 ./ sum(BC2); % prey preference
+G = (params.Gmax .* gammaT .* F ./ (params.k_G + F) .* ... 
+    (1-exp(params.Lambda .* F))) .* Phi; % grazing rate (1 / day)
 
-G = params.Gmax .* gammaT .* F ./ (params.k_G + F) .* ... 
-    (1 - exp(params.Lambda .* F)) .* Phi;                    % grazing rate
+predation_losses_C = G .* Z_C; % mmol C / m^3 / day
+predation_gains_C = [zeros_size_nz; ... 
+    params.lambda_max .* sum(predation_losses_C)];
 
-B_predation_losses = ZP .* G;
-
-% Assimilation
-B_predation_gains = [zeros(nPP, nz); ... 
-    params.lambda_max .* sum(B_predation_losses)];
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % Sources and sinks of organic matter
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+% OM sources are phyto and zooplankton mortality. Organic nitrogen is
+% modelled but there is no zooplankton N class, so assume that zooplankton
+% N quota is the same as their prey (some data on ths is would be useful...)
+phyto_C_losses = predation_losses_C(phyto,:); % Assume that zooplankton N quota is the same as their prey (some data on ths is would be useful...)
+Q_N_zoo = sum(Q_N .* (phyto_C_losses ./ sum(phyto_C_losses)));
+
 % Messy feeding
-lambda_m = 1 - params.lambda_max;
-beta_x_G = params.beta .* G;
-ZP_x_lambda_m = lambda_m .* ZP;
-OM_mess = ZP_x_lambda_m .* [sum(beta_x_G); sum(G - beta_x_G)]; % OM_mess=[DOM_mess; POM_mess]
+lambda_predLoss = (1 - params.lambda_max) .* predation_losses_C;
+beta_lambda_predLoss = params.beta .* lambda_predLoss;
+OM_mess_C = [sum(beta_lambda_predLoss); ... 
+    sum(lambda_predLoss-beta_lambda_predLoss)]; % OM_mess=[DOM_mess; POM_mess] (mmol C / m^3 / day)
+OM_mess_N = Q_N_zoo .* OM_mess_C;
 
 % Mortality
-beta_x_m_x_B = params.beta .* B_mortality;
-OM_mort = [sum(beta_x_m_x_B); sum(B_mortality - beta_x_m_x_B)]; % OM_mort=[DOM_mort; POM_mort]
+beta_m_B = params.beta .* B_C_mortality;
+OM_mort_C = [sum(beta_m_B); sum(B_C_mortality - beta_m_B)]; % OM_mort=[DOM_mort; POM_mort] (mmol C / m^3 / day)
+B_N_mortality = [Q_N; Q_N_zoo] .* B_C_mortality;
+beta_m_B = params.beta .* B_N_mortality;
+OM_mort_N = [sum(beta_m_B); sum(B_N_mortality - beta_m_B)]; % OM_mort=[DOM_mort; POM_mort] (mmol N / m^3 / day)
 
 % Remineralisation
 OM_remin = params.rOM .* OM;
+OM_remin_N = OM_remin(:,:,fixedParams.OM_N_index);
 
-SOM = OM_mort + OM_mess - OM_remin;
+SOM_C = OM_mort_C + OM_mess_C - OM_remin(:,:,fixedParams.OM_C_index); % (mmol C / m^3 / day)
+SOM_N = OM_mort_N + OM_mess_N - OM_remin_N; % (mmol N / m^3 / day)
 
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % Sources of inorganic nutrients
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 % Remineralisation
-SN = sum(OM_remin);
+SN = sum(OM_remin_N); % (mmol N / m^3 / day)
 
 %~~~~~~~~~~
 % Diffusion
 %~~~~~~~~~~
 
-v_diffuse = diffusion_1D([N(:), B', OM'], K, fixedParams.zwidth, fixedParams.delz);
+OM_C_t = OM_C';
+
+v_diffuse = diffusion_1D([N(:), B_C', OM_C_t], K, fixedParams.zwidth, fixedParams.delz);
 
 N_diffuse = v_diffuse(:,1);
-B_diffuse = v_diffuse(:,2:nPP+2)';
-OM_diffuse = v_diffuse(:,end-nOM+1:end)';
+B_C_diffuse = v_diffuse(:,2:nPP_size+2)';
+OM_C_diffuse = v_diffuse(:,end-nOM_nut+1:end)';
 
 %~~~~~~~~
 % Sinking
 %~~~~~~~~
 
-v_sink = sinking(OM', params.wk, fixedParams.zwidth);
-OM_sink = v_sink';
-
+OM_C_sink = sinking(OM_C_t, params.wk, fixedParams.zwidth)';
 
 %~~~~~
 % ODEs
@@ -144,13 +177,19 @@ OM_sink = v_sink';
 % Inorganic nutrients
 dNdt = N_diffuse - N_uptake_losses(:) + SN(:);
 % Plankton
-dBdt = B_diffuse + B_uptake + B_predation_gains - B_predation_losses - B_mortality;
+fluxC_ = B_C_diffuse - predation_losses_C - B_C_mortality; % all plankton carbon flux terms (mmol C / m^3 / day) excluding uptake and predation gains
+fluxC = fluxC_ + predation_gains_C; % all plankton carbon flux terms excluding uptake
+fluxC_p = fluxC_(phyto,:);
+fluxN = N_uptake + Q_N .* fluxC_p; % mmol N / m^3 / day
+fluxChl = V_Chl .* P_C + Q_Chl .* fluxC_p; % mg Chl / m^3 / day
+fluxC = V_C .* B_C + fluxC;
+dPPdt = cat(3, fluxC(phyto,:), fluxN, fluxChl);
+dZPdt = fluxC(zoo,:);
 % Organic matter
-dOMdt = OM_diffuse + OM_sink + SOM;
-
-% Separate phytoplankton and zooplankton
-dPPdt = dBdt(fixedParams.phytoplankton,:);
-dZPdt = dBdt(fixedParams.zooplankton,:);
+fluxC_ = OM_C_diffuse + OM_C_sink;
+fluxN = OM(:,:,fixedParams.OM_N_index) ./ OM_C .* fluxC_ + SOM_N;
+fluxC = fluxC_ + SOM_C;
+dOMdt = cat(3, fluxC, fluxN);
 
 dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)];
 
@@ -159,15 +198,15 @@ dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)];
 if returnExtra
     % 1D
     extraOutput.PAR = I;
-    
     % 2D (vectorised over cell size)
-    if all(I == 0)
-        extraOutput_2d.Qeq = repmat(params.Qmax, [1 nz]); % equilibrium nitrogen Qeq=Qmax when I=0
-    else
-        Q_ = (QmaxVmax_ .* aN) ./ (aN + params.Vmax_over_Qmin);
-        extraOutput_2d.Qeq = (Q_ + mu) ./ (mu ./ params.Qmin + Q_ ./ params.Qmax); % equilibrium N quota
-    end
-    extraOutput_2d.PP_C = params.Q_C  .* (PP ./ extraOutput_2d.Qeq); % phytoplankton carbon biomass (mmol C / m^3)
+    extraOutput_2d = struct();
+%     if all(I == 0)
+%         extraOutput_2d.Qeq = repmat(params.Qmax, [1 nz]); % equilibrium nitrogen Qeq=Qmax when I=0
+%     else
+%         Q_ = (QmaxVmax_ .* aN) ./ (aN + params.Vmax_over_Qmin);
+%         extraOutput_2d.Qeq = (Q_ + mu) ./ (mu ./ params.Qmin + Q_ ./ params.Qmax); % equilibrium N quota
+%     end
+%     extraOutput_2d.PP_C = params.Q_C  .* (PP(:,:,fixedParams.N_index) ./ extraOutput_2d.Qeq); % phytoplankton carbon biomass (mmol C / m^3)
 end
 
 end
@@ -185,17 +224,11 @@ padZeros = zeros(1,size(u,2));
 v = diff([padZeros; (K ./ delz) .* diff(u); padZeros]) ./ w;
 end
 
-
 function v = sinking(u,s,w)
 % Rate of change of u due to sinking.
 % Inputs: u = concentrations, size(u)=[nz nvar]
 %         s = sinking speed, size(s)=[1 nvar]
 %         w = depth layer widths, size(w)=[nz 1]
-nvar = size(u,2);
-v = ((-s) ./ w) .* diff([zeros(1,nvar); u]);
+v = ((-s) ./ w) .* diff([zeros(1,size(u,2)); u]);
 end
-
-
-
-
 
