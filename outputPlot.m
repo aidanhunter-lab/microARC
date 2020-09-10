@@ -168,8 +168,12 @@ switch type
                 nc = floor(sqrt(fixedParams.nPP_size));
                 nr = ceil(fixedParams.nPP_size / nc);
                 plt.Units = 'inches';
-                plt.Position = [0 0 8*nc 3*nr];
-                index = reshape(1:fixedParams.nPP_size, nc, nr)';
+                plt.Position = [0 0 8*nc 3*nr];                
+                if ~mod(fixedParams.nPP_size,2) % even number of size classes
+                    index = reshape(1:fixedParams.nPP_size, [nc nr])';
+                else
+                    index = reshape([1:fixedParams.nPP_size 0], [nc nr])';
+                end                
                 for ii = 1:fixedParams.nPP_size
                     subplot(nr,nc,index(ii))
                     x = squeeze(P(ii,:,fixedParams.PP_N_index,:));
@@ -200,7 +204,11 @@ switch type
                 nr = ceil(fixedParams.nPP_size / nc);
                 plt.Units = 'inches';
                 plt.Position = [0 0 8*nc 3*nr];
-                index = reshape(1:fixedParams.nPP_size, nc, nr)';
+                if ~mod(fixedParams.nPP_size,2) % even number of size classes
+                    index = reshape(1:fixedParams.nPP_size, [nc nr])';
+                else
+                    index = reshape([1:fixedParams.nPP_size 0], [nc nr])';
+                end
                 for ii = 1:fixedParams.nPP_size
                     subplot(nr,nc,index(ii))
                     x = squeeze(P(ii,:,fixedParams.PP_Chl_index ,:));
@@ -231,7 +239,11 @@ switch type
                 nr = ceil(fixedParams.nPP_size / nc);
                 plt.Units = 'inches';
                 plt.Position = [0 0 8*nc 3*nr];
-                index = reshape(1:fixedParams.nPP_size, nc, nr)';
+                if ~mod(fixedParams.nPP_size,2) % even number of size classes
+                    index = reshape(1:fixedParams.nPP_size, [nc nr])';
+                else
+                    index = reshape([1:fixedParams.nPP_size 0], [nc nr])';
+                end
                 for ii = 1:fixedParams.nPP_size
                     subplot(nr,nc,index(ii))
                     x = squeeze(P(ii,:,fixedParams.PP_C_index ,:));
@@ -260,7 +272,11 @@ switch type
                 nr = ceil(fixedParams.nPP_size / nc);
                 plt.Units = 'inches';
                 plt.Position = [0 0 8*nc 3*nr];
-                index = reshape(1:fixedParams.nPP_size, nc, nr)';
+                if ~mod(fixedParams.nPP_size,2) % even number of size classes
+                    index = reshape(1:fixedParams.nPP_size, [nc nr])';
+                else
+                    index = reshape([1:fixedParams.nPP_size 0], [nc nr])';
+                end
                 for ii = 1:fixedParams.nPP_size
                     subplot(nr,nc,index(ii))
                     x = squeeze(P(ii,:,fixedParams.PP_N_index,:) ./ P(ii,:,fixedParams.PP_C_index,:));
@@ -289,7 +305,11 @@ switch type
                 nr = ceil(fixedParams.nPP_size / nc);
                 plt.Units = 'inches';
                 plt.Position = [0 0 8*nc 3*nr];
-                index = reshape(1:fixedParams.nPP_size, nc, nr)';
+                if ~mod(fixedParams.nPP_size,2) % even number of size classes
+                    index = reshape(1:fixedParams.nPP_size, [nc nr])';
+                else
+                    index = reshape([1:fixedParams.nPP_size 0], [nc nr])';
+                end
                 for ii = 1:fixedParams.nPP_size
                     subplot(nr,nc,index(ii))
                     x = squeeze(P(ii,:,fixedParams.PP_Chl_index,:) ./ ... 
@@ -367,8 +387,8 @@ switch type
         OM = squeeze(out.OM(:,:,:,:,itraj));
         
         % Event position
-        elat = dat.Latitude(dat.Event == ie);
-        elon = dat.Longitude(dat.Event == ie);
+        elat = dat.scalar.Latitude(dat.scalar.Event == ie);
+        elon = dat.scalar.Longitude(dat.scalar.Event == ie);
 
         switch var
             case 'direction'                
@@ -555,12 +575,17 @@ switch type
                 plt = figure;
                 nTraj = length(itraj);
                 ind_nut = fixedParams.PP_N_index;
-                Col = squeeze(max(P(:,:,ind_nut,:),[],2));
+                Col = squeeze(max(P(:,:,ind_nut,:,:),[],2));
+%                 Col = squeeze(max(P(:,:,ind_nut,:),[],2));
                 nc = floor(sqrt(fixedParams.nPP_size));
                 nr = ceil(fixedParams.nPP_size / nc);
                 plt.Units = 'inches';
                 plt.Position = [0 0 6*nc 4*nr];
-                index = reshape(1:fixedParams.nPP_size, nc, nr)';
+                if ~mod(fixedParams.nPP_size, 2)
+                    index = reshape(1:fixedParams.nPP_size, [nc nr])';
+                else
+                    index = reshape([1:fixedParams.nPP_size 0], [nc nr])';
+                end
                 for ii = 1:fixedParams.nPP_size
                     subplot(nr,nc,index(ii))
                     col = squeeze(Col(ii,:,:));
@@ -631,7 +656,7 @@ switch type
         % Extract times
         day = yearday(forcing.t(:,itraj));
         x = day(:,1);
-        etime = unique(dat.Yearday(dat.Event == ie,:));
+        etime = unique(dat.scalar.Yearday(dat.scalar.Event == ie,:));
         
         % Extract outputs
         N = squeeze(out.N(:,:,:,itraj));
@@ -832,7 +857,11 @@ switch type
                 Y = squeeze(max(Y,[],2));
                 nc = floor(sqrt(nPP_size));
                 nr = ceil(nPP_size / nc);
-                index = reshape(1:nPP_size, nc, nr)';
+                if ~mod(nPP_size, 2)
+                    index = reshape(1:nPP_size, [nc nr])';
+                else
+                    index = reshape([1:nPP_size 0], [nc nr])';
+                end
                 for ii = 1:nPP_size
                     subplot(nr,nc,index(ii))
                     y = Y(ii,:,:);

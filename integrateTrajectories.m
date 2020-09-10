@@ -1,5 +1,5 @@
 function [OUT, AUXVARS, AUXVARS_2d, namesExtra, nExtra] = ... 
-    integrateTrajectories(FixedParams, Params, Forc, v0, ode45options)
+    integrateTrajectories(FixedParams, Params, Forc, v0, odeIntegrator, odeOptions)
 
 nt = FixedParams.nt;
 nz = FixedParams.nz;
@@ -35,6 +35,7 @@ OUT(:,1,:) = reshape(v0, [nEquations 1 nTraj]);
 [namesExtra, nExtra, AUXVARS, AUXVARS_2d] = ... 
     initialiseExtraVariables(v0, parameterList, Forc);
 
+
 % Loop through trajectories and integrate
 parfor i = 1:nTraj
     % Forcing data
@@ -44,6 +45,8 @@ parfor i = 1:nTraj
     forcing.PARsurf = PARsurf(:,:,i);
     % Initial state
     v_in = v0(:,i);
+    % Integrating method
+    odeSolver = str2func(odeIntegrator);
     % Integrate step-wise between successive data points    
     for j = 2:nt
         if deepens(:,j,i)
@@ -62,7 +65,9 @@ parfor i = 1:nTraj
             v_in = [N; P(:); Z; OM(:)];            
         end
         % Integrate
-        sol=ode45(@(t, v_in) ODEs(t, v_in, parameterList, forcing, j, false), [0 1], v_in, ode45options);
+%         sol=ode45(@(t, v_in) ODEs(t, v_in, parameterList, forcing, j, false), [0 1], v_in, odeOptions);        
+%         sol=ode23(@(t, v_in) ODEs(t, v_in, parameterList, forcing, j, false), [0 1], v_in, odeOptions);        
+        sol = odeSolver(@(t, v_in) ODEs(t, v_in, parameterList, forcing, j, false), [0 1], v_in, odeOptions);        
         % Store solutions each day (each forcing data time-step)
         OUT(:,j,i) = deval(sol, 1);
         % Update initials for next time step

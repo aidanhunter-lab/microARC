@@ -1,4 +1,4 @@
-function [FixedParams, Params] = initialiseParameters(Forc)
+function [FixedParams, Params] = initialiseParameters(Forc, Data)
 
 % Choose initial values for fixed and variable parameters
 
@@ -36,18 +36,25 @@ FixedParams.nIN = length(FixedParams.IN_nut);
 % Plankton
 FixedParams.PP_nut = {'C','N','Chl'}; % model phytoplankton carbon, nitrogen and chlorophyll
 FixedParams.nPP_nut = length(FixedParams.PP_nut);
-FixedParams.nPP_size = 6; % number of phytoplankton size classes
+
+PPdia = unique(Data.size.size);
+PPsize = 4/3*pi*(PPdia ./ 2) .^ 3;
+FixedParams.nPP_size = length(PPdia); % number of phytoplankton size classes
+FixedParams.PPdia = PPdia; % cell diameter [mu m]
+FixedParams.PPsize = PPsize; % cell volume [mu m^3]
+
+% FixedParams.nPP_size = 6; % number of phytoplankton size classes
 FixedParams.nPP = FixedParams.nPP_size * FixedParams.nPP_nut;
 FixedParams.nZP = 1; % number of zooplankton classes
 % Phytoplanton sizes - smallest diameter is 0.5 mu m, volumes of successive size 
 % classes increase by factors of 32 (equally spaced on log-scale).
-PPdia = 0.5; % cell diameter [mu m]
-PPsize = 4/3*pi*(PPdia/2)^3; % cell volume [mu m^3]
-PPsize(2:FixedParams.nPP_size) = 32 .^ (1:FixedParams.nPP_size-1) .* PPsize(1);
-PPsize = PPsize(:);
-FixedParams.PPsize = PPsize;
-FixedParams.PPdia = 2 .* (3 .* FixedParams.PPsize ./ (4*pi)) .^ (1/3);
-FixedParams.diatoms = FixedParams.PPsize >= 100;                            % assume large phytoplankton are diatoms - only needed to split SINMOD output over classes during state variable initialisation
+% PPdia = 0.5; % cell diameter [mu m]
+% PPsize = 4/3*pi*(PPdia/2)^3; % cell volume [mu m^3]
+% PPsize(2:FixedParams.nPP_size) = 32 .^ (1:FixedParams.nPP_size-1) .* PPsize(1);
+% PPsize = PPsize(:);
+% FixedParams.PPsize = PPsize;
+% FixedParams.PPdia = 2 .* (3 .* FixedParams.PPsize ./ (4*pi)) .^ (1/3);
+FixedParams.diatoms = FixedParams.PPdia >= 10;                            % assume large phytoplankton are diatoms - only needed to split SINMOD output over classes during state variable initialisation
 FixedParams.phytoplankton = [true(1,FixedParams.nPP_size) ... 
     false(1,FixedParams.nZP)]';                                              % index phytoplankton
 FixedParams.zooplankton = [false(1,FixedParams.nPP_size) ... 
@@ -212,32 +219,58 @@ FixedParams.dt_max = 1 /tx;
 
 % Choose bounds to restrict numerical optimisers
 
-% THIS STILL NEEDS ADJUSTED FOR THE CARBON-BASED MODEL...
+% If there is good reason to exclude any particular parameter from the
+% optimisation then set its lower/upper bounds equal to its value
 
-Params.lowerBound.A = 0.01; Params.upperBound.A = 0.2;
-Params.lowerBound.m = 0.01; Params.upperBound.m = 0.1;
-Params.lowerBound.aP = 1e-8; Params.upperBound.aP = 1e-2;
-Params.lowerBound.theta = 2; Params.upperBound.aP = 5;
-Params.lowerBound.Gmax = 1; Params.upperBound.Gmax = 30;
-Params.lowerBound.k_G = 0.01; Params.upperBound.k_G = 5;
-Params.lowerBound.Lambda = -1.5; Params.upperBound.Lambda = -0.5;
+% scalars - NEED TO FIND REFERENCES FOR THESE SCALAR BOUNDS...
+Params.lowerBound.Tref = 20;        Params.upperBound.Tref = 20;
+Params.lowerBound.A = 0.01;         Params.upperBound.A = 0.2;
+Params.lowerBound.h = 5;            Params.upperBound.h = 15;
+% Params.lowerBound.m = 0.01;         Params.upperBound.m = 0.1;
+Params.lowerBound.m = 0.001;         Params.upperBound.m = 0.1;
+Params.lowerBound.aP = 0.001;       Params.upperBound.aP = 0.5;
+Params.lowerBound.theta = 3;        Params.upperBound.theta = 5;
+Params.lowerBound.xi = 3;           Params.upperBound.xi = 5;
+Params.lowerBound.Gmax = 1;         Params.upperBound.Gmax = 30;
+Params.lowerBound.k_G = 0.01;       Params.upperBound.k_G = 5;
+Params.lowerBound.Lambda = -1.5;    Params.upperBound.Lambda = -0.5;
 Params.lowerBound.lambda_max = 0.5; Params.upperBound.lambda_max = 0.9;
-Params.lowerBound.rDOC = 0.01; Params.upperBound.rDOC = 0.15;
-Params.lowerBound.rDON = 0.01; Params.upperBound.rDON = 0.15;
-Params.lowerBound.rPOC = 0.01; Params.upperBound.rPOC = 0.15;
-Params.lowerBound.rPON = 0.01; Params.upperBound.rPON = 0.15;
+Params.lowerBound.wk = 10;          Params.upperBound.wk = 10;
+Params.lowerBound.rDOC = 0.01;      Params.upperBound.rDOC = 0.15;
+Params.lowerBound.rDON = 0.01;      Params.upperBound.rDON = 0.15;
+Params.lowerBound.rPOC = 0.01;      Params.upperBound.rPOC = 0.15;
+Params.lowerBound.rPON = 0.01;      Params.upperBound.rPON = 0.15;
 
-Params.lowerBound.Qmin_QC_a = 0.05; Params.upperBound.Qmin_QC_a = 0.5;
-Params.lowerBound.Qmin_QC_b = -0.2; Params.upperBound.Qmin_QC_b = 0.1;
-Params.lowerBound.Qmax_delQ_a = 0.1; Params.upperBound.Qmax_delQ_a = 1;
-Params.lowerBound.Qmax_delQ_b = -0.3; Params.upperBound.Qmax_delQ_b = 0;
-Params.lowerBound.Vmax_QC_a = 0; Params.upperBound.Vmax_QC_a = 0.5;
-Params.lowerBound.Vmax_QC_b = 0; Params.upperBound.Vmax_QC_b = 0.5;
-Params.lowerBound.aN_QC_a = 0.05; Params.upperBound.aN_QC_a = 1;
-Params.lowerBound.aN_QC_b = -0.5; Params.upperBound.aN_QC_b = 0;
-Params.lowerBound.pmax_a = 1; Params.upperBound.pmax_a = 25;
-Params.lowerBound.pmax_b = -1; Params.upperBound.pmax_b = 0;
+% size dependent
+Params.lowerBound.Qmin_QC_a = (1/14) * 1e-9 * 10^-1.78 / Params.Q_C_a; % Qmin bounds from Maranon (2013)
+Params.upperBound.Qmin_QC_a = (1/14) * 1e-9 * 10^-1.26 / Params.Q_C_a;
+Params.lowerBound.Qmin_QC_b = 0.77 - Params.Q_C_b;
+Params.upperBound.Qmin_QC_b = 0.92 - Params.Q_C_b;
 
+Params.lowerBound.Qmax_delQ_a = 10^(-1.78 - (-0.99)); % Qmax bounds from Maranon (2013)
+Params.upperBound.Qmax_delQ_a = 10^(-1.26 - (-1.35));
+Params.lowerBound.Qmax_delQ_b = 0.77 - 0.96;
+Params.upperBound.Qmax_delQ_b = 0.92 - 0.83;
+
+Params.lowerBound.Vmax_QC_a = 24 / 14 * 1e-9 * 10^-3.18 / Params.Q_C_a; % Vmax bounds from Maranon (2013)
+Params.upperBound.Vmax_QC_a = 24 / 14 * 1e-9 * 10^-2.78 / Params.Q_C_a;
+Params.lowerBound.Vmax_QC_b = 0.89 - Params.Q_C_b;
+Params.upperBound.Vmax_QC_b = 1.06 - Params.Q_C_b;
+
+Params.lowerBound.aN_QC_a = Params.lowerBound.Vmax_QC_a / 10^-0.44; % N affinity bounds from Edwards et al. (2015)
+Params.upperBound.aN_QC_a = Params.upperBound.Vmax_QC_a / 10^-1.2;
+Params.lowerBound.aN_QC_b = Params.lowerBound.Vmax_QC_b - 0.45;
+Params.upperBound.aN_QC_b = Params.upperBound.Vmax_QC_b - 0.24;
+
+% Params.lowerBound.aN_QC_a = Params.lowerBound.Vmax_QC_a / 0.17; % this doesn't, but should, account for CIs of half saturation K intercept a CIs as thsee are not given in Litchman (2013)
+% Params.upperBound.aN_QC_a = Params.upperBound.Vmax_QC_a / 0.17;
+% Params.lowerBound.aN_QC_b = Params.lowerBound.Vmax_QC_b - 0.36; % N affinity slope bounds from Litchman
+% Params.upperBound.aN_QC_b = Params.upperBound.Vmax_QC_b - 0.2;
+
+Params.lowerBound.pmax_a = 1.8; % pmax bounds guessed from mu_inf CIs given in Ward (2017)
+Params.upperBound.pmax_a = 24;
+Params.lowerBound.pmax_b = -0.7;
+Params.upperBound.pmax_b = -0.09;
 
 
 end

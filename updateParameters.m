@@ -17,7 +17,7 @@ if ~isempty(varargin)
                 Name = pn(1:end-2);
                 param_a = Params.([Name '_a']);
                 param_b = Params.([Name '_b']);
-                if ~any(strcmp(Name, {'Qmax_over_delQ'}))
+                if ~any(strcmp(Name, {'Qmax_delQ'}))
                     Params.(Name) = volumeDependent(param_a, param_b, V_PP);
                 else
                     Params.(Name) = 1 ./ (1 - volumeDependent(param_a, param_b, V_PP));
@@ -27,10 +27,9 @@ if ~isempty(varargin)
         
         if any(strcmp('Qmin_QC_a', parnames)) || any(strcmp('Qmin_QC_b', parnames)) || ...
                 any(strcmp('Qmax_delQ_a', parnames)) || any(strcmp('Qmax_delQ_b', parnames))
-            Params.Qmax_QC = Params.Qmin_QC .* (1 ./ (1 - 1 ./ Params.Qmax_delQ));
+            Params.Qmax_QC = Params.Qmin_QC ./ (1 - 1 ./ Params.Qmax_delQ);
             Params.delQ_QC = Params.Qmax_QC - Params.Qmin_QC;
         end
-        
         
         if any(strcmp('rDOC', parnames)), Params.rOM(FixedParams.DOM_index,1,FixedParams.OM_C_index) = Params.rDOC; end
         if any(strcmp('rDON', parnames)), Params.rOM(FixedParams.DOM_index,1,FixedParams.OM_N_index) = Params.rDON; end
@@ -106,4 +105,3 @@ end
 
 function p = volumeDependent(a,b,V)
 p = a .* V .^ b;
-% end
