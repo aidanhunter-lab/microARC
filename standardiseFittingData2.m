@@ -1,34 +1,26 @@
-function Data = standardiseFittingData(Data, varargin)
+function Data = standardiseFittingData2(Data, varargin)
 
 % Use linear mixed models to standardise fitting data.
 % Returns linear-model coefficients used to rescale data as a function of
 % depth and (if significant) sampling event.
 
-dat = Data.scalar;
-sizeDat = Data.size;
-
-dat.waterMass = dat.waterMass(dat.Event);
-fields = fieldnames(dat);
+fields = fieldnames(Data);
+dat = Data;
+dat.waterMass = Data.waterMass(Data.Event);
 dat = rmfield(dat, ... 
     [{'nSamples';'nEvents';'EventTraj'}; fields(contains(fields,'scaleFun'))]);
 dat = struct2table(dat);
 
-fields = fieldnames(sizeDat);
-sizeDat = rmfield(sizeDat, ... 
-    ['nSamples'; fields(contains(fields,'scaleFun'))]);
-sizeDat = struct2table(sizeDat);
-
 % Extra arguments control whether plots are returned. Name-value pairs with
 % options: 'plotScaledPON', 'plotScaledPOC', 'plotScaledN', 'plotAllData'
 v = reshape(varargin, [2 0.5*length(varargin)]);
-
 
 %% Find scaling factors for all fitting data
 
 % Linearise POM data w.r.t. depth by log tranform of dependent variable
 % (PON or POC), equivalent to an exponential decay with depth.
 
-dat.log_Value = log(dat.Value);
+% dat.log_Value = log(dat.Value);
 
 dPOM = {'PON','POC'};
 
@@ -41,12 +33,16 @@ for jj = 1:length(dPOM)
     uev = unique(d.Event);
     nev = length(uev);
     
+    % normalise data using power transforms
+    [norm_Value, lambda] = boxcox(d.Value);
+    d.norm_Value = norm_Value;
+    
     % Fit linear mixed models
-    lme_mods{1} = fitlme(d, 'log_Value~1');
-    lme_mods{2} = fitlme(d, 'log_Value~Depth');
-    lme_mods{3} = fitlme(d, 'log_Value~Depth+(1|Event)');
-    lme_mods{4} = fitlme(d, 'log_Value~Depth+(Depth-1|Event)');
-    lme_mods{5} = fitlme(d, 'log_Value~Depth+(Depth|Event)');
+    lme_mods{1} = fitlme(d, 'norm_Value~1');
+    lme_mods{2} = fitlme(d, 'norm_Value~Depth');
+    lme_mods{3} = fitlme(d, 'norm_Value~Depth+(1|Event)');
+    lme_mods{4} = fitlme(d, 'norm_Value~Depth+(Depth-1|Event)');
+    lme_mods{5} = fitlme(d, 'norm_Value~Depth+(Depth|Event)');
     
     % Use AIC score to choose most appropriate model
     test_aic = cellfun(@(x)x.ModelCriterion.AIC, lme_mods);
@@ -75,33 +71,28 @@ for jj = 1:length(dPOM)
     gradient = cf(2) + cr(dat.Event(d_ind)-min(uev)+1,2);
     dat.scale_mu(d_ind) = intercept + gradient .* dat.Depth(d_ind);
     dat.scale_sig(d_ind) = stdDev;
+    dat.norm_lambda(d_ind) = repmat(lambda, [sum(d_ind) 1]);
     
-    Data.scalar.(['scaleFun_' dv]) = @(mu,sig,x) (log(x) - mu) ./ sig; % scaling function
+    if lambda ~= 0
+        scaleFun = @(lambda, mu, sig, x) ((x.^lambda-1)./lambda - mu) ./ sig;
+    else
+        scaleFun = @(lambda, mu, sig, x) (log(x) - mu) ./ sig;
+    end
     
-    dat.scaled_Value(d_ind) = Data.scalar.(['scaleFun_' dv]) ... 
-        (dat.scale_mu(d_ind), dat.scale_sig(d_ind), dat.Value(d_ind)); % scaled data
+    Data.(['scaleFun_' dv]) = scaleFun; % function normalises data with power function, then standardises relative to depth and event covariates
     
-    
-%     % Store coefficients and standard deviation used to scale data.
-%     dat.scale_intercept(d_ind) = cf(1) + cr(dat.Event(d_ind)-min(uev)+1,1);
-%     dat.scale_gradient(d_ind) = cf(2) + cr(dat.Event(d_ind)-min(uev)+1,2);
-%     dat.scale_stdDev(d_ind) = repmat(stdDev, [sum(d_ind) 1]);
-%     % and the scaled data
-%     mu = dat.scale_intercept(d_ind) + dat.scale_gradient(d_ind) .* dat.Depth(d_ind);
-%     dat.scaled_Value(d_ind) = (dat.log_Value(d_ind) - mu) ./ dat.scale_stdDev(d_ind);
-    
-    
-    
+    dat.scaled_Value(d_ind) = Data.(['scaleFun_' dv]) ... 
+        (dat.norm_lambda(d_ind), dat.scale_mu(d_ind), dat.scale_sig(d_ind), dat.Value(d_ind)); % scaled data
+        
 end
 
-logy = dPOM;
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 % Linearise nutrient data w.r.t. depth by log tranform of independent
 % variable (depth)
 
-dat.log_Depth = log(dat.Depth);
+% dat.log_Depth = log(dat.Depth);
 
 dv = 'N';
 
@@ -110,6 +101,21 @@ d = dat(d_ind,:);
 
 uev = unique(d.Event);
 nev = length(uev);
+
+% normalise data using power transforms
+histogram(d.Value)
+
+[norm_Value, lambda] = boxcox(d.Value);
+d.norm_Value = norm_Value;
+
+l=-0.05;
+
+scatter((d.Depth .^ l - 1) ./ l, d.Value)
+scatter(log(d.Depth), norm_Value)
+scatter(log(d.Depth), d.Value)
+
+scatter(d.Value, norm_Value)
+
 
 % Fit linear mixed models
 lme_mods{1} = fitlme(d, 'Value~1');
@@ -145,9 +151,9 @@ gradient = cf(2) + cr(dat.Event(d_ind)-min(uev)+1,2);
 dat.scale_mu(d_ind) = intercept + gradient .* dat.log_Depth(d_ind);
 dat.scale_sig(d_ind) = stdDev;
 
-Data.scalar.(['scaleFun_' dv]) = @(mu,sig,x) (x - mu) ./ sig; % scaling function
+Data.(['scaleFun_' dv]) = @(mu,sig,x) (x - mu) ./ sig; % scaling function
 
-dat.scaled_Value(d_ind) = Data.scalar.(['scaleFun_' dv]) ...
+dat.scaled_Value(d_ind) = Data.(['scaleFun_' dv]) ...
     (dat.scale_mu(d_ind), dat.scale_sig(d_ind), dat.Value(d_ind)); % scaled data
 
 
@@ -159,106 +165,18 @@ dat.scaled_Value(d_ind) = Data.scalar.(['scaleFun_' dv]) ...
 % mu = dat.scale_intercept(d_ind) + dat.scale_gradient(d_ind) .* dat.log_Depth(d_ind);
 % dat.scaled_Value(d_ind) = (dat.Value(d_ind) - mu) ./ dat.scale_stdDev(d_ind);
 
-logx = {dv};
-
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% Linearise chlorophll data w.r.t. depth by log tranform of dependent
-% variable (chl)
-
-dv = 'chl_a';
-
-d_ind = strcmp(dat.Variable, dv);
-d = dat(d_ind,:);
-
-uev = unique(d.Event);
-nev = length(uev);
-
-% Fit linear mixed models
-lme_mods{1} = fitlme(d, 'log_Value~1');
-lme_mods{2} = fitlme(d, 'log_Value~Depth');
-lme_mods{3} = fitlme(d, 'log_Value~Depth+(1|Event)');
-lme_mods{4} = fitlme(d, 'log_Value~Depth+(Depth-1|Event)');
-lme_mods{5} = fitlme(d, 'log_Value~Depth+(Depth|Event)');
-
-% Use AIC score to choose most appropriate model
-test_aic = cellfun(@(x)x.ModelCriterion.AIC, lme_mods);
-whichMod = find(test_aic==min(test_aic));
-mod = lme_mods{whichMod};
-clear lme_mods
-
-% Extract fitted coefficients of linear models
-cf = zeros(2,1); % fixed-effect (depth) intercept & gradient
-cr = zeros(nev,2); % random-effect (event) intercept & gradient deviations
-cf_ = mod.fixedEffects;
-cr_ = mod.randomEffects;
-if length(cf_) == 2, cf = cf_; else, cf(1) = cf_; end
-if length(cr_) == nev
-    if whichMod ~= 4, cr(:,1) = cr_; else, cr(:,2) = cr_; end
-end
-if length(cr_) == 2*nev, cr = reshape(cr_, [2 nev])'; end
-
-rsd = mod.residuals;
-stdDev = std(rsd);
-
-% Calculate depth- and event-dependent expected values and store
-% functions used to scale the data and model output
-intercept = cf(1) + cr(dat.Event(d_ind)-min(uev)+1,1);
-gradient = cf(2) + cr(dat.Event(d_ind)-min(uev)+1,2);
-dat.scale_mu(d_ind) = intercept + gradient .* dat.Depth(d_ind);
-dat.scale_sig(d_ind) = stdDev;
-
-Data.scalar.(['scaleFun_' dv]) = @(mu,sig,x) (log(x) - mu) ./ sig; % scaling function
-
-dat.scaled_Value(d_ind) = Data.scalar.(['scaleFun_' dv]) ...
-    (dat.scale_mu(d_ind), dat.scale_sig(d_ind), dat.Value(d_ind)); % scaled data
-
-
-logy = [logy 'chl_a'];
 
 
 %% Store outputs in the Data struct
 % Data.log_Depth = dat.log_Depth;
 % Data.log_Value = dat.log_Value;
-Data.scalar.scale_mu = dat.scale_mu;
-Data.scalar.scale_sig = dat.scale_sig;
+Data.scale_mu = dat.scale_mu;
+Data.scale_sig = dat.scale_sig;
 % Data.scale_intercept = dat.scale_intercept;
 % Data.scale_gradient = dat.scale_gradient;
 % Data.scale_stdDev = dat.scale_stdDev;
-Data.scalar.scaled_Value = dat.scaled_Value;
+Data.scaled_Value = dat.scaled_Value;
 
-
-%% Similarly find scaling factors for size data
-
-% Each size class interval contains N measurements from several sizes.
-% On the log scale, find the mean, standard deviation and the residuals
-% (scaled values) within each size class.
-yrs = unique(sizeDat.Year);
-nyrs = length(yrs);
-esd = unique(sizeDat.size);
-nesd = length(esd);
-ns = height(sizeDat);
-sizeDat.log_Value = log(sizeDat.Value);
-sizeDat.scale_mu = nan(ns,1);
-sizeDat.scale_sig = nan(ns,1);
-
-for i = 1:nyrs
-    ind0 = sizeDat.Year == yrs(i);
-    for j = 1:nesd
-        ind = ind0 & sizeDat.size == esd(j);
-        sizeDat.scale_mu(ind) = mean(sizeDat.log_Value(ind));
-        sizeDat.scale_sig(ind) = std(sizeDat.log_Value(ind));
-    end
-end
-
-Data.size.scaleFun = @(mu,sig,x) (log(x) - mu) ./ sig; % scaling function
-sizeDat.scaled_Value = Data.size.scaleFun(sizeDat.scale_mu, sizeDat.scale_sig, sizeDat.Value);
-
-
-Data.size.scale_mu = sizeDat.scale_mu;
-Data.size.scale_sig = sizeDat.scale_sig;
-Data.size.scaled_Value = sizeDat.scaled_Value;
 
 
 %% Plots of standardised data
@@ -268,10 +186,8 @@ if ~isempty(v) && any(contains(v(1,:),'Scaled'))
     for jj = 1:length(v_ind)
         vv = v(:,v_ind(jj));
         
-        if contains(vv{1}, 'N_at_size'), continue; end % make the size plot separately after this loop
-        
-        if endsWith(vv{1},logy)
-            dv = logy{cellfun(@(x)~isempty(x),regexp(vv{1},logy))};
+        if endsWith(vv{1},{'POC','PON'})
+            dv = dPOM{cellfun(@(x)~isempty(x),regexp(vv{1},dPOM))};
             d_ind = strcmp(dat.Variable, dv);
             d = dat(d_ind,:);
             uev = unique(d.Event);
@@ -408,75 +324,6 @@ if ~isempty(v) && any(contains(v(1,:),'Scaled'))
         suptitle(['Compare raw and standardised ' dv ' measurements'])
 
     end
-    
-    % similar plot for size data
-    if ~isempty(v) && any(contains(v(1,:),'ScaledN_at_size'))
-        v_ind = find(contains(v(1,:),'ScaledN_at_size'));
-        
-        esd = unique(sizeDat.size);
-        nesd = length(esd);
-        
-        % Compare raw data to standardised data
-        figure
-        subplot(3,1,1)
-        
-        xraw = sizeDat.size; xmod = sizeDat.size;
-        yraw = sizeDat.Value; ymod = sizeDat.log_Value;
-        ys = sizeDat.scaled_Value;
-
-        G = cell(nesd,1);
-        for i = 1:nesd
-            G{i} = yraw(sizeDat.size == esd(i));
-        end
-        
-        grp = cell2mat(arrayfun(@(i){i*ones(numel(G{i}),1)},(1:numel(G))'));
-        boxplot(vertcat(G{:}),grp,'orientation','horizontal')
-        
-        hold on
-        xlabel('planktonic N'); ylabel('ESD');
-        yticklabels(num2str(esd))
-        mu = mean(yraw);
-        ca = gca;
-        plot(repmat(mu,[1 2]), ca.YLim,'k')
-        
-        
-        subplot(3,1,2)
-        G = cell(nesd,1);
-        for i = 1:nesd
-            G{i} = ymod(sizeDat.size == esd(i));
-        end
-        grp = cell2mat(arrayfun(@(i){i*ones(numel(G{i}),1)},(1:numel(G))'));
-        boxplot(vertcat(G{:}),grp,'orientation','horizontal')
-        hold on
-        xlabel('log planktonic N'); ylabel('ESD');
-        yticklabels(num2str(esd))
-        mu = mean(ymod);
-        ca = gca;
-        plot(repmat(mu,[1 2]), ca.YLim,'k')
-        hold off
-        
-        
-        subplot(3,1,3)
-        G = cell(nesd,1);
-        for i = 1:nesd
-            G{i} = ys(sizeDat.size == esd(i));
-        end
-        grp = cell2mat(arrayfun(@(i){i*ones(numel(G{i}),1)},(1:numel(G))'));
-        boxplot(vertcat(G{:}),grp,'orientation','horizontal')
-        hold on
-        xlabel('standardised planktonic N'); ylabel('ESD');
-        yticklabels(num2str(esd))
-        mu = mean(ys);
-        ca = gca;
-        plot(repmat(mu,[1 2]), ca.YLim,'k')
-        hold off
-        
-        suptitle(['Compare raw and standardised N-at-size measurements'])
-
-        
-    end
-    
-    
 end
 
 
@@ -484,95 +331,67 @@ end
 if ~isempty(v) && any(contains(v(1,:),'All'))
     % Plot all standardised data sources together
     figure
-    
-    alph = 0.5;
-    col_PON = [1 0 0];
-    col_POC = [1 0.5 0];
-    col_Chl = [0 1 0];
-    col_N = [0 0 1];
-
     subplot(3,1,1)
     ind = strcmp(dat.Variable, 'PON');
-    scatter(dat.scaled_Value(ind),dat.Depth(ind), 'MarkerEdgeColor', col_PON, 'MarkerFaceColor', col_PON, 'MarkerEdgeAlpha', alph, 'MarkerFaceAlpha', alph);
+    scatter(dat.scaled_Value(ind),dat.Depth(ind),'g')
     hold on
     ylabel('depth (m)')
     ind = strcmp(dat.Variable, 'POC');
-    scatter(dat.scaled_Value(ind),dat.Depth(ind), 'MarkerEdgeColor', col_POC, 'MarkerFaceColor', col_POC, 'MarkerEdgeAlpha', alph, 'MarkerFaceAlpha', alph);
-    ind = strcmp(dat.Variable, 'chl_a');
-    scatter(dat.scaled_Value(ind),dat.Depth(ind), 'MarkerEdgeColor', col_Chl, 'MarkerFaceColor', col_Chl, 'MarkerEdgeAlpha', alph, 'MarkerFaceAlpha', alph);
+    scatter(dat.scaled_Value(ind),dat.Depth(ind),'r')
     ind = strcmp(dat.Variable, 'N');
-    scatter(dat.scaled_Value(ind),dat.Depth(ind), 'MarkerEdgeColor', col_N, 'MarkerFaceColor', col_N, 'MarkerEdgeAlpha', alph, 'MarkerFaceAlpha', alph);
-    
+    scatter(dat.scaled_Value(ind),dat.Depth(ind),'b')
     ca = gca; xl = ca.XLim; yl = ca.YLim;
     % legend
     text(xl(1)+0.1*diff(xl),yl(1)+0.95*diff(yl),'PON')
     xl_ = xl(1) + [0.025 0.075] * diff(xl);
     yl_ = yl(1) + [0.975 0.925] * diff(yl);
     pgon = polyshape([xl_(1) xl_(2) xl_(2) xl_(1) xl_(1)], [yl_(1) yl_(1) yl_(2) yl_(2) yl_(1)]);
-    pg = plot(pgon); pg.FaceColor = [col_PON alph];
-    
+    pg = plot(pgon); pg.FaceColor = 'green';
     text(xl(1)+0.1*diff(xl),yl(1)+0.85*diff(yl),'POC')
     yl_ = yl(1) + [0.875 0.825] * diff(yl);
     pgon = polyshape([xl_(1) xl_(2) xl_(2) xl_(1) xl_(1)], [yl_(1) yl_(1) yl_(2) yl_(2) yl_(1)]);
-    pg = plot(pgon); pg.FaceColor = [col_POC alph];
-    
-    text(xl(1)+0.1*diff(xl),yl(1)+0.75*diff(yl),'chl_a')
+    pg = plot(pgon); pg.FaceColor = 'red';
+    text(xl(1)+0.1*diff(xl),yl(1)+0.75*diff(yl),'N')
     yl_ = yl(1) + [0.775 0.725] * diff(yl);
     pgon = polyshape([xl_(1) xl_(2) xl_(2) xl_(1) xl_(1)], [yl_(1) yl_(1) yl_(2) yl_(2) yl_(1)]);
-    pg = plot(pgon); pg.FaceColor = [col_Chl alph];
-
-    text(xl(1)+0.1*diff(xl),yl(1)+0.65*diff(yl),'N')
-    yl_ = yl(1) + [0.675 0.625] * diff(yl);
-    pgon = polyshape([xl_(1) xl_(2) xl_(2) xl_(1) xl_(1)], [yl_(1) yl_(1) yl_(2) yl_(2) yl_(1)]);
-    pg = plot(pgon); pg.FaceColor = [col_N alph];
-    
+    pg = plot(pgon); pg.FaceColor = 'blue';
     hold off
     
     subplot(3,1,2)
     ind = strcmp(dat.Variable, 'PON');
-    scatter(dat.scaled_Value(ind), dat.Event(ind), 'MarkerEdgeColor', col_PON, 'MarkerFaceColor', col_PON, 'MarkerEdgeAlpha', alph, 'MarkerFaceAlpha', alph)    
+    scatter(dat.scaled_Value(ind),dat.Event(ind),'g')
     hold on
     ylabel('sampling event')
     ind = strcmp(dat.Variable, 'POC');
-    scatter(dat.scaled_Value(ind), dat.Event(ind), 'MarkerEdgeColor', col_POC, 'MarkerFaceColor', col_POC, 'MarkerEdgeAlpha', alph, 'MarkerFaceAlpha', alph)
-    ind = strcmp(dat.Variable, 'chl_a');
-    scatter(dat.scaled_Value(ind), dat.Event(ind), 'MarkerEdgeColor', col_Chl, 'MarkerFaceColor', col_Chl, 'MarkerEdgeAlpha', alph, 'MarkerFaceAlpha', alph)
+    scatter(dat.scaled_Value(ind),dat.Event(ind),'r')
     ind = strcmp(dat.Variable, 'N');
-    scatter(dat.scaled_Value(ind), dat.Event(ind), 'MarkerEdgeColor', col_N, 'MarkerFaceColor', col_N, 'MarkerEdgeAlpha', alph, 'MarkerFaceAlpha', alph)
+    scatter(dat.scaled_Value(ind),dat.Event(ind),'b')
     hold off
     
     subplot(3,1,3)
-    bw = 0.5; % smoothing kernel bandwidth to approximate distributions of scaled data
-    
     ind = strcmp(dat.Variable, 'PON');
     y = dat.scaled_Value(ind);
     x_ = [min(y) max(y)];
-    yf_PON = fitdist(y,'kernel','BandWidth',bw);
+    yf1 = fitdist(y,'kernel','BandWidth',1);
 
     ind = strcmp(dat.Variable, 'POC');
     y = dat.scaled_Value(ind);
     x_(1) = min([min(y), x_]); x_(2) = max([max(y), x_]);
-    yf_POC = fitdist(y,'kernel','BandWidth',bw);
-
-    ind = strcmp(dat.Variable, 'chl_a');
-    y = dat.scaled_Value(ind);
-    x_(1) = min([min(y), x_]); x_(2) = max([max(y), x_]);
-    yf_Chl = fitdist(y,'kernel','BandWidth',bw);
+    yf2 = fitdist(y,'kernel','BandWidth',1);
     
     ind = strcmp(dat.Variable, 'N');
     y = dat.scaled_Value(ind);
     x_(1) = min([min(y), x_]); x_(2) = max([max(y), x_]);
-    yf_N = fitdist(y,'kernel','BandWidth',bw);
+    yf3 = fitdist(y,'kernel','BandWidth',1);
     
     x_ = linspace(min(x_),max(x_),100);
     
-    plot(x_,pdf(yf_PON,x_), 'LineWidth', 2, 'Color', [col_PON alph]);
+    plot(x_,pdf(yf1,x_), 'LineWidth', 2, 'Color', [0 1 0 0.5]);
     hold on
-    plot(x_,pdf(yf_POC,x_), 'LineWidth', 2, 'Color', [col_POC alph])
-    plot(x_,pdf(yf_Chl,x_), 'LineWidth', 2, 'Color', [col_Chl alph])
-    plot(x_,pdf(yf_N,x_), 'LineWidth', 2, 'Color', [col_N alph])
+    plot(x_,pdf(yf2,x_), 'LineWidth', 2, 'Color', [1 0 0 0.5])
+    plot(x_,pdf(yf3,x_), 'LineWidth', 2, 'Color', [0 0 1 0.5])
     nd = (2*pi)^(-0.5) * exp(-0.5 .* x_ .^ 2);
-    plot(x_,nd, 'LineWidth', 2, 'Color', [0 0 0 alph])
+    plot(x_,nd, 'LineWidth', 1, 'Color', [0 0 0 0.5])
     ca = gca; xl = ca.XLim; yl = ca.YLim;
     xl_ = xl(1) + [0.025 0.075] * diff(xl);
     yl_ = yl(1)+0.85*diff(yl);
@@ -581,57 +400,43 @@ if ~isempty(v) && any(contains(v(1,:),'All'))
     xlabel('standardised data')
     ylabel('sample density')
     hold off
+
     
     
-    
-    % Similar plot for size data
-    figure
-    subplot(2,1,1)
-    
-    esd = unique(sizeDat.size);
-    nesd = length(esd);
-    sizeClass = table((1:nesd)', esd);
-    sizeClass.Properties.VariableNames = {'sizeClass','size'};    
-    sizeDat = join(sizeDat,sizeClass);
-    
-%     colSize = [0 0 0];
-    colSize = col_N;
-    
+%     nbins = 9;
 %     ind = strcmp(dat.Variable, 'PON');
-    scatter(sizeDat.scaled_Value,sizeDat.sizeClass, 'MarkerEdgeColor', colSize, 'MarkerFaceColor', colSize, 'MarkerEdgeAlpha', alph, 'MarkerFaceAlpha', alph);
-    hold on
-    ylabel('ESD')
-    yticks(1:nesd)
-    yticklabels(num2str(esd))
-    
-    hold off
-    
-    
-    subplot(2,1,2)
-    bw = 0.5; % smoothing kernel bandwidth to approximate distributions of scaled data
-    
-    y = sizeDat.scaled_Value;
-    x_ = [min(y) max(y)];
-    yf = fitdist(y, 'kernel', 'Bandwidth', bw);
-    
-    
-    x_ = linspace(min(x_),max(x_),100);
-    
-    plot(x_, pdf(yf, x_), 'LineWidth', 2, 'Color', [colSize alph]);
-    hold on
-    nd = (2*pi)^(-0.5) * exp(-0.5 .* x_ .^ 2);
-    plot(x_, nd, 'LineWidth', 2, 'Color', [0 0 0 alph])
-    ca = gca; xl = ca.XLim; yl = ca.YLim;
-    xl_ = xl(1) + [0.025 0.075] * diff(xl);
-    yl_ = yl(1)+0.85*diff(yl);
-    text(xl(1)+0.1*diff(xl),yl_,'standard normal')
-    plot(xl_, repmat(yl_, [1 2]), 'k')
-    xlabel('standardised size spectra data')
-    ylabel('sample density')
-    hold off
+%     ph1 = histogram(dat.scaled_Value(ind),'Normalization','pdf');
+%     ph1.FaceColor = 'green'; ph1.FaceAlpha = 0.2;
+%     ph1.NumBins = nbins;
+%     hold on
+%     xlabel('standardised data')
+%     ylabel('sample density')
+%     ind = strcmp(dat.Variable, 'POC');
+%     ph2 = histogram(dat.scaled_Value(ind),'Normalization','pdf');
+%     ph2.FaceColor = 'red'; ph2.FaceAlpha = 0.2;
+%     ph2.NumBins = nbins;
+%     ind = strcmp(dat.Variable, 'N');
+%     ph3 = histogram(dat.scaled_Value(ind),'Normalization','pdf');
+%     ph3.FaceColor = 'blue'; ph3.FaceAlpha = 0.2;
+%     ph3.NumBins = nbins;
+%     % resize
+%     be = [ph1.BinEdges ph2.BinEdges ph3.BinEdges];
+%     be = linspace(min(be),max(be),nbins+1);
+%     ph1.BinEdges = be; ph2.BinEdges = be; ph3.BinEdges = be;
+%     % overlay a standard normal distibution
+%     nx = linspace(min(be), max(be), 100);
+%     nd = (2*pi)^(-0.5) * exp(-0.5 .* nx .^ 2);
+%     plot(nx,nd,'k')
+%     % legend
+%     ca = gca; xl = ca.XLim; yl = ca.YLim;
+%     xl_ = xl(1) + [0.025 0.075] * diff(xl);
+%     yl_ = yl(1)+0.85*diff(yl);
+%     text(xl(1)+0.1*diff(xl),yl_,'standard normal')
+%     plot(xl_, repmat(yl_, [1 2]), 'k')
+%     hold off
 
-
+    
+    
 end
-
 
 

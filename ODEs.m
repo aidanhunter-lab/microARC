@@ -15,17 +15,19 @@ zoo = fixedParams.zooplankton;
 
 %% INITIAL CONDITIONS
 
+v_in_exp = exp(v_in); % exponentiate to natural scale
+
 % Inorganic nitrogen
-N = v_in(fixedParams.IN_index)';
+N = v_in_exp(fixedParams.IN_index)';
 
 % Plankton
-PP = reshape(v_in(fixedParams.PP_index), [nPP_size nz nPP_nut]); % phytoplankton (all nutrients)
+PP = reshape(v_in_exp(fixedParams.PP_index), [nPP_size nz nPP_nut]); % phytoplankton (all nutrients)
 P_C = PP(:,:,fixedParams.PP_C_index);
-Z_C = v_in(fixedParams.ZP_index)'; % zooplankton (carbon)
+Z_C = v_in_exp(fixedParams.ZP_index)'; % zooplankton (carbon)
 B_C = [P_C; Z_C]; % all planktonic carbon
 
 % Organic matter
-OM =reshape(v_in(fixedParams.OM_index), [nOM_type nz nOM_nut]);
+OM =reshape(v_in_exp(fixedParams.OM_index), [nOM_type nz nOM_nut]);
 OM_C = OM(:,:,fixedParams.OM_C_index); % DOC and POC
 
 
@@ -69,7 +71,8 @@ Qstat = 1 - gammaN .^ params.h;
 gammaT = exp(params.A .* (T - params.Tref));
 
 % Background mortality
-B_C_mortality = params.m .* B_C;
+B_C_mortality = params.m .* B_C; % linear mortality
+% B_C_mortality = params.m .* B_C .^ 2; % non-linear mortality
 
 
 %~~~~~~~~~~~
@@ -191,7 +194,8 @@ fluxN = OM(:,:,fixedParams.OM_N_index) ./ OM_C .* fluxC_ + SOM_N;
 fluxC = fluxC_ + SOM_C;
 dOMdt = cat(3, fluxC, fluxN);
 
-dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)];
+% dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)];
+dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)] ./ v_in_exp; % dividing by initial values returns derivatives of log-scale variables [d/dt(log(x)) = 1/x d/dt(x)]
 
 
 %% AUXILIARY OUTPUTS
@@ -200,6 +204,9 @@ if returnExtra
     extraOutput.PAR = I;
     % 2D (vectorised over cell size)
     extraOutput_2d = struct();
+    extraOutput_2d.cellDensity = P_C ./ params.Q_C; % phytoplankton cell density [cells / m^3]
+    extraOutput_2d.biovolume = (1e-18 * fixedParams.PPsize) .* ... 
+        extraOutput_2d.cellDensity; % [m^3 / m^3] volume of all cells per m^3 of water
 %     if all(I == 0)
 %         extraOutput_2d.Qeq = repmat(params.Qmax, [1 nz]); % equilibrium nitrogen Qeq=Qmax when I=0
 %     else
@@ -208,6 +215,7 @@ if returnExtra
 %     end
 %     extraOutput_2d.PP_C = params.Q_C  .* (PP(:,:,fixedParams.N_index) ./ extraOutput_2d.Qeq); % phytoplankton carbon biomass (mmol C / m^3)
 end
+
 
 end
 
@@ -220,8 +228,8 @@ function v = diffusion_1D(u,K,w,delz)
 %         K = diffusivities, size(K)=[nz-1 1]
 %         w = depth layer widths, size(w)=[nz 1]
 %         delz = distance between depth layer centers, size(delz)=[nz-1 1]
-padZeros = zeros(1,size(u,2));
-v = diff([padZeros; (K ./ delz) .* diff(u); padZeros]) ./ w;
+z = zeros(1,size(u,2));
+v = diff([z; (K ./ delz) .* diff(u); z]) ./ w;
 end
 
 function v = sinking(u,s,w)
