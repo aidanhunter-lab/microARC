@@ -114,7 +114,9 @@ Params.sizeDependent = {
     'aN_QC_b'
     'pmax_a'
     'pmax_b'
-    'beta'
+    'beta1'
+    'beta2'
+    'beta3'
     };
 
 
@@ -157,8 +159,23 @@ Params.pmax_a = 6;
 Params.pmax_b = -0.1;
 Params.pmax = volumeDependent(Params.pmax_a, Params.pmax_b, PPsize);
 % partitioning of dead matter into DOM and POM
-Params.beta = 0.9 - 0.7 ./ (1 + exp(2.0 - log10(PPsize)));
+% Params.beta = 0.9 - 0.7 ./ (1 + exp(2.0 - log10(PPsize)));
+% Params.beta(FixedParams.nPP_size+1) = Params.beta(FixedParams.nPP_size); % assume beta for zooplankton is equivalent to largest phytoplankton size class
+
+logSize = log10(PPsize);
+
+Params.beta1 = 0.9; % initial values from Ward et al. (2016)
+Params.beta2 = 0.2/0.9;
+Params.beta3 = 2.0;
+
+expBeta3 = exp(logSize - Params.beta3);
+Params.beta = Params.beta1 ./ (1 + expBeta3) .* (1 + Params.beta2 .* expBeta3);
+
 Params.beta(FixedParams.nPP_size+1) = Params.beta(FixedParams.nPP_size); % assume beta for zooplankton is equivalent to largest phytoplankton size class
+
+
+
+
 
 % Size-independent
 
@@ -194,6 +211,8 @@ Params.wk = 10;      % sinking rate of POM (m / day)
 % are independent of the state variables
 Params.Qmax_QC = Params.Qmin_QC ./ (1 - 1 ./ Params.Qmax_delQ);
 Params.delQ_QC = Params.Qmax_QC - Params.Qmin_QC;
+
+Params.kN = Params.Vmax_QC ./ Params.aN_QC;
 
 % Params.rDOM = nan(1, FixedParams.nOM_nut);
 Params.rOM = nan(FixedParams.nOM_type,1,FixedParams.nOM_nut);
@@ -236,10 +255,16 @@ Params.lowerBound.k_G = 0.01;       Params.upperBound.k_G = 5;
 Params.lowerBound.Lambda = -1.5;    Params.upperBound.Lambda = -0.5;
 Params.lowerBound.lambda_max = 0.5; Params.upperBound.lambda_max = 0.9;
 Params.lowerBound.wk = 10;          Params.upperBound.wk = 10;
-Params.lowerBound.rDOC = 0.01;      Params.upperBound.rDOC = 0.15;
-Params.lowerBound.rDON = 0.01;      Params.upperBound.rDON = 0.15;
-Params.lowerBound.rPOC = 0.01;      Params.upperBound.rPOC = 0.15;
-Params.lowerBound.rPON = 0.01;      Params.upperBound.rPON = 0.15;
+% Params.lowerBound.rDOC = 0.01;      Params.upperBound.rDOC = 0.15;
+% Params.lowerBound.rDON = 0.01;      Params.upperBound.rDON = 0.15;
+% Params.lowerBound.rPOC = 0.01;      Params.upperBound.rPOC = 0.15;
+% Params.lowerBound.rPON = 0.01;      Params.upperBound.rPON = 0.15;
+Params.lowerBound.rDOC = Params.rDOC * 1/3; Params.upperBound.rDOC = Params.rDOC * 3;
+Params.lowerBound.rDON = Params.rDON * 1/3; Params.upperBound.rDON = Params.rDON * 3;
+Params.lowerBound.rPOC = Params.rPOC * 1/3; Params.upperBound.rPOC = Params.rPOC * 3;
+Params.lowerBound.rPON = Params.rPON * 1/3; Params.upperBound.rPON = Params.rPON * 3;
+
+
 
 % size dependent
 Params.lowerBound.Qmin_QC_a = (1/14) * 1e-9 * 10^-1.78 / Params.Q_C_a; % Qmin bounds from Maranon (2013)
@@ -271,6 +296,14 @@ Params.lowerBound.pmax_a = 1.8; % pmax bounds guessed from mu_inf CIs given in W
 Params.upperBound.pmax_a = 24;
 Params.lowerBound.pmax_b = -0.7;
 Params.upperBound.pmax_b = -0.09;
+
+Params.lowerBound.beta1 = 0.5;
+Params.upperBound.beta1 = 1;
+Params.lowerBound.beta2 = 0;
+Params.upperBound.beta2 = 0.9;
+Params.lowerBound.beta3 = min(logSize);
+Params.upperBound.beta3 = max(logSize);
+
 
 
 end

@@ -5,18 +5,19 @@ function Data = standardiseFittingData(Data, varargin)
 % depth and (if significant) sampling event.
 
 dat = Data.scalar;
-sizeDat = Data.size;
+% sizeDat = Data.size;
+sizeDatBinned = Data.size.dataBinned;
 
 dat.waterMass = dat.waterMass(dat.Event);
 fields = fieldnames(dat);
-dat = rmfield(dat, ... 
-    [{'nSamples';'nEvents';'EventTraj'}; fields(contains(fields,'scaleFun'))]);
-dat = struct2table(dat);
+nSamples = dat.nSamples;
+for i = 1:length(fields)
+    if size(dat.(fields{i}),1) ~= nSamples || contains(fields{i}, 'scaleFun')
+        dat = rmfield(dat, fields{i});
+    end
+end
 
-fields = fieldnames(sizeDat);
-sizeDat = rmfield(sizeDat, ... 
-    ['nSamples'; fields(contains(fields,'scaleFun'))]);
-sizeDat = struct2table(sizeDat);
+dat = struct2table(dat);
 
 % Extra arguments control whether plots are returned. Name-value pairs with
 % options: 'plotScaledPON', 'plotScaledPOC', 'plotScaledN', 'plotAllData'
@@ -67,7 +68,6 @@ for jj = 1:length(dPOM)
 
     rsd = mod.residuals;
     stdDev = std(rsd);
-    % sqrt(mod.MSE)
     
     % Calculate depth- and event-dependent expected values and store
     % functions used to scale the data and model output
@@ -80,18 +80,7 @@ for jj = 1:length(dPOM)
     
     dat.scaled_Value(d_ind) = Data.scalar.(['scaleFun_' dv]) ... 
         (dat.scale_mu(d_ind), dat.scale_sig(d_ind), dat.Value(d_ind)); % scaled data
-    
-    
-%     % Store coefficients and standard deviation used to scale data.
-%     dat.scale_intercept(d_ind) = cf(1) + cr(dat.Event(d_ind)-min(uev)+1,1);
-%     dat.scale_gradient(d_ind) = cf(2) + cr(dat.Event(d_ind)-min(uev)+1,2);
-%     dat.scale_stdDev(d_ind) = repmat(stdDev, [sum(d_ind) 1]);
-%     % and the scaled data
-%     mu = dat.scale_intercept(d_ind) + dat.scale_gradient(d_ind) .* dat.Depth(d_ind);
-%     dat.scaled_Value(d_ind) = (dat.log_Value(d_ind) - mu) ./ dat.scale_stdDev(d_ind);
-    
-    
-    
+
 end
 
 logy = dPOM;
@@ -229,36 +218,29 @@ Data.scalar.scale_sig = dat.scale_sig;
 Data.scalar.scaled_Value = dat.scaled_Value;
 
 
-%% Similarly find scaling factors for size data
+%% Standardise size spectra measurements
 
-% Each size class interval contains N measurements from several sizes.
-% On the log scale, find the mean, standard deviation and the residuals
-% (scaled values) within each size class.
-yrs = unique(sizeDat.Year);
-nyrs = length(yrs);
-esd = unique(sizeDat.size);
-nesd = length(esd);
-ns = height(sizeDat);
-sizeDat.log_Value = log(sizeDat.Value);
-sizeDat.scale_mu = nan(ns,1);
-sizeDat.scale_sig = nan(ns,1);
+% There are no covariates available in these data, so standardise by
+% substracting the mean and dividing by the standard deviation across size
+% classes, after log-transforming.
 
-for i = 1:nyrs
-    ind0 = sizeDat.Year == yrs(i);
-    for j = 1:nesd
-        ind = ind0 & sizeDat.size == esd(j);
-        sizeDat.scale_mu(ind) = mean(sizeDat.log_Value(ind));
-        sizeDat.scale_sig(ind) = std(sizeDat.log_Value(ind));
-    end
+Data.size.scaleFun_Ntot = @(mu,sig,x) (log(x)-mu) ./ sig;
+
+usc = unique(sizeDatBinned.scenario);
+nsc = length(usc); % number of size spectra samples
+for i = 1:nsc
+    ind = strcmp(sizeDatBinned.scenario, usc{i});
+    y = sizeDatBinned.Ntot(ind);
+    yl = log(y);
+    mu = mean(yl);
+    sig = std(yl);
+    sizeDatBinned.scale_mu(ind,:) = mu;
+    sizeDatBinned.scale_sig(ind,:) = sig;
+    sizeDatBinned.scaled_Ntot(ind,:) = Data.size.scaleFun_Ntot(mu, sig, y);
 end
 
-Data.size.scaleFun = @(mu,sig,x) (log(x) - mu) ./ sig; % scaling function
-sizeDat.scaled_Value = Data.size.scaleFun(sizeDat.scale_mu, sizeDat.scale_sig, sizeDat.Value);
+Data.size.dataBinned = sizeDatBinned;
 
-
-Data.size.scale_mu = sizeDat.scale_mu;
-Data.size.scale_sig = sizeDat.scale_sig;
-Data.size.scaled_Value = sizeDat.scaled_Value;
 
 
 %% Plots of standardised data
@@ -405,81 +387,15 @@ if ~isempty(v) && any(contains(v(1,:),'Scaled'))
         plot(repmat(mu,[1 2]), ca.YLim,'k')
         hold off
         
-        suptitle(['Compare raw and standardised ' dv ' measurements'])
+        sgtitle(['Compare raw and standardised ' dv ' measurements'])
 
-    end
-    
-    % similar plot for size data
-    if ~isempty(v) && any(contains(v(1,:),'ScaledN_at_size'))
-        v_ind = find(contains(v(1,:),'ScaledN_at_size'));
-        
-        esd = unique(sizeDat.size);
-        nesd = length(esd);
-        
-        % Compare raw data to standardised data
-        figure
-        subplot(3,1,1)
-        
-        xraw = sizeDat.size; xmod = sizeDat.size;
-        yraw = sizeDat.Value; ymod = sizeDat.log_Value;
-        ys = sizeDat.scaled_Value;
-
-        G = cell(nesd,1);
-        for i = 1:nesd
-            G{i} = yraw(sizeDat.size == esd(i));
-        end
-        
-        grp = cell2mat(arrayfun(@(i){i*ones(numel(G{i}),1)},(1:numel(G))'));
-        boxplot(vertcat(G{:}),grp,'orientation','horizontal')
-        
-        hold on
-        xlabel('planktonic N'); ylabel('ESD');
-        yticklabels(num2str(esd))
-        mu = mean(yraw);
-        ca = gca;
-        plot(repmat(mu,[1 2]), ca.YLim,'k')
-        
-        
-        subplot(3,1,2)
-        G = cell(nesd,1);
-        for i = 1:nesd
-            G{i} = ymod(sizeDat.size == esd(i));
-        end
-        grp = cell2mat(arrayfun(@(i){i*ones(numel(G{i}),1)},(1:numel(G))'));
-        boxplot(vertcat(G{:}),grp,'orientation','horizontal')
-        hold on
-        xlabel('log planktonic N'); ylabel('ESD');
-        yticklabels(num2str(esd))
-        mu = mean(ymod);
-        ca = gca;
-        plot(repmat(mu,[1 2]), ca.YLim,'k')
-        hold off
-        
-        
-        subplot(3,1,3)
-        G = cell(nesd,1);
-        for i = 1:nesd
-            G{i} = ys(sizeDat.size == esd(i));
-        end
-        grp = cell2mat(arrayfun(@(i){i*ones(numel(G{i}),1)},(1:numel(G))'));
-        boxplot(vertcat(G{:}),grp,'orientation','horizontal')
-        hold on
-        xlabel('standardised planktonic N'); ylabel('ESD');
-        yticklabels(num2str(esd))
-        mu = mean(ys);
-        ca = gca;
-        plot(repmat(mu,[1 2]), ca.YLim,'k')
-        hold off
-        
-        suptitle(['Compare raw and standardised N-at-size measurements'])
-
+        pause(0.1)
         
     end
-    
-    
+        
 end
 
-
+pause(0.1)
 
 if ~isempty(v) && any(contains(v(1,:),'All'))
     % Plot all standardised data sources together
@@ -583,52 +499,7 @@ if ~isempty(v) && any(contains(v(1,:),'All'))
     hold off
     
     
-    
-    % Similar plot for size data
-    figure
-    subplot(2,1,1)
-    
-    esd = unique(sizeDat.size);
-    nesd = length(esd);
-    sizeClass = table((1:nesd)', esd);
-    sizeClass.Properties.VariableNames = {'sizeClass','size'};    
-    sizeDat = join(sizeDat,sizeClass);
-    
-%     colSize = [0 0 0];
-    colSize = col_N;
-    
-%     ind = strcmp(dat.Variable, 'PON');
-    scatter(sizeDat.scaled_Value,sizeDat.sizeClass, 'MarkerEdgeColor', colSize, 'MarkerFaceColor', colSize, 'MarkerEdgeAlpha', alph, 'MarkerFaceAlpha', alph);
-    hold on
-    ylabel('ESD')
-    yticks(1:nesd)
-    yticklabels(num2str(esd))
-    
-    hold off
-    
-    
-    subplot(2,1,2)
-    bw = 0.5; % smoothing kernel bandwidth to approximate distributions of scaled data
-    
-    y = sizeDat.scaled_Value;
-    x_ = [min(y) max(y)];
-    yf = fitdist(y, 'kernel', 'Bandwidth', bw);
-    
-    
-    x_ = linspace(min(x_),max(x_),100);
-    
-    plot(x_, pdf(yf, x_), 'LineWidth', 2, 'Color', [colSize alph]);
-    hold on
-    nd = (2*pi)^(-0.5) * exp(-0.5 .* x_ .^ 2);
-    plot(x_, nd, 'LineWidth', 2, 'Color', [0 0 0 alph])
-    ca = gca; xl = ca.XLim; yl = ca.YLim;
-    xl_ = xl(1) + [0.025 0.075] * diff(xl);
-    yl_ = yl(1)+0.85*diff(yl);
-    text(xl(1)+0.1*diff(xl),yl_,'standard normal')
-    plot(xl_, repmat(yl_, [1 2]), 'k')
-    xlabel('standardised size spectra data')
-    ylabel('sample density')
-    hold off
+    pause(0.1)
 
 
 end

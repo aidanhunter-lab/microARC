@@ -9,6 +9,8 @@ for iy = 1:length(FixedParams.years)
     y_index = ['y' num2str(FixedParams.years(iy))];
     forcing = F.(y_index);
     
+    forcing.Yearday = yearday(forcing.t);
+
     % exclude trajectories that go on land
     iSurf = forcing.z == max(forcing.z);    
     iKeep = sum(~isnan(forcing.T(:,iSurf,:)),1) == size(forcing.T,1);
@@ -130,6 +132,7 @@ for iy = 1:length(FixedParams.years)
     
     forcing = rmfield(forcing, 'z');
     forcing.t = repmat(forcing.t, [1 np]);
+    forcing.Yearday = repmat(forcing.Yearday, [1 np]);
  
     fields = fieldnames(forcing);
     for j = 1:length(fields)

@@ -1,4 +1,4 @@
-function [OUT, AUXVARS, AUXVARS_2d, namesExtra, nExtra] = ... 
+function [out, auxVars, OUT, AUXVARS, AUXVARS_2d, namesExtra, nExtra] = ... 
     integrateTrajectories(FixedParams, Params, Forc, v0, odeIntegrator, odeOptions)
 
 nt = FixedParams.nt;
@@ -35,6 +35,13 @@ OUT(:,1,:) = reshape(v0, [nEquations 1 nTraj]);
 [namesExtra, nExtra, AUXVARS, AUXVARS_2d] = ... 
     initialiseExtraVariables(v0, parameterList, Forc);
 
+if Forc.integrateFullTrajectory
+    nt_traj = repmat(nt, [1 nTraj]);
+else
+   x = cumsum(Forc.sampleTime);
+   [nt_traj,~] = find([zeros(1, nTraj); diff(x == max(x))]);
+   nt_traj = nt_traj';
+end
 
 % Loop through trajectories and integrate
 parfor i = 1:nTraj
@@ -47,37 +54,41 @@ parfor i = 1:nTraj
     v_in = v0(:,i);
     % Integrating method
     odeSolver = str2func(odeIntegrator);
-    % Integrate step-wise between successive data points    
+    % Integrate step-wise between successive data points
     for j = 2:nt
-        if deepens(:,j,i)
-            % Extract state variable types from input vector
-            N = v_in(N_index);
-            P = reshape(v_in(P_index), [nPP_size nz nPP_nut]);
-            Z = v_in(Z_index);
-            OM = reshape(v_in(OM_index), [nOM_type nz nOM_nut]);
-            % Infill values
-            nfill = sum(infillDepth(:,j,i));
-            N(infillDepth(:,j,i)) = repmat(N(replicateConc(:,j,i)), [nfill 1]);
-            P(:,infillDepth(:,j,i),:) = repmat(P(:,replicateConc(:,j,i),:), [1 nfill 1]);
-            Z(infillDepth(:,j,i)) = repmat(Z(replicateConc(:,j,i)), [nfill 1]);
-            OM(:,infillDepth(:,j,i),:) = repmat(OM(:,replicateConc(:,j,i),:), [1 nfill 1]);
-            % Recombine the input vector
-            v_in = [N; P(:); Z; OM(:)];            
+        if j > nt_traj(i)
+            break;
+        else
+            if deepens(:,j,i)
+                % Extract state variable types from input vector
+                N = v_in(N_index);
+                P = reshape(v_in(P_index), [nPP_size nz nPP_nut]);
+                Z = v_in(Z_index);
+                OM = reshape(v_in(OM_index), [nOM_type nz nOM_nut]);
+                % Infill values
+                nfill = sum(infillDepth(:,j,i));
+                N(infillDepth(:,j,i)) = repmat(N(replicateConc(:,j,i)), [nfill 1]);
+                P(:,infillDepth(:,j,i),:) = repmat(P(:,replicateConc(:,j,i),:), [1 nfill 1]);
+                Z(infillDepth(:,j,i)) = repmat(Z(replicateConc(:,j,i)), [nfill 1]);
+                OM(:,infillDepth(:,j,i),:) = repmat(OM(:,replicateConc(:,j,i),:), [1 nfill 1]);
+                % Recombine the input vector
+                v_in = [N; P(:); Z; OM(:)];
+            end
+            % Integrate
+            %         sol=ode45(@(t, v_in) ODEs(t, v_in, parameterList, forcing, j, false), [0 1], v_in, odeOptions);
+            %         sol=ode23(@(t, v_in) ODEs(t, v_in, parameterList, forcing, j, false), [0 1], v_in, odeOptions);
+            sol = odeSolver(@(t, v_in) ODEs(t, v_in, parameterList, forcing, j, false), [0 1], v_in, odeOptions);
+            % Store solutions each day (each forcing data time-step)
+            OUT(:,j,i) = deval(sol, 1);
+            % Update initials for next time step
+            v_in = OUT(:,j,i);
+            % Extract extra outputs
+            [~, extraOutput, extraOutput_2d] = ...
+                ODEs(1, v_in, parameterList, forcing, j, true);
+            AUXVARS(:,j,i) = struct2array(extraOutput);
+            AUXVARS_2d(:,j,i) = struct2array(structfun(@(x)x(:)', ...
+                extraOutput_2d, 'UniformOutput', false));
         end
-        % Integrate
-%         sol=ode45(@(t, v_in) ODEs(t, v_in, parameterList, forcing, j, false), [0 1], v_in, odeOptions);        
-%         sol=ode23(@(t, v_in) ODEs(t, v_in, parameterList, forcing, j, false), [0 1], v_in, odeOptions);        
-        sol = odeSolver(@(t, v_in) ODEs(t, v_in, parameterList, forcing, j, false), [0 1], v_in, odeOptions);        
-        % Store solutions each day (each forcing data time-step)
-        OUT(:,j,i) = deval(sol, 1);
-        % Update initials for next time step
-        v_in = OUT(:,j,i);
-        % Extract extra outputs
-        [~, extraOutput, extraOutput_2d] = ...
-            ODEs(1, v_in, parameterList, forcing, j, true);
-        AUXVARS(:,j,i) = struct2array(extraOutput);
-        AUXVARS_2d(:,j,i) = struct2array(structfun(@(x)x(:)', ...
-            extraOutput_2d, 'UniformOutput', false));
     end
 end
 
@@ -107,4 +118,26 @@ end
 % Tidy up
 AUXVARS = reshape(AUXVARS, [nz nExtra(1) nt nTraj]);
 AUXVARS_2d = reshape(AUXVARS_2d, [nPP_size nz nExtra(2) nt nTraj]);
+
+% Extract solutions from array, OUT, into a more readable struct, out.
+% Same for extra outputs...
+out.N = reshape(OUT(N_index,:,:), [1 nz nt nTraj]);
+out.P = reshape(OUT(P_index,:,:), [nPP_size nz nPP_nut nt nTraj]);
+out.Z = reshape(OUT(Z_index,:,:), [1 nz nt nTraj]);
+out.OM = reshape(OUT(OM_index,:,:), [nOM_type nz nOM_nut nt nTraj]);
+
+if sum(nExtra) > 0
+    for k = 1:nExtra(1)
+        auxVars.(namesExtra{k}) = squeeze(AUXVARS(:,k,:,:));
+    end
+    for k = 1:nExtra(2)
+        auxVars.(namesExtra{k+nExtra(1)}) = squeeze(AUXVARS_2d(:,:,k,:,:));
+    end
+end
+
+
+
+
+
+
 
