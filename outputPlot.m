@@ -192,8 +192,8 @@ switch type
                     yticks(linspace(0,abs(fixedParams.zw(end)),7))
                     yticklabels(linspace(fixedParams.zw(end),0,7))
                 end
-                suptitle('phytoplankton nitrogen concentration given cell diameter')
-%                 suptitle('phytoplankton abundance given cell volume (mmol N / m^3)')
+                sgtitle('phytoplankton nitrogen concentration given cell diameter')
+%                 sgtitle('phytoplankton abundance given cell volume (mmol N / m^3)')
                 colormap plasma
                 
                 %------------------------------------------------------------------
@@ -227,8 +227,8 @@ switch type
                     yticks(linspace(0,abs(fixedParams.zw(end)),7))
                     yticklabels(linspace(fixedParams.zw(end),0,7))
                 end
-                suptitle('phytoplankton chlorophyll_a concentration given cell diameter')
-%                 suptitle('phytoplankton abundance given cell volume (mmol N / m^3)')
+                sgtitle('phytoplankton chlorophyll_a concentration given cell diameter')
+%                 sgtitle('phytoplankton abundance given cell volume (mmol N / m^3)')
                 colormap plasma
                 
                 %------------------------------------------------------------------
@@ -261,7 +261,7 @@ switch type
                     yticks(linspace(0,abs(fixedParams.zw(end)),7))
                     yticklabels(linspace(fixedParams.zw(end),0,7))
                 end
-                suptitle('phytoplankton carbon concentration given cell diameter')
+                sgtitle('phytoplankton carbon concentration given cell diameter')
                 colormap plasma
                                 
                 %------------------------------------------------------------------
@@ -294,7 +294,7 @@ switch type
                     yticks(linspace(0,abs(fixedParams.zw(end)),7))
                     yticklabels(linspace(fixedParams.zw(end),0,7))
                 end
-                suptitle('phytoplankton N/C ratio given cell diameter')
+                sgtitle('phytoplankton N/C ratio given cell diameter')
                 colormap plasma
                 
                 %------------------------------------------------------------------
@@ -328,7 +328,7 @@ switch type
                     yticks(linspace(0,abs(fixedParams.zw(end)),7))
                     yticklabels(linspace(fixedParams.zw(end),0,7))
                 end
-                suptitle('phytoplankton Chl/N ratio given cell diameter')
+                sgtitle('phytoplankton Chl/N ratio given cell diameter')
                 colormap plasma
                 
                 %------------------------------------------------------------------
@@ -466,7 +466,7 @@ switch type
                 hold on
                 scatter(elon,elat,'pr','filled')
                 hold off
-                suptitle('Forcing data - surface layer')
+                sgtitle('Forcing data - surface layer')
                 colormap plasma
                 
                 %----------------------------------------------------------
@@ -605,8 +605,8 @@ switch type
                     scatter(elon,elat,'pr','filled')
                     hold off
                 end
-                suptitle('phytoplankton abundance / cell diameter')
-%                 suptitle('phytoplankton abundance / cell volume')
+                sgtitle('phytoplankton abundance / cell diameter')
+%                 sgtitle('phytoplankton abundance / cell volume')
                 colormap plasma
                 
                 %----------------------------------------------------------
@@ -844,7 +844,7 @@ switch type
                 xlabel('year-day')
                 ylabel('PON (mmol N m^{-3})')
 
-                suptitle('organic matter')
+                sgtitle('organic matter')
                 
 
                 %----------------------------------------------------------
@@ -1069,6 +1069,1324 @@ switch type
                 title(['planktonic carbon in ' num2str(fixedParams.Htot) 'm deep (1m^2) water column'])
         end
         
+        %------------------------------------------------------------------
+        %------------------------------------------------------------------
+    
+    case 'outputVsData_depth_boxplot'
+        
+        var = varargin{1}; % variables to plot
+        out = varargin{2}; % model output
+        Data = varargin{3};
+        FixedParams = varargin{4};
+        plotStd = varargin{5}; % index [0, 1, 2] controlling whether raw or standardised data are plotted
+        
+        switch var
+            case 'DIN'
+                ind = strcmp('N', Data.scalar.Variable); % index data
+                v = 'N'; % label used in model output
+                xlab = 'DIN (mmol N m^{-3})';
+                xlab_std = 'standardised DIN';
+                scaleFun = 'scaleFun_N';
+            case 'PON'
+                ind = strcmp('PON', Data.scalar.Variable); % index data
+                v = 'OM'; % label used in model output
+                xlab = 'PON (mmol N m^{-3})';
+                xlab_std = 'standardised PON';
+                scaleFun = 'scaleFun_PON';
+            case 'POC'
+                ind = strcmp('POC', Data.scalar.Variable); % index data
+                v = 'OM'; % label used in model output
+                xlab = 'POC (mmol C m^{-3})';
+                xlab_std = 'standardised POC';
+                scaleFun = 'scaleFun_POC';
+            case 'Chl'
+                ind = strcmp('chl_a', Data.scalar.Variable); % index data
+                v = 'P'; % label used in model output
+                xlab = 'Chl_a (mg Chl_a m^{-3})';
+                xlab_std = 'standardised Chl_a';
+                scaleFun = 'scaleFun_chl_a';
+        end
+        
+        figure
+                
+        % data
+        event = Data.scalar.Event(ind);
+        depth = Data.scalar.Depth(ind);
+        value = Data.scalar.Value(ind);
+        value_scaled = Data.scalar.scaled_Value(ind);
+        
+        uevent = unique(event);
+        udepth = unique(depth);
+        nevent = length(uevent);
+        ndepth = length(udepth);
+        
+        % equivalent model output
+        depthMod = [];
+        valueMod = [];
+        valueMod_scaled = [];
+        time = Data.scalar.Yearday(ind);
+        
+        for i = 1:nevent
+            ev = uevent(i);
+            ind_ev = ind & Data.scalar.Event == ev;
+            evTime = unique(time(event == ev));
+            evDepths = depth(event == ev);
+            traj = find(Data.scalar.EventTraj(ev,:));
+            ntraj = length(traj);
+            depthMod = [depthMod; repmat(evDepths, [ntraj, 1])];
+            x = out.(v);
+            switch var
+                case 'DIN', x = squeeze(x(:,:,evTime,traj)); % modelled values [depth,trajectory]
+                case 'PON', x = squeeze(x(FixedParams.POM_index,:,FixedParams.OM_N_index,evTime,traj));
+                case 'POC', x = squeeze(x(FixedParams.POM_index,:,FixedParams.OM_C_index,evTime,traj));
+                case 'Chl', x = squeeze(sum(x(:,:,FixedParams.PP_Chl_index,evTime,traj)));
+            end
+            x = interp1(abs(FixedParams.z), x, evDepths); % interpolate to match sampling depths
+            valueMod = [valueMod; x(:)];
+            x = Data.scalar.(scaleFun)(Data.scalar.scale_mu(ind_ev), Data.scalar.scale_sig(ind_ev), x);
+%             x = Data.scalar.scaleFun_N(Data.scalar.scale_mu(ind_ev), Data.scalar.scale_sig(ind_ev), x);
+            valueMod_scaled = [valueMod_scaled; x(:)];
+        end
+        for i = ndepth:-1:1
+            x = value(depth == udepth(i));
+            allValues(1:length(x),2*ndepth-2*i+1) = x;
+            x = valueMod(depthMod == udepth(i));
+            allValues(1:length(x),2*ndepth-2*i+2) = x;
+            x = value_scaled(depth == udepth(i));
+            allValues_scaled(1:length(x),2*ndepth-2*i+1) = x;
+            x = valueMod_scaled(depthMod == udepth(i));
+            allValues_scaled(1:length(x),2*ndepth-2*i+2) = x;
+        end
+        allValues(~isnan(allValues) & allValues == 0) = nan;
+        allValues_scaled(~isnan(allValues_scaled) & allValues_scaled == 0) = nan;
+        
+        dataCol = [0 0 0];
+        modCol = [0 1 0];
+        
+        if ismember(plotStd, [0 1])
+            if plotStd == 0, bp = boxplot2(allValues, 'orientation', 'horizontal', 'barwidth', 0.7); end
+            if plotStd == 1, bp = boxplot2(allValues_scaled, 'orientation', 'horizontal', 'barwidth', 0.7); end
+            for i = 1:size(allValues,2)
+                bp.out(i).Marker = '.';
+            end
+            for i = 1:size(allValues,2) / 2
+                bp.out(2*i-1).MarkerFaceColor = dataCol;
+                bp.out(2*i-1).MarkerEdgeColor = dataCol;
+                bp.out(2*i).MarkerFaceColor = modCol;
+                bp.out(2*i).MarkerEdgeColor = modCol;
+                bp.box(2*i-1).Color = dataCol;
+                bp.box(2*i).Color = modCol;
+                bp.med(2*i-1).Color = [0 0 0];
+                bp.med(2*i).Color = [0 0 0];
+            end
+            gc = gca;
+            tt = reshape(1:size(allValues,2), [2, 0.5 * size(allValues,2)]);
+            gc.YTick = mean(tt);
+            gc.YTickLabel = num2str(flip(udepth));
+            gc.TickLength = 0.5 * gc.TickLength;
+            xl = gc.XLim; yl = gc.YLim;
+            tt = 0.5 * (tt(2,1:end-1) + tt(1,2:end));
+            hold on
+            for i = 1:length(tt)
+                line(xl, [tt(i) tt(i)], 'Color', [0.5 0.5 0.5], 'LineStyle', ':');
+            end
+            hold off
+            if plotStd == 0, xlabel(xlab); end
+            if plotStd == 1, xlabel(xlab_std); end
+            ylabel('Depth (m)')
+
+        else
+            
+            j = 1;
+            while j < 3
+                subplot(1,2,j)
+                if j == 1, bp = boxplot2(allValues, 'orientation', 'horizontal', 'barwidth', 0.7); end
+                if j == 2, bp = boxplot2(allValues_scaled, 'orientation', 'horizontal', 'barwidth', 0.7); end
+                for i = 1:size(allValues,2)
+                    bp.out(i).Marker = '.';
+                end
+                for i = 1:size(allValues,2) / 2
+                    bp.out(2*i-1).MarkerFaceColor = dataCol;
+                    bp.out(2*i-1).MarkerEdgeColor = dataCol;
+                    bp.out(2*i).MarkerFaceColor = modCol;
+                    bp.out(2*i).MarkerEdgeColor = modCol;
+                    bp.box(2*i-1).Color = dataCol;
+                    bp.box(2*i).Color = modCol;
+                    bp.med(2*i-1).Color = [0 0 0];
+                    bp.med(2*i).Color = [0 0 0];
+                end
+                gc = gca;
+                tt = reshape(1:size(allValues,2), [2, 0.5 * size(allValues,2)]);
+                gc.YTick = mean(tt);
+                gc.YTickLabel = num2str(flip(udepth));
+                gc.TickLength = 0.5 * gc.TickLength;
+                xl = gc.XLim; yl = gc.YLim;
+                tt = 0.5 * (tt(2,1:end-1) + tt(1,2:end));
+                hold on
+                for i = 1:length(tt)
+                    line(xl, [tt(i) tt(i)], 'Color', [0.5 0.5 0.5], 'LineStyle', ':');
+                end
+                hold off
+                if j == 1, xlabel(xlab); end
+                if j == 2, xlabel(xlab_std); end
+                ylabel('Depth (m)')
+                j = j + 1;
+            end
+        end
+        % legend
+        text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+        text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', dataCol)
+        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', modCol)
+
+        %------------------------------------------------------------------
+        %------------------------------------------------------------------
+    
+    case 'outputVsData_event_boxplot'
+
+        var = varargin{1}; % variables to plot
+        out = varargin{2}; % model output
+        Data = varargin{3};
+        FixedParams = varargin{4};
+        plotStd = varargin{5}; % index [0, 1, 2] controlling whether raw or standardised data are plotted
+        
+        switch var
+            case 'DIN'
+                ind = strcmp('N', Data.scalar.Variable); % index data
+                v = 'N'; % label used in model output
+                xlab = 'DIN (mmol N m^{-3})';
+                xlab_std = 'standardised DIN';
+                scaleFun = 'scaleFun_N';
+            case 'PON'
+                ind = strcmp('PON', Data.scalar.Variable); % index data
+                v = 'OM'; % label used in model output
+                xlab = 'PON (mmol N m^{-3})';
+                xlab_std = 'standardised PON';
+                scaleFun = 'scaleFun_PON';
+            case 'POC'
+                ind = strcmp('POC', Data.scalar.Variable); % index data
+                v = 'OM'; % label used in model output
+                xlab = 'POC (mmol C m^{-3})';
+                xlab_std = 'standardised POC';
+                scaleFun = 'scaleFun_POC';
+            case 'Chl'
+                ind = strcmp('chl_a', Data.scalar.Variable); % index data
+                v = 'P'; % label used in model output
+                xlab = 'Chl_a (mg Chl_a m^{-3})';
+                xlab_std = 'standardised Chl_a';
+                scaleFun = 'scaleFun_chl_a';
+        end
+        
+        figure
+                
+        % data
+        event = Data.scalar.Event(ind);
+        depth = Data.scalar.Depth(ind);
+        value = Data.scalar.Value(ind);
+        value_scaled = Data.scalar.scaled_Value(ind);
+        
+        uevent = unique(event);
+        udepth = unique(depth);
+        nevent = length(uevent);
+        ndepth = length(udepth);
+        
+        % equivalent model output
+        depthMod = [];
+        eventMod = [];
+        valueMod = [];
+        valueMod_scaled = [];
+        time = Data.scalar.Yearday(ind);
+        
+        for i = 1:nevent
+            ev = uevent(i);
+            ind_ev = ind & Data.scalar.Event == ev;
+            evTime = unique(time(event == ev));
+            evDepths = depth(event == ev);
+            traj = find(Data.scalar.EventTraj(ev,:));
+            ntraj = length(traj);
+            depthMod = [depthMod; repmat(evDepths, [ntraj, 1])];
+            eventMod = [eventMod; repmat(ev, [length(evDepths)*ntraj 1])];
+            x = out.(v);
+            switch var
+                case 'DIN', x = squeeze(x(:,:,evTime,traj)); % modelled values [depth,trajectory]
+                case 'PON', x = squeeze(x(FixedParams.POM_index,:,FixedParams.OM_N_index,evTime,traj));
+                case 'POC', x = squeeze(x(FixedParams.POM_index,:,FixedParams.OM_C_index,evTime,traj));
+                case 'Chl', x = squeeze(sum(x(:,:,FixedParams.PP_Chl_index,evTime,traj)));
+            end
+            x = interp1(abs(FixedParams.z), x, evDepths); % interpolate to match sampling depths
+            valueMod = [valueMod; x(:)];
+            x = Data.scalar.(scaleFun)(Data.scalar.scale_mu(ind_ev), Data.scalar.scale_sig(ind_ev), x);
+%             x = Data.scalar.scaleFun_N(Data.scalar.scale_mu(ind_ev), Data.scalar.scale_sig(ind_ev), x);
+            valueMod_scaled = [valueMod_scaled; x(:)];
+        end
+        
+        for i = 1:nevent
+            ev = uevent(i);
+            x = value(event == ev);
+            allValues(1:length(x),2*i-1) = x;
+            x = valueMod(eventMod == ev);
+            allValues(1:length(x),2*i) = x;
+            x = value_scaled(event == ev);
+            allValues_scaled(1:length(x),2*i-1) = x;
+            x = valueMod_scaled(eventMod == ev);
+            allValues_scaled(1:length(x),2*i) = x;
+        end
+        allValues(~isnan(allValues) & allValues == 0) = nan;
+        allValues_scaled(~isnan(allValues_scaled) & allValues_scaled == 0) = nan;
+        
+        dataCol = [0 0 0];
+        modCol = [0 1 0];
+        
+        if ismember(plotStd, [0 1])
+            if plotStd == 0, bp = boxplot2(allValues, 'orientation', 'horizontal', 'barwidth', 0.7); end
+            if plotStd == 1, bp = boxplot2(allValues_scaled, 'orientation', 'horizontal', 'barwidth', 0.7); end
+            for i = 1:size(allValues,2)
+                bp.out(i).Marker = '.';
+            end
+            for i = 1:size(allValues,2) / 2
+                bp.out(2*i-1).MarkerFaceColor = dataCol;
+                bp.out(2*i-1).MarkerEdgeColor = dataCol;
+                bp.out(2*i).MarkerFaceColor = modCol;
+                bp.out(2*i).MarkerEdgeColor = modCol;
+                bp.box(2*i-1).Color = dataCol;
+                bp.box(2*i).Color = modCol;
+                bp.med(2*i-1).Color = [0 0 0];
+                bp.med(2*i).Color = [0 0 0];
+            end
+            gc = gca;
+            tt = reshape(1:size(allValues,2), [2, 0.5 * size(allValues,2)]);
+            gc.YTick = mean(tt);
+            gc.YTickLabel = num2str(flip(udepth));
+            gc.TickLength = 0.5 * gc.TickLength;
+            xl = gc.XLim; yl = gc.YLim;
+            tt = 0.5 * (tt(2,1:end-1) + tt(1,2:end));
+            hold on
+            for i = 1:length(tt)
+                line(xl, [tt(i) tt(i)], 'Color', [0.5 0.5 0.5], 'LineStyle', ':');
+            end
+            hold off
+            if plotStd == 0, xlabel(xlab); end
+            if plotStd == 1, xlabel(xlab_std); end
+            ylabel('Depth (m)')
+
+        else
+            
+            j = 1;
+            while j < 3
+                subplot(1,2,j)
+                if j == 1, bp = boxplot2(allValues, 'orientation', 'horizontal', 'barwidth', 0.7); end
+                if j == 2, bp = boxplot2(allValues_scaled, 'orientation', 'horizontal', 'barwidth', 0.7); end
+                for i = 1:size(allValues,2)
+                    bp.out(i).Marker = '.';
+                end
+                for i = 1:size(allValues,2) / 2
+                    bp.out(2*i-1).MarkerFaceColor = dataCol;
+                    bp.out(2*i-1).MarkerEdgeColor = dataCol;
+                    bp.out(2*i).MarkerFaceColor = modCol;
+                    bp.out(2*i).MarkerEdgeColor = modCol;
+                    bp.box(2*i-1).Color = dataCol;
+                    bp.box(2*i).Color = modCol;
+                    bp.med(2*i-1).Color = [0 0 0];
+                    bp.med(2*i).Color = [0 0 0];
+                end
+                gc = gca;
+                tt = reshape(1:size(allValues,2), [2, 0.5 * size(allValues,2)]);
+                gc.YTick = mean(tt);
+                gc.YTickLabel = num2str((uevent));
+                gc.TickLength = 0.5 * gc.TickLength;
+                xl = gc.XLim; yl = gc.YLim;
+                tt = 0.5 * (tt(2,1:end-1) + tt(1,2:end));
+                hold on
+                for i = 1:length(tt)
+                    line(xl, [tt(i) tt(i)], 'Color', [0.5 0.5 0.5], 'LineStyle', ':');
+                end
+                hold off
+                if j == 1, xlabel(xlab); end
+                if j == 2, xlabel(xlab_std); end
+                ylabel('Event')
+                j = j + 1;
+            end
+        end
+        % legend
+        text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+        text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', dataCol)
+        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', modCol)
+        
+        %------------------------------------------------------------------
+        %------------------------------------------------------------------
+    
+
+    case 'outputVsData_summaryPlots'
+        
+        v = varargin{1}; % variable to plot
+        Data = varargin{2}; % model output
+        modData = varargin{3};
+        FixedParams = varargin{4};
+        costfun = FixedParams.costFunction;
+        
+        % Different selection of plots for different cost functions
+        switch costfun
+           
+            case 'polyLikelihood'
+                switch v
+                    % summary plots displaying model fit to scalar data
+                    case {'N','PON','POC','chl_a'}
+                        
+                        coldat = [0 0 0];
+                        colmod = [0 1 0];
+                        
+                        plt = figure;
+                        plt.Units = 'inches';
+                        plt.Position = [0 0 16 12];
+                        
+                        % Model fit to polynomial coefficients representing data
+                        subplot(2,3,1)
+                        
+                        cdat = flip(Data.scalar.(['polyCoefs_' v]));
+                        cmod = flip(modData.scalar.(['polyCoefs_' v]));
+                        nc = length(cdat);
+                        x = 1:nc;
+                        mu_c = mean(cmod, 2);
+                        cmin = min(cmod,[],2);
+                        cmax = max(cmod,[],2);
+                        
+                        yl = [min([cmin(:);cdat(:)]), max([cmax(:);cdat(:)])];
+                        yl(1) = floor(yl(1));
+                        yl(2) = ceil(yl(2));
+                        
+                        scatter(x-0.125, cdat, 'MarkerEdgeColor', coldat, 'MarkerFaceColor', coldat)
+                        hold on
+                        scatter(x+0.125, mu_c, 'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod)
+                        for i = 1:nc
+                            line([x(i) x(i)]+0.125, [cmin(i) cmax(i)], 'Color', colmod)
+                            if i < nc
+                                line([x(i) x(i)]+0.5, yl, 'Color', [0.5 0.5 0.5], 'LineStyle', ':')
+                            end
+                        end
+                        
+                        gc = gca;
+                        gc.XLim = [0.5, nc+0.5];
+                        xl = gc.XLim;
+                        line(xl, [0 0], 'Color', [0.5 0.5 0.5], 'LineStyle', '--')
+                        
+                        gc.XTick = 1:nc;
+                        gc.XTickLabel{1} = 'intercept';
+                        
+                        for i = 1:nc
+                            if i > 1, l = ['\beta_' num2str(i-1)];
+                            else, l = ['\beta_' num2str(i-1) ' (intercept)'];
+                            end
+                            gc.XTickLabel{i} = l;
+                        end
+                        
+                        xl = gc.XLim;
+                        xl(2) = xl(2) + diff(xl) / 5;
+                        gc.XLim = xl;
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        switch v
+                            case 'N'
+                                Var = 'DIN';
+                            case 'PON'
+                                Var = 'PON';
+                            case 'POC'
+                                Var = 'POC';
+                            case 'chl_a'
+                                Var = 'chl-a';
+                        end
+                        title(['Polynomial coefficients representing ' Var  ' data'])
+                        hold off
+                        
+                        
+                        % Sorted data and polynomial curves
+                        subplot(2,3,4)
+                        
+                        ind = strcmp(Data.scalar.Variable, v);
+                        x = Data.scalar.(['polyXvals_' v]);
+                        o = Data.scalar.(['sortOrder_' v]);
+                        ymod = modData.scalar.scaled_Value(ind,:);
+                        ydat = Data.scalar.scaled_Value(ind);
+                        ymod = ymod(o,:);
+                        ydat = ydat(o);
+                        
+                        for i = 1:size(ymod, 2)
+                            %     scatter(x, ymod(:,i), 'Marker', '.', 'MarkerEdgeColor', [0.7 0.7 0.7]);
+                            scatter(x, ymod(:,i), 'Marker', '.', 'MarkerEdgeColor', colmod);
+                            if i == 1, hold on; end
+                            modpoly = polyval(modData.scalar.(['polyCoefs_' v])(:,i), x);
+                            plot(x, modpoly, 'Color', colmod)
+                        end
+                        scatter(x, ydat, 'MarkerEdgeColor', coldat)
+                        datpoly = polyval(Data.scalar.(['polyCoefs_' v]), x);
+                        plot(x, datpoly, 'Color', coldat)
+                        hold off
+                        
+                        gc = gca;
+                        xl = gc.XLim; yl = gc.YLim;
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        
+                        
+                        ylabel(['sorted standardised ' Var])
+                        title(['Polynomials representing ' Var ' data'])
+                        
+                        
+                        
+                        % depth vs standardised variable boxplot
+                        subplot(2,3,2)
+                        
+                        switch v
+                            case 'N'
+                                xlab = 'DIN (mmol N m^{-3})';
+                                xlab_std = 'standardised DIN';
+                            case 'PON'
+                                xlab = 'PON (mmol N m^{-3})';
+                                xlab_std = 'standardised PON';
+                            case 'POC'
+                                xlab = 'POC (mmol C m^{-3})';
+                                xlab_std = 'standardised POC';
+                            case 'chl_a'
+                                xlab = 'chl-a (mg chl-a m^{-3})';
+                                xlab_std = 'standardised chl-a';
+                        end
+                        
+                        ind = strcmp(Data.scalar.Variable, v);
+                        
+                        event = Data.scalar.Event(ind);
+                        depth = Data.scalar.Depth(ind);
+                        value = Data.scalar.Value(ind);
+                        value_scaled = Data.scalar.scaled_Value(ind);
+                        
+                        uevent = unique(event);
+                        udepth = unique(depth);
+                        nevent = length(uevent);
+                        ndepth = length(udepth);
+                        
+                        valueMod = modData.scalar.Value(ind,:);
+                        valueMod_scaled = modData.scalar.scaled_Value(ind,:);
+                        
+                        clear allValues allValues_scaled
+                        for i = ndepth:-1:1
+                            di = depth == udepth(i);
+                            x = value(di);
+                            allValues(1:numel(x),2*ndepth-2*i+1) = x(:);
+                            x = valueMod(di,:);
+                            allValues(1:numel(x),2*ndepth-2*i+2) = x(:);
+                            x = value_scaled(di);
+                            allValues_scaled(1:numel(x),2*ndepth-2*i+1) = x(:);
+                            x = valueMod_scaled(di,:);
+                            allValues_scaled(1:numel(x),2*ndepth-2*i+2) = x(:);
+                        end
+                        allValues(~isnan(allValues) & allValues == 0) = nan;
+                        allValues_scaled(~isnan(allValues_scaled) & allValues_scaled == 0) = nan;
+                        
+                        bp = boxplot2(allValues_scaled, 'orientation', 'horizontal', 'barwidth', 0.7);
+                        
+                        for i = 1:size(allValues,2)
+                            bp.out(i).Marker = '.';
+                        end
+                        for i = 1:size(allValues,2) / 2
+                            bp.out(2*i-1).MarkerFaceColor = coldat;
+                            bp.out(2*i-1).MarkerEdgeColor = coldat;
+                            bp.out(2*i).MarkerFaceColor = colmod;
+                            bp.out(2*i).MarkerEdgeColor = colmod;
+                            bp.box(2*i-1).Color = coldat;
+                            bp.box(2*i).Color = colmod;
+                            bp.med(2*i-1).Color = [0 0 0];
+                            bp.med(2*i).Color = [0 0 0];
+                        end
+                        
+                        gc = gca;
+                        tt = reshape(1:size(allValues,2), [2, 0.5 * size(allValues,2)]);
+                        gc.YTick = mean(tt);
+                        gc.YTickLabel = num2str(flip(udepth));
+                        gc.TickLength = 0.5 * gc.TickLength;
+                        xl = gc.XLim; yl = gc.YLim;
+                        tt = 0.5 * (tt(2,1:end-1) + tt(1,2:end));
+                        hold on
+                        for i = 1:length(tt)
+                            line(xl, [tt(i) tt(i)], 'Color', [0.5 0.5 0.5], 'LineStyle', ':');
+                        end
+                        hold off
+                        
+                        gc.XLim = xl;
+                        
+                        xlabel(xlab_std)
+                        ylabel('depth (m)')
+                        
+                        % legend
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        
+                        
+                        
+                        % depth vs raw variable boxplot
+                        subplot(2,3,5)
+                        
+                        bp = boxplot2(allValues, 'orientation', 'horizontal', 'barwidth', 0.7);
+                        
+                        for i = 1:size(allValues,2)
+                            bp.out(i).Marker = '.';
+                        end
+                        for i = 1:size(allValues,2) / 2
+                            bp.out(2*i-1).MarkerFaceColor = coldat;
+                            bp.out(2*i-1).MarkerEdgeColor = coldat;
+                            bp.out(2*i).MarkerFaceColor = colmod;
+                            bp.out(2*i).MarkerEdgeColor = colmod;
+                            bp.box(2*i-1).Color = coldat;
+                            bp.box(2*i).Color = colmod;
+                            bp.med(2*i-1).Color = [0 0 0];
+                            bp.med(2*i).Color = [0 0 0];
+                        end
+                        
+                        gc = gca;
+                        tt = reshape(1:size(allValues,2), [2, 0.5 * size(allValues,2)]);
+                        gc.YTick = mean(tt);
+                        gc.YTickLabel = num2str(flip(udepth));
+                        gc.TickLength = 0.5 * gc.TickLength;
+                        xl = gc.XLim; yl = gc.YLim;
+                        tt = 0.5 * (tt(2,1:end-1) + tt(1,2:end));
+                        hold on
+                        for i = 1:length(tt)
+                            line(xl, [tt(i) tt(i)], 'Color', [0.5 0.5 0.5], 'LineStyle', ':');
+                        end
+                        hold off
+                        
+                        xlabel(xlab)
+                        ylabel('depth (m)')
+                        
+                        % legend
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        
+                        
+                        % event vs standardised variable boxplot
+                        subplot(2,3,3)
+                        
+                        clear allValues allValues_scaled
+                        for i = 1:nevent
+                            ei = event == uevent(i);
+                            x = value(ei);
+                            allValues(1:numel(x),2*i-1) = x(:);
+                            x = valueMod(ei,:);
+                            allValues(1:numel(x),2*i) = x(:);
+                            x = value_scaled(ei);
+                            allValues_scaled(1:numel(x),2*i-1) = x(:);
+                            x = valueMod_scaled(ei);
+                            allValues_scaled(1:numel(x),2*i) = x(:);
+                        end
+                        allValues(~isnan(allValues) & allValues == 0) = nan;
+                        allValues_scaled(~isnan(allValues_scaled) & allValues_scaled == 0) = nan;
+                        
+                        bp = boxplot2(allValues_scaled, 'orientation', 'horizontal', 'barwidth', 0.7);
+                        
+                        for i = 1:size(allValues,2)
+                            bp.out(i).Marker = '.';
+                        end
+                        for i = 1:size(allValues,2) / 2
+                            bp.out(2*i-1).MarkerFaceColor = coldat;
+                            bp.out(2*i-1).MarkerEdgeColor = coldat;
+                            bp.out(2*i).MarkerFaceColor = colmod;
+                            bp.out(2*i).MarkerEdgeColor = colmod;
+                            bp.box(2*i-1).Color = coldat;
+                            bp.box(2*i).Color = colmod;
+                            bp.med(2*i-1).Color = [0 0 0];
+                            bp.med(2*i).Color = [0 0 0];
+                        end
+                        
+                        gc = gca;
+                        tt = reshape(1:size(allValues,2), [2, 0.5 * size(allValues,2)]);
+                        gc.YTick = mean(tt);
+                        gc.YTickLabel = num2str(uevent);
+                        gc.TickLength = 0.5 * gc.TickLength;
+                        xl = gc.XLim; yl = gc.YLim;
+                        tt = 0.5 * (tt(2,1:end-1) + tt(1,2:end));
+                        hold on
+                        for i = 1:length(tt)
+                            line(xl, [tt(i) tt(i)], 'Color', [0.5 0.5 0.5], 'LineStyle', ':');
+                        end
+                        hold off
+                        
+                        xlabel(xlab_std)
+                        ylabel('sampling event')
+                        
+                        % legend
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        
+                        
+                        % event vs raw variable boxplot
+                        subplot(2,3,6)
+                        
+                        bp = boxplot2(allValues, 'orientation', 'horizontal', 'barwidth', 0.7);
+                        
+                        for i = 1:size(allValues,2)
+                            bp.out(i).Marker = '.';
+                        end
+                        for i = 1:size(allValues,2) / 2
+                            bp.out(2*i-1).MarkerFaceColor = coldat;
+                            bp.out(2*i-1).MarkerEdgeColor = coldat;
+                            bp.out(2*i).MarkerFaceColor = colmod;
+                            bp.out(2*i).MarkerEdgeColor = colmod;
+                            bp.box(2*i-1).Color = coldat;
+                            bp.box(2*i).Color = colmod;
+                            bp.med(2*i-1).Color = [0 0 0];
+                            bp.med(2*i).Color = [0 0 0];
+                        end
+                        
+                        gc = gca;
+                        tt = reshape(1:size(allValues,2), [2, 0.5 * size(allValues,2)]);
+                        gc.YTick = mean(tt);
+                        gc.YTickLabel = num2str(uevent);
+                        gc.TickLength = 0.5 * gc.TickLength;
+                        xl = gc.XLim; yl = gc.YLim;
+                        tt = 0.5 * (tt(2,1:end-1) + tt(1,2:end));
+                        hold on
+                        for i = 1:length(tt)
+                            line(xl, [tt(i) tt(i)], 'Color', [0.5 0.5 0.5], 'LineStyle', ':');
+                        end
+                        hold off
+                        
+                        xlabel(xlab)
+                        ylabel('sampling event')
+                        
+                        % legend
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        
+                        % summary plots displaying model fit to size spectra data
+                    case 'N_at_size'
+                        
+                        Var = 'Ntot';
+                        
+                        coldat = [0 0 0];
+                        colmod = [0 1 0];
+                        
+                        plt = figure;
+                        plt.Units = 'inches';
+                        plt.Position = [0 0 12 12];
+                        
+                        % Model fit to polynomial coefficients representing data
+                        subplot(2,2,1)
+                        
+                        cdat = flip(Data.size.polyCoefs);
+                        cmod = flip(modData.size.polyCoefs);
+                        nc = length(cdat);
+                        x = 1:nc;
+                        mu_c = mean(cmod, 2);
+                        cmin = min(cmod,[],2);
+                        cmax = max(cmod,[],2);
+                        
+                        yl = [min([cmin(:);cdat(:)]), max([cmax(:);cdat(:)])];
+                        yl(1) = floor(yl(1));
+                        yl(2) = ceil(yl(2));
+                        
+                        scatter(x-0.125, cdat, 'MarkerEdgeColor', coldat, 'MarkerFaceColor', coldat)
+                        hold on
+                        scatter(x+0.125, mu_c, 'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod)
+                        for i = 1:nc
+                            line([x(i) x(i)]+0.125, [cmin(i) cmax(i)], 'Color', colmod)
+                            if i < nc
+                                line([x(i) x(i)]+0.5, yl, 'Color', [0.5 0.5 0.5], 'LineStyle', ':')
+                            end
+                        end
+                        
+                        gc = gca;
+                        gc.XLim = [0.5, nc+0.5];
+                        xl = gc.XLim;
+                        line(xl, [0 0], 'Color', [0.5 0.5 0.5], 'LineStyle', '--')
+                        
+                        gc.XTick = 1:nc;
+                        gc.XTickLabel{1} = 'intercept';
+                        
+                        for i = 1:nc
+                            if i > 1, l = ['\beta_' num2str(i-1)];
+                            else, l = ['\beta_' num2str(i-1) ' (intercept)'];
+                            end
+                            gc.XTickLabel{i} = l;
+                        end
+                        
+                        xl = gc.XLim;
+                        xl(2) = xl(2) + diff(xl) / 5;
+                        gc.XLim = xl;
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        
+                        title('Polynomial coefficients representing size spectra data')
+                        hold off
+                        
+                        
+                        % Sorted data and polynomial curves
+                        subplot(2,2,3)
+                        x = Data.size.polyXvals;
+                        o = Data.size.sortOrder;
+                        ymod = modData.size.(['scaled_' Var]);
+                        ydat = Data.size.dataBinned.(['scaled_' Var]);
+                        ymod = ymod(o,:);
+                        ydat = ydat(o);
+                        
+                        
+                        for i = 1:size(ymod, 2)
+                            scatter(x, ymod(:,i), 'Marker', '.', 'MarkerEdgeColor', colmod);
+                            if i == 1, hold on; end
+                            modpoly = polyval(modData.size.polyCoefs(:,i), x);
+                            plot(x, modpoly, 'Color', colmod)
+                        end
+                        scatter(x, ydat, 'MarkerEdgeColor', coldat)
+                        datpoly = polyval(Data.size.polyCoefs, x);
+                        plot(x, datpoly, 'Color', coldat)
+                        hold off
+                        
+                        gc = gca;
+                        xl = gc.XLim; yl = gc.YLim;
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        
+                        
+                        ylabel('sorted standardised N spectra')
+                        title('Polynomials representing size spectra data')
+                        
+                        
+                        
+                        % standardised variable vs size
+                        subplot(2,2,2)
+                        
+                        Size = Data.size.dataBinned.size;
+                        SizeClass = Data.size.dataBinned.sizeClass;
+                        value = Data.size.dataBinned.Ntot;
+                        value_scaled = Data.size.dataBinned.scaled_Ntot;
+                        
+                        usize = unique(Size);
+                        usizeClass = unique(SizeClass);
+                        nsize = length(usize);
+                        
+                        valueMod = modData.size.(Var);
+                        valueMod_scaled = modData.size.(['scaled_' Var]);
+                        
+                        semilogx(Size, value_scaled, '-o', ...
+                            'MarkerEdgeColor', coldat, 'MarkerFaceColor', coldat, ...
+                            'Color', coldat);
+                        hold on
+                        for i = 1:size(valueMod_scaled, 2)
+                            semilogx(Size(:), valueMod_scaled(:,i), '-o', ...
+                                'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod, ...
+                                'Color', colmod)
+                        end
+                        gc = gca;
+                        xl = gc.XLim;
+                        if xl(1) == Size(1), xl(1) = 0.5 * xl(1); end
+                        xl(2) = ceil(xl(2) / 100) * 100;
+                        gc.XLim = xl;
+                        yl = gc.YLim;
+                        
+                        %                 legend('data', 'model')
+                        
+                        xlabel('cell diameter (\mum)')
+                        ylabel('standardised N size spectra')
+                        
+                        % legend
+                        lxl = log10(xl);
+                        text(10^(lxl(2)-0.15*diff(lxl)), yl(2)-0.05*diff(yl), 'data')
+                        text(10^(lxl(2)-0.15*diff(lxl)), yl(2)-0.1*diff(yl), 'model')
+                        line([10^(lxl(2)-0.22*diff(lxl)), 10^(lxl(2)-0.17*diff(lxl))], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([10^(lxl(2)-0.22*diff(lxl)), 10^(lxl(2)-0.17*diff(lxl))], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        
+                        hold off
+                        
+                        
+                        % raw variable vs size
+                        subplot(2,2,4)
+                        
+                        semilogx(Size, value, '-o', ...
+                            'MarkerEdgeColor', coldat, 'MarkerFaceColor', coldat, ...
+                            'Color', coldat);
+                        hold on
+                        for i = 1:size(valueMod, 2)
+                            semilogx(Size(:), valueMod(:,i), '-o', ...
+                                'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod, ...
+                                'Color', colmod)
+                        end
+                        gc = gca;
+                        xl = gc.XLim;
+                        if xl(1) == Size(1), xl(1) = 0.5 * xl(1); end
+                        xl(2) = ceil(xl(2) / 100) * 100;
+                        gc.XLim = xl;
+                        yl = gc.YLim;
+                        
+                        %                 legend('data', 'model')
+                        
+                        xlabel('cell diameter (\mum)')
+                        ylabel('N size spectra')
+                        
+                        % legend
+                        lxl = log10(xl);
+                        text(10^(lxl(2)-0.15*diff(lxl)), yl(2)-0.05*diff(yl), 'data')
+                        text(10^(lxl(2)-0.15*diff(lxl)), yl(2)-0.1*diff(yl), 'model')
+                        line([10^(lxl(2)-0.22*diff(lxl)), 10^(lxl(2)-0.17*diff(lxl))], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([10^(lxl(2)-0.22*diff(lxl)), 10^(lxl(2)-0.17*diff(lxl))], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        
+                        hold off
+                        
+                        
+                end
+                
+            case 'LSS'
+                switch v
+                    % summary plots displaying model fit to scalar data
+                    case {'N','PON','POC','chl_a'}
+                        
+                        coldat = [0 0 0];
+                        colmod = [0 1 0];
+                        
+                        plt = figure;
+                        plt.Units = 'inches';
+                        plt.Position = [0 0 12 12];
+                        
+                        switch v
+                            case 'N'
+                                Var = 'DIN';
+                                xlab = 'DIN (mmol N m^{-3})';
+                                xlab_std = 'standardised DIN';
+                            case 'PON'
+                                Var = 'PON';
+                                xlab = 'PON (mmol N m^{-3})';
+                                xlab_std = 'standardised PON';
+                            case 'POC'
+                                Var = 'POC';
+                                xlab = 'POC (mmol C m^{-3})';
+                                xlab_std = 'standardised POC';
+                            case 'chl_a'
+                                Var = 'chl-a';
+                                xlab = 'chl-a (mg chl-a m^{-3})';
+                                xlab_std = 'standardised chl-a';
+                        end
+
+                        % Sorted standardised data
+                        subplot(2,3,1)
+                        
+                        ind = strcmp(Data.scalar.Variable, v);
+                        x = Data.scalar.(['polyXvals_' v]);
+                        o = Data.scalar.(['sortOrder_' v]);
+                        ymod = modData.scalar.scaled_Value(ind,:);
+                        ydat = Data.scalar.scaled_Value(ind);
+                        ymod = ymod(o,:);
+                        ydat = ydat(o);
+                        x2d = repmat(x, [1 size(ymod, 2)]);
+                        
+                        scatter(x2d(:), ymod(:), 'Marker', '.', 'MarkerEdgeColor', colmod)
+                        hold on
+                        scatter(x, ydat, 'MarkerEdgeColor', coldat)
+                        hold off
+                        
+                        gc = gca;
+                        xl = gc.XLim; yl = gc.YLim;
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        
+                        ylabel(['standardised ' Var])
+                        
+                        
+                        % Sorted raw data
+                        subplot(2,3,4)
+                        
+                        ymod = modData.scalar.Value(ind,:);
+                        ydat = Data.scalar.Value(ind);
+                        [ydat,J] = sort(ydat);
+                        ymod = ymod(J,:);
+%                         ymod = ymod(o,:);
+%                         ydat = ydat(o);
+                        
+                        scatter(x2d(:), ymod(:), 'Marker', '.', 'MarkerEdgeColor', colmod)
+                        hold on
+                        scatter(x, ydat, 'MarkerEdgeColor', coldat)
+                        hold off
+                        
+                        gc = gca;
+                        xl = gc.XLim; yl = gc.YLim;
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        
+                        ylabel(xlab)
+                        
+                        
+                        % depth vs standardised variable boxplot
+                        subplot(2,3,2)
+                                                
+                        ind = strcmp(Data.scalar.Variable, v);
+                        
+                        event = Data.scalar.Event(ind);
+                        depth = Data.scalar.Depth(ind);
+                        value = Data.scalar.Value(ind);
+                        value_scaled = Data.scalar.scaled_Value(ind);
+                        
+                        uevent = unique(event);
+                        udepth = unique(depth);
+                        nevent = length(uevent);
+                        ndepth = length(udepth);
+                        
+                        valueMod = modData.scalar.Value(ind,:);
+                        valueMod_scaled = modData.scalar.scaled_Value(ind,:);
+                        
+                        clear allValues allValues_scaled
+                        for i = ndepth:-1:1
+                            di = depth == udepth(i);
+                            x = value(di);
+                            allValues(1:numel(x),2*ndepth-2*i+1) = x(:);
+                            x = valueMod(di,:);
+                            allValues(1:numel(x),2*ndepth-2*i+2) = x(:);
+                            x = value_scaled(di);
+                            allValues_scaled(1:numel(x),2*ndepth-2*i+1) = x(:);
+                            x = valueMod_scaled(di,:);
+                            allValues_scaled(1:numel(x),2*ndepth-2*i+2) = x(:);
+                        end
+                        allValues(~isnan(allValues) & allValues == 0) = nan;
+                        allValues_scaled(~isnan(allValues_scaled) & allValues_scaled == 0) = nan;
+                        
+                        bp = boxplot2(allValues_scaled, 'orientation', 'horizontal', 'barwidth', 0.7);
+                        
+                        for i = 1:size(allValues,2)
+                            bp.out(i).Marker = '.';
+                        end
+                        for i = 1:size(allValues,2) / 2
+                            bp.out(2*i-1).MarkerFaceColor = coldat;
+                            bp.out(2*i-1).MarkerEdgeColor = coldat;
+                            bp.out(2*i).MarkerFaceColor = colmod;
+                            bp.out(2*i).MarkerEdgeColor = colmod;
+                            bp.box(2*i-1).Color = coldat;
+                            bp.box(2*i).Color = colmod;
+                            bp.med(2*i-1).Color = [0 0 0];
+                            bp.med(2*i).Color = [0 0 0];
+                        end
+                        
+                        gc = gca;
+                        tt = reshape(1:size(allValues,2), [2, 0.5 * size(allValues,2)]);
+                        gc.YTick = mean(tt);
+                        gc.YTickLabel = num2str(flip(udepth));
+                        gc.TickLength = 0.5 * gc.TickLength;
+                        xl = gc.XLim; yl = gc.YLim;
+                        tt = 0.5 * (tt(2,1:end-1) + tt(1,2:end));
+                        hold on
+                        for i = 1:length(tt)
+                            line(xl, [tt(i) tt(i)], 'Color', [0.5 0.5 0.5], 'LineStyle', ':');
+                        end
+                        hold off
+                        
+                        gc.XLim = xl;
+                        
+                        xlabel(xlab_std)
+                        ylabel('depth (m)')
+                        
+                        % legend
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        
+                        
+                        
+                        % depth vs raw variable boxplot
+                        subplot(2,3,5)
+                        
+                        bp = boxplot2(allValues, 'orientation', 'horizontal', 'barwidth', 0.7);
+                        
+                        for i = 1:size(allValues,2)
+                            bp.out(i).Marker = '.';
+                        end
+                        for i = 1:size(allValues,2) / 2
+                            bp.out(2*i-1).MarkerFaceColor = coldat;
+                            bp.out(2*i-1).MarkerEdgeColor = coldat;
+                            bp.out(2*i).MarkerFaceColor = colmod;
+                            bp.out(2*i).MarkerEdgeColor = colmod;
+                            bp.box(2*i-1).Color = coldat;
+                            bp.box(2*i).Color = colmod;
+                            bp.med(2*i-1).Color = [0 0 0];
+                            bp.med(2*i).Color = [0 0 0];
+                        end
+                        
+                        gc = gca;
+                        tt = reshape(1:size(allValues,2), [2, 0.5 * size(allValues,2)]);
+                        gc.YTick = mean(tt);
+                        gc.YTickLabel = num2str(flip(udepth));
+                        gc.TickLength = 0.5 * gc.TickLength;
+                        xl = gc.XLim; yl = gc.YLim;
+                        tt = 0.5 * (tt(2,1:end-1) + tt(1,2:end));
+                        hold on
+                        for i = 1:length(tt)
+                            line(xl, [tt(i) tt(i)], 'Color', [0.5 0.5 0.5], 'LineStyle', ':');
+                        end
+                        hold off
+                        
+                        xlabel(xlab)
+                        ylabel('depth (m)')
+                        
+                        % legend
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        
+                        
+                        % event vs standardised variable boxplot
+                        subplot(2,3,3)
+                        
+                        clear allValues allValues_scaled
+                        for i = 1:nevent
+                            ei = event == uevent(i);
+                            x = value(ei);
+                            allValues(1:numel(x),2*i-1) = x(:);
+                            x = valueMod(ei,:);
+                            allValues(1:numel(x),2*i) = x(:);
+                            x = value_scaled(ei);
+                            allValues_scaled(1:numel(x),2*i-1) = x(:);
+                            x = valueMod_scaled(ei);
+                            allValues_scaled(1:numel(x),2*i) = x(:);
+                        end
+                        allValues(~isnan(allValues) & allValues == 0) = nan;
+                        allValues_scaled(~isnan(allValues_scaled) & allValues_scaled == 0) = nan;
+                        
+                        bp = boxplot2(allValues_scaled, 'orientation', 'horizontal', 'barwidth', 0.7);
+                        
+                        for i = 1:size(allValues,2)
+                            bp.out(i).Marker = '.';
+                        end
+                        for i = 1:size(allValues,2) / 2
+                            bp.out(2*i-1).MarkerFaceColor = coldat;
+                            bp.out(2*i-1).MarkerEdgeColor = coldat;
+                            bp.out(2*i).MarkerFaceColor = colmod;
+                            bp.out(2*i).MarkerEdgeColor = colmod;
+                            bp.box(2*i-1).Color = coldat;
+                            bp.box(2*i).Color = colmod;
+                            bp.med(2*i-1).Color = [0 0 0];
+                            bp.med(2*i).Color = [0 0 0];
+                        end
+                        
+                        gc = gca;
+                        tt = reshape(1:size(allValues,2), [2, 0.5 * size(allValues,2)]);
+                        gc.YTick = mean(tt);
+                        gc.YTickLabel = num2str(uevent);
+                        gc.TickLength = 0.5 * gc.TickLength;
+                        xl = gc.XLim; yl = gc.YLim;
+                        tt = 0.5 * (tt(2,1:end-1) + tt(1,2:end));
+                        hold on
+                        for i = 1:length(tt)
+                            line(xl, [tt(i) tt(i)], 'Color', [0.5 0.5 0.5], 'LineStyle', ':');
+                        end
+                        hold off
+                        
+                        xlabel(xlab_std)
+                        ylabel('sampling event')
+                        
+                        % legend
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        
+                        
+                        % event vs raw variable boxplot
+                        subplot(2,3,6)
+                        
+                        bp = boxplot2(allValues, 'orientation', 'horizontal', 'barwidth', 0.7);
+                        
+                        for i = 1:size(allValues,2)
+                            bp.out(i).Marker = '.';
+                        end
+                        for i = 1:size(allValues,2) / 2
+                            bp.out(2*i-1).MarkerFaceColor = coldat;
+                            bp.out(2*i-1).MarkerEdgeColor = coldat;
+                            bp.out(2*i).MarkerFaceColor = colmod;
+                            bp.out(2*i).MarkerEdgeColor = colmod;
+                            bp.box(2*i-1).Color = coldat;
+                            bp.box(2*i).Color = colmod;
+                            bp.med(2*i-1).Color = [0 0 0];
+                            bp.med(2*i).Color = [0 0 0];
+                        end
+                        
+                        gc = gca;
+                        tt = reshape(1:size(allValues,2), [2, 0.5 * size(allValues,2)]);
+                        gc.YTick = mean(tt);
+                        gc.YTickLabel = num2str(uevent);
+                        gc.TickLength = 0.5 * gc.TickLength;
+                        xl = gc.XLim; yl = gc.YLim;
+                        tt = 0.5 * (tt(2,1:end-1) + tt(1,2:end));
+                        hold on
+                        for i = 1:length(tt)
+                            line(xl, [tt(i) tt(i)], 'Color', [0.5 0.5 0.5], 'LineStyle', ':');
+                        end
+                        hold off
+                        
+                        xlabel(xlab)
+                        ylabel('sampling event')
+                        
+                        % legend
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        
+                        % summary plots displaying model fit to size spectra data
+                    case 'N_at_size'
+                        
+                        Var = 'Ntot';
+                        
+                        coldat = [0 0 0];
+                        colmod = [0 1 0];
+                        
+                        plt = figure;
+                        plt.Units = 'inches';
+                        plt.Position = [0 0 12 12];
+                        
+                        % Model fit to polynomial coefficients representing data
+                        subplot(2,2,1)
+                        
+                        % Sorted standardised data
+                        subplot(2,2,1)
+                        x = Data.size.polyXvals;
+                        o = Data.size.sortOrder;
+                        ymod = modData.size.(['scaled_' Var]);
+                        ydat = Data.size.dataBinned.(['scaled_' Var]);
+                        ymod = ymod(o,:);
+                        ydat = ydat(o);
+                        x2d = repmat(x, [1 size(ymod, 2)]);
+                        
+                        scatter(x2d(:), ymod(:), 'Marker', '.', 'MarkerEdgeColor', colmod);
+                        hold on
+                        scatter(x, ydat, 'MarkerEdgeColor', coldat)
+                        hold off
+                        
+                        gc = gca;
+                        xl = gc.XLim; yl = gc.YLim;
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        
+                        ylabel('standardised N size spectra')
+                        
+                        
+                        % Sorted raw data
+                        subplot(2,2,3)
+                        ymod = modData.size.(Var);
+                        ydat = Data.size.dataBinned.(Var);
+                        [~,J] = sort(ydat);
+                        ymod = ymod(J,:);
+                        ydat = ydat(J);
+                        scatter(x2d(:), ymod(:), 'Marker', '.', 'MarkerEdgeColor', colmod);
+                        hold on
+                        scatter(x, ydat, 'MarkerEdgeColor', coldat)
+                        
+                        gc = gca;
+                        xl = gc.XLim; yl = gc.YLim;
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+                        text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        
+                        ylabel('size spectra (mmol N m^{-3})')
+                        
+                        
+                        % standardised variable vs size
+                        subplot(2,2,2)
+                        
+                        Size = Data.size.dataBinned.size;
+                        SizeClass = Data.size.dataBinned.sizeClass;
+                        value = Data.size.dataBinned.Ntot;
+                        value_scaled = Data.size.dataBinned.scaled_Ntot;
+                        
+                        usize = unique(Size);
+                        
+                        valueMod = modData.size.(Var);
+                        valueMod_scaled = modData.size.(['scaled_' Var]);
+                        
+                        semilogx(Size, value_scaled, '-o', ...
+                            'MarkerEdgeColor', coldat, 'MarkerFaceColor', coldat, ...
+                            'Color', coldat);
+                        hold on
+                        for i = 1:size(valueMod_scaled, 2)
+                            semilogx(Size(:), valueMod_scaled(:,i), '-o', ...
+                                'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod, ...
+                                'Color', colmod)
+                        end
+                        gc = gca;
+                        xl = gc.XLim;
+                        if xl(1) == Size(1), xl(1) = 0.5 * xl(1); end
+                        xl(2) = ceil(xl(2) / 100) * 100;
+                        gc.XLim = xl;
+                        yl = gc.YLim;
+                        
+                        xlabel('cell diameter (\mum)')
+                        ylabel('standardised N size spectra')
+                        
+                        % legend
+                        lxl = log10(xl);
+                        text(10^(lxl(2)-0.15*diff(lxl)), yl(2)-0.05*diff(yl), 'data')
+                        text(10^(lxl(2)-0.15*diff(lxl)), yl(2)-0.1*diff(yl), 'model')
+                        line([10^(lxl(2)-0.22*diff(lxl)), 10^(lxl(2)-0.17*diff(lxl))], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([10^(lxl(2)-0.22*diff(lxl)), 10^(lxl(2)-0.17*diff(lxl))], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        
+                        hold off
+                        
+                        
+                        % raw variable vs size
+                        subplot(2,2,4)
+                        
+                        semilogx(Size, value, '-o', ...
+                            'MarkerEdgeColor', coldat, 'MarkerFaceColor', coldat, ...
+                            'Color', coldat);
+                        hold on
+                        for i = 1:size(valueMod, 2)
+                            semilogx(Size(:), valueMod(:,i), '-o', ...
+                                'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod, ...
+                                'Color', colmod)
+                        end
+                        gc = gca;
+                        xl = gc.XLim;
+                        if xl(1) == Size(1), xl(1) = 0.5 * xl(1); end
+                        xl(2) = ceil(xl(2) / 100) * 100;
+                        gc.XLim = xl;
+                        yl = gc.YLim;
+                        
+                        %                 legend('data', 'model')
+                        
+                        xlabel('cell diameter (\mum)')
+                        ylabel('size spectra (mmol N m^{-3})')
+
+                        % legend
+                        lxl = log10(xl);
+                        text(10^(lxl(2)-0.15*diff(lxl)), yl(2)-0.05*diff(yl), 'data')
+                        text(10^(lxl(2)-0.15*diff(lxl)), yl(2)-0.1*diff(yl), 'model')
+                        line([10^(lxl(2)-0.22*diff(lxl)), 10^(lxl(2)-0.17*diff(lxl))], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
+                        line([10^(lxl(2)-0.22*diff(lxl)), 10^(lxl(2)-0.17*diff(lxl))], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
+                        
+                        hold off
+                        
+                end
+                
+        end
+        
+end
+
 end
 
 

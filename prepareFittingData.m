@@ -8,23 +8,39 @@ function Data = prepareFittingData(obsDir, varargin)
 
 nutrientObsFile = 'PS99_2_nutrients_rev.csv';
 
-dat_nut = readtable(fullfile(obsDir,nutrientObsFile));
+dat_nut = readtable(fullfile(obsDir,nutrientObsFile), 'Format', 'auto');
 date = split(dat_nut.Date, 'T');
 dat_nut.Date = date(:,1);
 dat_nut.Time = date(:,2);
 dat_nut = movevars(dat_nut, 'Time', 'After', 'Date');
-dat_nut.Year = year(dat_nut.Date); % this 'year' function apparently causes problems on some MatLab versions
-% dat_nut.Year = cellfun(@(x) str2double(x), ...
-%     cellfun(@(x) x(1:4), dat_nut.Date, 'UniformOutput', false));
+% dat_nut.Year = year(dat_nut.Date); % this 'year' function apparently causes problems on some MatLab versions
+dat_nut.Year = cellfun(@(x) str2double(x), ...
+    cellfun(@(x) x(1:4), dat_nut.Date, 'UniformOutput', false));
 dat_nut = movevars(dat_nut, 'Year', 'After', 'Time');
 dat_nut.Yearday = yearday(datenum(dat_nut.Date));
 dat_nut = movevars(dat_nut, 'Yearday', 'After', 'Year');
 % filter out data columns
-dat_nut = dat_nut(:,{'Year','Yearday','Event','Event_2','Latitude','Longitude','Depth','NO3_NO2_corrected','Flag_NO3_NO2_c'});
+% dat_nut = dat_nut(:,{'Year','Yearday','Event','Event_2','Latitude', ... 
+%     'Longitude','Depth','NO3_NO2_corrected','Flag_NO3_NO2_c'});
+dat_nut = dat_nut(:,{'Year','Yearday','Event','Event_2','Latitude', ... 
+    'Longitude','Depth','NO3_NO2_corrected','Flag_NO3_NO2_c', ... 
+    'PO4_corrected','Flag_PO4_c','Si_OH4_corrected','Flag_Si_OH4_c'});
+
 % remove rows flagged as (potentially) poor quality measurements
-dat_nut(dat_nut.Flag_NO3_NO2_c ~= 0,:) = [];
-dat_nut.Flag_NO3_NO2_c = [];
-dat_nut.Properties.VariableNames{'NO3_NO2_corrected'} = 'N';
+dat_nut.Properties.VariableNames(contains( ... 
+    dat_nut.Properties.VariableNames, 'corrected')) = {'N','P','Si'};
+dat_nut.Properties.VariableNames(contains( ... 
+    dat_nut.Properties.VariableNames, 'Flag')) = {'Flag_N','Flag_P','Flag_Si'};
+dat_nut.N(dat_nut.Flag_N ~= 0) = nan; dat_nut.Flag_N = [];
+dat_nut.P(dat_nut.Flag_P ~= 0) = nan; dat_nut.Flag_P = [];
+dat_nut.Si(dat_nut.Flag_Si ~= 0) = nan; dat_nut.Flag_Si = [];
+
+% convert from short to long format
+dat_nut = stack(dat_nut, {'N','P','Si'}, ... 
+    'IndexVariableName','Variable','NewDataVariableName','Value');
+dat_nut.Variable = cellstr(dat_nut.Variable);
+dat_nut(isnan(dat_nut.Value),:) = [];
+dat_nut.Type = repmat({'inorganic'}, [height(dat_nut) 1]);
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -32,7 +48,7 @@ dat_nut.Properties.VariableNames{'NO3_NO2_corrected'} = 'N';
 
 OMObsFile = 'copy_data_Engel_etal2019.csv';
 
-dat_OM = readtable(fullfile(obsDir,OMObsFile));
+dat_OM = readtable(fullfile(obsDir,OMObsFile), 'Format', 'auto');
 % The lat-long column entries are not formatted consistently across rows,
 % and also contain degree symbols and measurements both in decimal-degrees 
 % and degree-minutes. This needs fixed...
@@ -73,46 +89,76 @@ dat_OM.POC = dat_OM.POC ./ 12;
 % % Convert chl units from mu g / L to mu g / m^3
 % dat_OM.chl_a = dat_OM.chl_a * 1000;
 % dat_OM.Properties.VariableNames{'chl_a'} = 'Chl';
+% convert from short to long format
+dat_OM = stack(dat_OM, {'chl_a','POC','PON'}, ... 
+    'IndexVariableName','Variable','NewDataVariableName','Value');
+dat_OM.Variable = cellstr(dat_OM.Variable);
+dat_OM(isnan(dat_OM.Value),:) = [];
+dat_OM.Type = repmat({'organic'}, [height(dat_OM) 1]);
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 % Size spectra
 
+% load data
 sizeSpectraObsFile = 'S1-S4_spectra_Nbiomass.csv';
+dat_size = readtable(fullfile(obsDir, sizeSpectraObsFile), 'Format', 'auto');
 
-dat_size = readtable(fullfile(obsDir, sizeSpectraObsFile));
+% A selection of cell size -> N conversions are contained in this data.
+% Although these different conversions produce nitrogen size-spectra of
+% similar shape, there is some substantial variation in magnitudes
+% (especially at small and large cell sizes). So maybe we should
+% use the measured cell densities in our cost function rather than the
+% nitrogen densities. But use this script to return all of the various data...
+varNames = dat_size.Properties.VariableNames;
+varNames = varNames(contains(varNames, 'NperCell'));
+ne = length(varNames);
+NsizeEqs = cell(1,ne); % Store names of size -> nitrogen conversions
+for i = 1:ne
+    varSplit = strsplit(varNames{i}, '_');
+    NsizeEqs{i} = varSplit{2};
+end
 
-NsizeEqs = {'MDL','Moal','Montagnes','Verity'}; % 4 different cell size -> N conversions
-ne = length(NsizeEqs);
-ESDmin = 2; % min/max sizes to retain from the data
+% ESDmin = 2; % min/max sizes to retain from the data
+ESDmin = 1; % min/max sizes to retain from the data
 ESDmax = 200;
-% xl = [ESDmin ESDmax]; % plot axis limits
-yl = [1e-6 1e8];
+if ESDmin < min(dat_size.ESD), ESDmin = min(dat_size.ESD); end
+if ESDmax > max(dat_size.ESD), ESDmax = max(dat_size.ESD); end
 
-% Convert cell density to nitrogen density
-esdScale = mean(diff(log10(unique(dat_size.ESD)))); % log10 scale of ESD measurement intervals
-sf = 1e-6 .* 1/14;  % unit conversion factor: pg/L -> mmol/m^3
-dat_size.Ndensity = sf .* esdScale .* dat_size.cellDensity .* ... 
-    sum(dat_size{:,strcat('NperCell_', NsizeEqs)},2) ./ ne;
-dat_size.NdensitySD = sf .* esdScale ./ ne .* dat_size.cellDensitySD .* ... 
-    (sum(dat_size{:,strcat('NperCell_', NsizeEqs)} .^ 2,2)) .^ 0.5;
-% dat_size.Ndensity = sf .* dat_size.cellDensity .* ... 
-%     sum(dat_size{:,strcat('NperCell_', NsizeEqs)},2) ./ ne;
-% dat_size.NdensitySD = sf ./ ne .* dat_size.cellDensitySD .* ... 
-%     (sum(dat_size{:,strcat('NperCell_', NsizeEqs)} .^ 2,2)) .^ 0.5;
+% Convert units of original data into units used in model (keep all
+% elemental concentrations in mmol)
+dat_size.cellDensity = 1e3 * dat_size.cellDensity; % cells/L -> cells/m^3
+dat_size.cellDensitySD = 1e3 * dat_size.cellDensitySD; % cells/L -> cells/m^3
+dat_size.cellDensitySE = 1e3 * dat_size.cellDensitySE; % cells/L -> cells/m^3
+dat_size.cellDensityCImin = 1e3 * dat_size.cellDensityCImin; % cells/L -> cells/m^3
+dat_size.cellDensityCImax = 1e3 * dat_size.cellDensityCImax; % cells/L -> cells/m^3
+for i = 1:ne
+    % nitrogen per cell: pg N / cell -> mmol N / cell
+    dat_size.(['NperCell_' NsizeEqs{i}]) = ... 
+        (1/14) * 1e-9 * dat_size.(['NperCell_' NsizeEqs{i}]);
+end
+for i = 1:ne
+    % nitrogen density: mug N / L -> mmol N / m^3
+    dat_size.(['Ndensity_' NsizeEqs{i}]) = ... 
+        (1/14) * dat_size.(['Ndensity_' NsizeEqs{i}]);
+end
 
-% Remove unnecessaary variables
-% Dat_size = dat_size;
+% Take average values over the various size -> N conversions
+dat_size.NperCell = mean(dat_size{:,strcat('NperCell_', NsizeEqs)}, 2);
+dat_size.Ndensity = mean(dat_size{:,strcat('Ndensity_', NsizeEqs)}, 2);
+
+% Remove unnecessary variables and rows from data
 scenarios = unique(dat_size.scenario)'; % data collected from different cruises/years
-TrophicLevel = 'autotroph';
-dat_size = dat_size(strcmp(dat_size.trophicLevel,TrophicLevel) & ... 
-    dat_size.ESD >= ESDmin & dat_size.ESD <= ESDmax, ...
-    {'season','ESD','scenario','Ndensity'});
-% remove scenario S4 because it's from a winter cruise and the data has a different shape
-dat_size(strcmp(dat_size.scenario,scenarios(4)),:) = [];
-scenarios(4) = [];
 N = length(scenarios);
-cols = [[1 0 0]; [0 1 0]; [0 0 1]];
+TrophicLevel = 'autotroph'; % At present we're only modelling autotrophs
+keepRows = strcmp(dat_size.trophicLevel, TrophicLevel) & ... 
+    dat_size.ESD >= ESDmin & dat_size.ESD <= ESDmax;
+dat_size = dat_size(keepRows,:);
+keepVars = [{'scenario', 'season', 'regime', 'ESD', 'cellVolume', ...
+    'cellDensity', 'cellDensitySD'}, strcat('Ndensity_', NsizeEqs), 'Ndensity'];
+dat_size = dat_size(:,keepVars);
+
+cols = [[1 0 0]; [0 1 0]; [0 0 1]; [1 0 1]]; % plotting colours for different scenarios
 
 v = reshape(varargin, [2 0.5*length(varargin)]);
 
@@ -125,9 +171,11 @@ if ~isempty(v) && any(contains(v(1,:),'plotRawSizeSpectra')) && v{2,strcmp(v(1,:
         ii = strcmp(dat_size.scenario, scenarios(i));
         loglog(dat_size.ESD(ii), dat_size.Ndensity(ii), 'Color', cols(i,:))
     end
-    gc = gca; gc.YLim(1) = yl(1); gc = gca;
+    gc = gca;
+    gc.YLim(1) = 1e-6;
+    gc.YLim(2) = ceil(max(dat_size.Ndensity) / 100) * 100;
     xlabel('ESD (\mum)')
-    ylabel('Nitrogen density (mmol N m^{-3})')
+    ylabel('Nitrogen density (mmol N m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
     title('Size spectra data')
     for i = N:-1:1
         j = N-i+1;
@@ -141,7 +189,9 @@ end
 
 
 % Partition the size spectra measurements into size-class bins.
-% Find the across-scenario (log scale) mean nitrogen spectra (different scenarios may have different numbers of data points...)
+% Use the scenario 2 data as this is from 2017... This might (probably
+% should) change later...
+mean_scenarios = 2;
 allESD = unique(dat_size.ESD);
 allESDn = length(allESD);
 allESD = table((1:allESDn)', allESD); allESD.Properties.VariableNames = {'index','ESD'};
@@ -152,101 +202,109 @@ for i = 1:N
     dtt = innerjoin(allESD, dt);
     mat(:,i) = dtt.Ndensity;
 end
-dt = table(repmat({'null'}, [allESDn 1]), allESD.ESD, repmat({'mean'}, [allESDn 1]), ...
-    10 .^ nanmean(log10(mat), 2));
-dt.Properties.VariableNames = dat_size.Properties.VariableNames;
-dat_size = [dat_size; dt];
+% dt = table(repmat({'null'}, [allESDn 1]), allESD.ESD, repmat({'mean'}, [allESDn 1]), ...
+%     10 .^ nanmean(log10(mat(:,mean_scenarios)), 2));
+dat_size2 = table(allESD.ESD, nanmean(mat(:,mean_scenarios), 2)); % use this table of means to find size class intervals
+dat_size2.Properties.VariableNames = {'ESD', 'Ndensity'};
 
-ind_mean = strcmp(dat_size.scenario,'mean');
-ibin = partitionSizeSpectra(dat_size.Ndensity(ind_mean));
+ibin = partitionSizeSpectra(dat_size2.Ndensity);
 
-plotSizeClassBins = 0;
-if plotSizeClassBins
-    figure
-    loglog(dat_size.ESD(ind_mean), dat_size.Ndensity(ind_mean), 'Color', [0 0 0])
-    hold on
-    xlabel('ESD (\mum)')
-    ylabel('Nitrgen (mmol N m^{-3})')
-%     ylabel('Nitrgen (\mug L^{-1})')
-    title({'mean size spectra:', 'intervals bounded by turning points'})
-    gc = gca; yt = gc.YLim;
-    for i = 1:length(ibin)
-        xt = allESD.ESD(ibin(i));
-        line([xt xt], yt, 'Color', [0 0 0], 'LineStyle', ':')
-    end    
-    hold off
+plotSizeClassBins = false;
+switch plotSizeClassBins
+    case true
+        figure
+        loglog(dat_size2.ESD, dat_size2.Ndensity, 'Color', [0 0 0])
+        hold on
+        xlabel('ESD (\mum)')
+        ylabel('Nitrogen density (mmol N m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
+        title({'size spectra:', 'intervals bounded by turning points'})
+        gc = gca;
+        gc.YLim(1) = 1e-6;
+        gc.YLim(2) = ceil(max(dat_size2.Ndensity / 100)) * 100;
+        yt = gc.YLim;
+        for i = 1:length(ibin)
+            xt = allESD.ESD(ibin(i));
+            line([xt xt], yt, 'Color', [0 0 0], 'LineStyle', ':')
+        end
+        hold off
 end
 
 
 
 % Reduce number of size-class bins by incrementally removing the narrowest bins
 nbins = length(ibin) - 1;
-bins = cell(nbins - 1, 1);
+bins = cell(nbins - 2, 1);
 bins{1} = ibin;
 nbd = diff(ibin); % number of data points within each bin
-[~, o] = sort(nbd);
-while nbins > 2
-    rb = o(1); % narrowest bin -- remove 1 of its boundaries
+[nbd_sort, o] = sort(nbd);
+while nbins > 3
+    rb = o(find(nbd_sort == nbd_sort(1), 1, 'last')); % narrowest bin -- remove 1 of its boundaries, from large end of spectrum if tied
+%     rb = o(1); % narrowest bin -- remove 1 of its boundaries
     if rb == 1, removeBin = 2; end
     if rb == nbins, removeBin = nbins - 1; end
     if rb > 1 && rb < nbins
-        trb = [nbd(rb - 1) nbd(rb + 1)];
+        trb = [nbd(rb - 1) nbd(rb + 1)]; % number of data points in adjacent bins
         removeBin = rb + (find(trb == min(trb)) - 1);
     end
     ibin(removeBin) = [];
     nbins = length(ibin) - 1;
-    bins{length(bins)-nbins+2} = ibin;
+    bins{length(bins)-nbins+3} = ibin;
     nbd = diff(ibin);
-    [~, o] = sort(nbd);
+    nbd(1) = inf; nbd(end) = inf;
+    [nbd_sort, o] = sort(nbd);
 end
 
-
-plotSizeClassBins = 0;
-if plotSizeClassBins
-    figure
-    bp = length(bins);
-    nr = ceil(sqrt(bp));
-    nc = ceil(bp / nr);
-    ind_mean = strcmp(dat_size.scenario, 'mean');
-    for i = 1:bp
-        subplot(nr, nc, i)
-        loglog(allESD.ESD, dat_size.Ndensity(ind_mean), 'Color', [0 0 0])
-        hold on
-        vl = bins{i};
-        nvl = length(vl);
-        xlabel('ESD (\mum)')
-        ylabel('Nitrogen (mmol N m^{-3})')
-        title([num2str(nvl-1) ' intervals'])
-        gc = gca; yl = gc.YLim;
-        for j = 1:length(vl)
-            line([allESD.ESD(vl(j)) allESD.ESD(vl(j))], yl, 'LineStyle', ':', 'Color', [0 0 0])
+plotSizeClassBins = false;
+switch plotSizeClassBins
+    case true
+        figure
+        bp = length(bins);
+        nr = ceil(sqrt(bp));
+        nc = ceil(bp / nr);
+        for i = 1:bp
+            subplot(nr, nc, i)
+            loglog(allESD.ESD, dat_size2.Ndensity, 'Color', [0 0 0])
+            hold on
+            vl = bins{i};
+            nvl = length(vl);
+            xlabel('ESD (\mum)')
+            ylabel('Nitrogen density', 'Interpreter', 'latex')
+            title([num2str(nvl-1) ' intervals'])
+            gc = gca;
+            gc.YLim(1) = 1e-6;
+            gc.YLim(2) = ceil(max(dat_size2.Ndensity) / 100) * 100;
+            yl = gc.YLim;
+            for j = 1:length(vl)
+                line([allESD.ESD(vl(j)) allESD.ESD(vl(j))], yl, 'LineStyle', ':', 'Color', [0 0 0])
+            end
+            hold off
         end
-        hold off
-    end
 end
+
+
+
 
 % Choose a number of intervals, by eye for now, and plot within-interval
 % distributions. (Then repeat for all intervals to choose between them...)
-bns = bins{6};
-nb = length(bns) - 1; % number of size-class bins
+% 7 intervals looks good...
+nb = 7; % number of size-class bins
+bns = bins{-1 + cellfun('length', bins) == nb};
 
 if ~isempty(v) && any(contains(v(1,:),'plotSizeClassBins')) && v{2,strcmp(v(1,:), 'plotSizeClassBins')}
     figure
-    ind_mean = strcmp(dat_size.scenario, 'mean');
-    loglog(allESD.ESD, dat_size.Ndensity(ind_mean), 'Color', [0 0 0])
+    loglog(allESD.ESD, dat_size2.Ndensity, 'Color', [0 0 0])
     hold on
-    gc = gca; yl = gc.YLim;
+    gc = gca;
+    yl = gc.YLim;
     for i = 1:nb+1
         line([allESD.ESD(bns(i)) allESD.ESD(bns(i))], yl, 'Color', [0 0 0], 'LineStyle', ':')
     end
     xlabel('ESD (\mum)')
-    ylabel('Nitrogen (mmol N m^{-3})')
+    ylabel('Nitrogen density (mmol N m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
     title({'mean size spectra', 'intervals bounded by selected turning points'})
     hold off
 end
 
-% Remove the across-scenario mean data
-dat_size(strcmp(dat_size.scenario,'mean'),:) = [];
 % Group the data by size-class bin
 dat_size.sizeClass = nan(height(dat_size), 1);
 for i = 1:nb
@@ -259,13 +317,14 @@ for i = 1:nb
 end
 
 Sizes = allESD.ESD(bns(1:nb)) + 0.5 * diff(allESD.ESD(bns)); % midpoints within each interval
-Sizes = round(Sizes * 2) / 2; % round to 0.5
-K = length(Sizes);
+% Sizes = round(Sizes * 2) / 2; % round to 0.5
+Sizes = round(Sizes * 4) / 4; % round to 0.25
+% K = length(Sizes);
 dat_size.size = Sizes(dat_size.sizeClass);
 dat_size.ndat = nan(height(dat_size), 1); % number of data points per size-class bin
 for i = 1:N
     ind0 = strcmp(dat_size.scenario, scenarios{i});
-    for j = 1:K
+    for j = 1:nb
         ind = ind0 & dat_size.sizeClass == j;
         ndat = sum(ind);
         dat_size.ndat(ind) = repmat(ndat, [ndat 1]);
@@ -283,6 +342,7 @@ if ~isempty(v) && any(contains(v(1,:),'plotRawSpectraAndBins')) && v{2,strcmp(v(
     end
     gc = gca; 
     if gc.YLim(1) < 1e-6, gc.YLim(1) = 1e-6; end
+    gc.YLim(2) = ceil(max(dat_size.Ndensity) / 100) * 100;
     yl = gc.YLim;    
     for i = 1:nb+1
         line([allESD.ESD(bns(i)) allESD.ESD(bns(i))], yl, 'Color', [0 0 0], 'LineStyle', ':')
@@ -296,26 +356,35 @@ if ~isempty(v) && any(contains(v(1,:),'plotRawSpectraAndBins')) && v{2,strcmp(v(
         line([gc.XLim(1) * (1 + 0.1 * 10) gc.XLim(1) * (1 + 0.2 * 10)], [yt yt], 'Color', cols(i,:))
     end
     xlabel('ESD (\mum)')
-    ylabel('Nitrogen (mmol N m^{-3})')
+    ylabel('Nitrogen density (mmol N m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
     title({'size spectra data', 'intervals bounded by selected turning points'})
     hold off
 end
 
-% Model output will comprise nitrogen density estimates for each size-class
-% bin, which should be equivalent to summing the data within each bin.
-% Thus we can simply multiply the data within each bin by the number of data
-% points in that bin, to get data distributions for each bin.
-% These can then be scaled for use in a cost function.
 
-dat_size.NdensityTot = nan(height(dat_size), 1);
+dat_size.Celltot = nan(height(dat_size), 1); % integrate cell densities to find total cell number within each size class
+dat_size.Ntot = nan(height(dat_size), 1); % integrate nitrogen densities to find nitrogen mass within each size class
+
 for i = 1:N
     ind0 = strcmp(dat_size.scenario, scenarios(i));
     for j = 1:nb
         ind = ind0 & dat_size.sizeClass == j;
         n = unique(dat_size.ndat(ind));
-        dat_size.NdensityTot(ind) = n .* dat_size.Ndensity(ind);
+        x = log10(dat_size.ESD(ind));
+        xd = diff(x);
+        
+        y = dat_size.Ndensity(ind);
+        ys = y(1:end-1) + y(2:end);
+        Ntot = sum(0.5 * xd .* ys);
+        dat_size.Ntot(ind) = repmat(Ntot, [n, 1]);
+        
+        y = dat_size.cellDensity(ind);
+        ys = y(1:end-1) + y(2:end);
+        Celltot = sum(0.5 * xd .* ys);
+        dat_size.Celltot(ind) = repmat(Celltot, [n, 1]);
     end
 end
+
 
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -346,55 +415,45 @@ dat_OM.EventLabel = strrep(dat_OM.EventLabel, '/', '_');
 dat_OM.EventLabel = strrep(dat_OM.EventLabel, '-', '_');
 
 % Match dates & depths to scenarios in size data
-scenarioTimes.S1.date = datetime(2016,7,16);
-scenarioTimes.S2.date = datetime(2017,8,19);
-scenarioTimes.S3.date = datetime(2018,8,3);
-scenarioTimes.S1.depth = [10 30];
-scenarioTimes.S2.depth = [10 40];
-scenarioTimes.S3.depth = [5 43];
+scenarioInfo.S1.dateFirst = datetime(2016,6,23);
+scenarioInfo.S1.dateLast = datetime(2016,7,16);
+scenarioInfo.S2.dateFirst = datetime(2017,7,23);
+scenarioInfo.S2.dateLast = datetime(2017,8,19);
+scenarioInfo.S3.dateFirst = datetime(2018,7,10);
+scenarioInfo.S3.dateLast = datetime(2018,8,3);
+scenarioInfo.S4.dateFirst = datetime(2018,9,16);
+scenarioInfo.S4.dateLast = datetime(2018,10,12);
+scenarioInfo.S1.depth = [10 30];
+scenarioInfo.S2.depth = [10 40];
+scenarioInfo.S3.depth = [5 43];
+scenarioInfo.S4.depth = [5 34];
+
 dat_size.Year = nan(height(dat_size), 1);
-dat_size.Yearday = nan(height(dat_size), 1);
+% dat_size.Yearday = nan(height(dat_size), 1);
 dat_size.DepthMin = nan(height(dat_size), 1);
 dat_size.DepthMax = nan(height(dat_size), 1);
-fields = fieldnames(scenarioTimes);
+fields = fieldnames(scenarioInfo);
 for i = 1:length(fields)
     ind = strcmp(dat_size.scenario,fields{i});
     indn = sum(ind);
-    [yr, ~] = datevec(scenarioTimes.(fields{i}).date);
-    yrDay = yearday(datenum(scenarioTimes.(fields{i}).date));
+    [yr, ~] = datevec(scenarioInfo.(fields{i}).dateFirst);
+    yrDayFirst = yearday(datenum(scenarioInfo.(fields{i}).dateFirst));
+    yrDayLast = yearday(datenum(scenarioInfo.(fields{i}).dateLast));
     dat_size.Year(ind) = repmat(yr, [indn 1]);
-    dat_size.Yearday(ind) = repmat(yrDay, [indn 1]);    
-    dat_size.DepthMin(ind) = scenarioTimes.(fields{i}).depth(1);
-    dat_size.DepthMax(ind) = scenarioTimes.(fields{i}).depth(2);    
+    dat_size.YeardayFirst(ind) = repmat(yrDayFirst, [indn 1]);    
+    dat_size.YeardayLast(ind) = repmat(yrDayLast, [indn 1]);    
+    dat_size.DepthMin(ind) = scenarioInfo.(fields{i}).depth(1);
+    dat_size.DepthMax(ind) = scenarioInfo.(fields{i}).depth(2);    
 end
 
-% dat_size = removevars(dat_size, {'season', 'scenario', 'ESD', 'sizeClass'});
-% dat_size = removevars(dat_size, {'season', 'scenario', 'ESD', 'sizeClass', 'Ndensity', 'logNdensityTot', 'mu', 'sig', 'resid'});
-% dat_size = removevars(dat_size, {'season', 'scenario', 'ESD', 'sizeClass', 'Ndensity'});
-dat_size = movevars(dat_size, {'Year', 'Yearday'}, 'Before', 'season');
-dat_size = movevars(dat_size, {'scenario'}, 'Before', 'Year');
-dat_size = movevars(dat_size, {'DepthMin', 'DepthMax'}, 'After', 'season');
-dat_size = movevars(dat_size, {'Ndensity'}, 'Before', 'NdensityTot');
-% dat_size = movevars(dat_size, {'Year', 'Yearday', 'DepthMin', 'DepthMax'}, 'Before', 'size');
-dat_size.Properties.VariableNames{'NdensityTot'} = 'N_at_size'; % rename the size data measurement variable
+dat_size = movevars(dat_size, {'Year', 'YeardayFirst', 'YeardayLast'}, 'Before', 'season');
+dat_size = movevars(dat_size, {'DepthMin', 'DepthMax'}, 'After', 'regime');
 
-% Convert tables to long-form in the measurement variables, then merge
-dat_OM = stack(dat_OM, {'chl_a','POC','PON'}, ... 
-    'IndexVariableName','Variable','NewDataVariableName','Value');
-dat_nut = stack(dat_nut, 'N', ... 
-    'IndexVariableName','Variable','NewDataVariableName','Value');
-dat_size = stack(dat_size, 'N_at_size', ... 
-    'IndexVariableName','Variable','NewDataVariableName','Value');
+% Merge nutrient data (inorganic & organic)
 dat = [dat_nut; dat_OM];
-
-% MOVE THIS OUTSIDE THE FUNCTION
-% % Remove samples from below the maximum modelled depth
-% dat = dat(dat.Depth < -min(FixedParams.z),:);
-% dat_size = dat_size(dat_size.DepthMin < -min(FixedParams.z),:);
 
 % Remove NaNs & rows with non-positive measures
 dat(dat.Value <= 0 | isnan(dat.Value),:) = [];
-dat_size(dat_size.Value <= 0 | isnan(dat_size.Value),:) = [];
 
 % Index each unique sampling event
 EventLabel = unique(dat.EventLabel, 'stable');
@@ -402,14 +461,26 @@ Event = (1:length(EventLabel))';
 events = table(Event, EventLabel);
 dat = join(dat, events);
 
+
+% As nitrogen is the only modelled inorganic nutrient (this may change in 
+% future), omit measures of other nutrients.
+remove = strcmp(dat.Type, 'inorganic') & ~strcmp(dat.Variable, 'N');
+dat(remove,:) = [];
+
 % Store fitting data as a struct
 scalarData = table2struct(dat, 'ToScalar', true);
 scalarData.Variable = cellstr(scalarData.Variable);
 scalarData.nSamples = size(scalarData.Value,1);
 scalarData.nEvents = length(unique(scalarData.Event));
 sizeData = table2struct(dat_size, 'ToScalar', true);
-sizeData.Variable = cellstr(sizeData.Variable);
-sizeData.nSamples = size(sizeData.Value,1);
+sizeData.nSamples = size(sizeData.Ndensity,1);
+
+% Include a reduced size spectra data set containing only the binned values
+sizeDataBinned = unique(dat_size(:,{'scenario', 'Year', 'YeardayFirst', ... 
+    'YeardayLast', 'season', 'regime', 'DepthMin', 'DepthMax', 'size', ... 
+    'sizeClass', 'Ntot'}));
+sizeDataBinned = table2struct(sizeDataBinned, 'ToScalar', true);
+sizeData.dataBinned = sizeDataBinned;
 
 Data.scalar = scalarData;
 Data.size = sizeData;
@@ -424,13 +495,6 @@ end
 %~~~~~~~~~~
 % Functions
 %~~~~~~~~~~
-
-% function y = nanunique(x)
-%   y = unique(x);
-%   if any(isnan(y))
-%     y(isnan(y)) = []; % remove all nans
-%   end
-% end
 
 function y = partitionSizeSpectra(x)
     % uses stationary points to partition size spectra vectors into size-class
@@ -451,45 +515,4 @@ function y = partitionSizeSpectra(x)
         end
     end
 end
-
-% function y = movAv(x,n)
-%     % moving average to smooth data to reduce number of size-class 
-%     % intervals found with partitionSizeSpectra.
-%     % x = data to smooth
-%     % n = number of points either side of focal data point
-%     N = length(x);
-%     y = nan(N,1);
-%     y(1) = x(1); y(N) = x(N);
-%     span = 2 * n + 1;
-%     Ind = (n+1):(N-n);
-%     mat = nan(length(Ind),span);
-%     v = -n:n;
-%     for i = 1:span
-%         mat(:,i) = x(Ind + v(i));
-%     end
-%     av = sum(mat, 2) ./ span;
-%     y(Ind) = av;
-%     % edge points
-%     for i = n:-1:2
-%         nn = i - 1;
-%         v = -nn:nn;
-%         span = 2 * nn + 1;
-%         av = sum(x(i + v)) ./ span;
-%         y(i) = av;
-%     end
-%     j = (N-n+1):(N-1);
-%     for i = 1:n-1
-%         nn = n - i;
-%         v = -nn:nn;
-%         span = 2 * nn + 1;
-%         av = sum(x(j(i) + v)) / span;
-%         y(j(i)) = av;
-%     end
-% end
-% 
-% function y = rnormTruncated(n,mu,sig,a,b)
-%     pa = normcdf(a,mu,sig);
-%     y = norminv(pa + rand(n,1) .* (normcdf(b,mu,sig) - pa)) .* sig + mu;
-% end
-
 

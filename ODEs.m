@@ -15,19 +15,23 @@ zoo = fixedParams.zooplankton;
 
 %% INITIAL CONDITIONS
 
-v_in_exp = exp(v_in); % exponentiate to natural scale
+% v_in_exp = exp(v_in); % exponentiate to natural scale
 
 % Inorganic nitrogen
-N = v_in_exp(fixedParams.IN_index)';
+% N = v_in_exp(fixedParams.IN_index)';
+N = v_in(fixedParams.IN_index)';
 
 % Plankton
-PP = reshape(v_in_exp(fixedParams.PP_index), [nPP_size nz nPP_nut]); % phytoplankton (all nutrients)
+% PP = reshape(v_in_exp(fixedParams.PP_index), [nPP_size nz nPP_nut]); % phytoplankton (all nutrients)
+PP = reshape(v_in(fixedParams.PP_index), [nPP_size nz nPP_nut]); % phytoplankton (all nutrients)
 P_C = PP(:,:,fixedParams.PP_C_index);
-Z_C = v_in_exp(fixedParams.ZP_index)'; % zooplankton (carbon)
+% Z_C = v_in_exp(fixedParams.ZP_index)'; % zooplankton (carbon)
+Z_C = v_in(fixedParams.ZP_index)'; % zooplankton (carbon)
 B_C = [P_C; Z_C]; % all planktonic carbon
 
 % Organic matter
-OM =reshape(v_in_exp(fixedParams.OM_index), [nOM_type nz nOM_nut]);
+% OM =reshape(v_in_exp(fixedParams.OM_index), [nOM_type nz nOM_nut]);
+OM =reshape(v_in(fixedParams.OM_index), [nOM_type nz nOM_nut]);
 OM_C = OM(:,:,fixedParams.OM_C_index); % DOC and POC
 
 
@@ -82,8 +86,9 @@ B_C_mortality = params.m .* B_C; % linear mortality
 zeros_size_nz = zeros(nPP_size, nz);
 
 % Nutrient uptake
-V_N = params.Vmax_QC ./ (1 + params.Vmax_QC ./ (params.aN_QC .* N)) .* ... 
-    gammaT .* Qstat; % nitrogen uptake rate (mmol N / mmol C / day)
+V_N = MichaelisMenton(params.Vmax_QC, params.kN, N) .* gammaT .* Qstat;
+
+% V_N = params.Vmax_QC ./ (1 + params.Vmax_QC ./ (params.aN_QC .* N)) .* gammaT .* Qstat; % nitrogen uptake rate (mmol N / mmol C / day)
 N_uptake = V_N .* P_C; % mmol N / m^3 / day
 N_uptake_losses = sum(N_uptake);
 
@@ -109,8 +114,11 @@ end
 F = sum(B_C); % total prey carbon
 BC2 = B_C .^ 2;
 Phi = BC2 ./ sum(BC2); % prey preference
-G = (params.Gmax .* gammaT .* F ./ (params.k_G + F) .* ... 
-    (1-exp(params.Lambda .* F))) .* Phi; % grazing rate (1 / day)
+G = (MichaelisMenton(params.Gmax, params.k_G, F) .* ... 
+    gammaT .* (1-exp(params.Lambda .* F))) .* Phi;  % grazing rate (1 / day)
+
+% G = (params.Gmax .* gammaT .* F ./ (params.k_G + F) .* ... 
+%     (1-exp(params.Lambda .* F))) .* Phi; % grazing rate (1 / day)
 
 predation_losses_C = G .* Z_C; % mmol C / m^3 / day
 predation_gains_C = [zeros_size_nz; ... 
@@ -194,8 +202,21 @@ fluxN = OM(:,:,fixedParams.OM_N_index) ./ OM_C .* fluxC_ + SOM_N;
 fluxC = fluxC_ + SOM_C;
 dOMdt = cat(3, fluxC, fluxN);
 
-% dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)];
-dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)] ./ v_in_exp; % dividing by initial values returns derivatives of log-scale variables [d/dt(log(x)) = 1/x d/dt(x)]
+% dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)]; % rate of change, natural scale
+
+% % Adjust rates if natural-scale variables become negative. I don't like
+% % this method ... want a better way...
+% approxNewVal = v_in_exp + t * dvdt;
+% negTest = approxNewVal < 0;
+% if any(negTest)
+%     dvdt(negTest) = -v_in_exp(negTest) ./ t; % this sets updated value to zero instead of negative    
+% end
+% dvdt = dvdt ./ v_in_exp; % dividing by initial values returns derivatives of log-scale variables [d/dt(log(x)) = 1/x d/dt(x)]
+
+dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)];
+% dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)] ./ v_in_exp; % dividing by initial values returns derivatives of log-scale variables [d/dt(log(x)) = 1/x d/dt(x)]
+
+
 
 
 %% AUXILIARY OUTPUTS
@@ -239,4 +260,11 @@ function v = sinking(u,s,w)
 %         w = depth layer widths, size(w)=[nz 1]
 v = ((-s) ./ w) .* diff([zeros(1,size(u,2)); u]);
 end
+
+function v = MichaelisMenton(m,k,u)
+% Uptake rate of u, given maximum m and half saturation k
+u(u<0) = 0; % this is needed for robustness... there shouldn't be any negatives
+v = m .* u ./ (u + k);
+end
+
 
