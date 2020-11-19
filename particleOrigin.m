@@ -77,7 +77,7 @@ end
 % Associate each sample with Arctic or Atlantic waters, or both...
 waterMass = zeros(Data.nEvents,2); % for each event, count particles originating from Atlantic or Arctic
 for i = 1:Data.nEvents
-    p = Data.EventTraj(i,:); % particles used for event i
+    p = Data.EventTraj(i,:) > 0; % particles used for event i
     x = Forc.waterMass(p);
     waterMass(i,1) = sum(strcmp(x,'Atlantic'));
     waterMass(i,2) = sum(strcmp(x,'Arctic'));

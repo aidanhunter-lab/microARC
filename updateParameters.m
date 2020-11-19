@@ -23,12 +23,24 @@ if ~isempty(varargin)
                     Params.(Name) = 1 ./ (1 - volumeDependent(param_a, param_b, V_PP));
                 end
             end
+            
+            if strcmp(pn, 'beta1') || strcmp(pn, 'beta2') || strcmp(pn, 'beta3')
+                expBeta3 = exp(log10(V_PP) - Params.beta3);
+                Params.beta = Params.beta1 ./ (1 + expBeta3) .* (1 + Params.beta2 .* expBeta3);
+                Params.beta(FixedParams.nPP_size+1) = Params.beta(FixedParams.nPP_size); % assume beta for zooplankton is equivalent to largest phytoplankton size class
+            end
+            
         end
         
         if any(strcmp('Qmin_QC_a', parnames)) || any(strcmp('Qmin_QC_b', parnames)) || ...
                 any(strcmp('Qmax_delQ_a', parnames)) || any(strcmp('Qmax_delQ_b', parnames))
             Params.Qmax_QC = Params.Qmin_QC ./ (1 - 1 ./ Params.Qmax_delQ);
             Params.delQ_QC = Params.Qmax_QC - Params.Qmin_QC;
+        end
+        
+        if any(strcmp('Vmax_QC_a', parnames)) || any(strcmp('Vmax_QC_b', parnames)) || ...
+                any(strcmp('aN_QC_a', parnames)) || any(strcmp('aN_QC_b', parnames))
+            Params.kN = Params.Vmax_QC ./ Params.aN_QC;
         end
         
         if any(strcmp('rDOC', parnames)), Params.rOM(FixedParams.DOM_index,1,FixedParams.OM_C_index) = Params.rDOC; end
@@ -77,6 +89,14 @@ if ~isempty(varargin)
                     else
                         Params.(Name) = 1 ./ (1 - volumeDependent(param_a, param_b, V_PP));
                     end
+                    
+                    if strcmp(name, 'beta1') || strcmp(name, 'beta2') || strcmp(name, 'beta3')
+                        expBeta3 = exp(log10(V_PP) - Params.beta3);
+                        Params.beta = Params.beta1 ./ (1 + expBeta3) .* (1 + Params.beta2 .* expBeta3);
+                        Params.beta(FixedParams.nPP_size+1) = Params.beta(FixedParams.nPP_size); % assume beta for zooplankton is equivalent to largest phytoplankton size class
+                    end
+
+                    
                 end
             end
         end
@@ -88,6 +108,11 @@ if ~isempty(varargin)
             Params.delQ_QC = Params.Qmax_QC - Params.Qmin_QC;
         end
         
+        if any(strcmp('Vmax_QC_a', parnames)) || any(strcmp('Vmax_QC_b', parnames)) || ...
+                any(strcmp('aN_QC_a', parnames)) || any(strcmp('aN_QC_b', parnames))
+            Params.kN = Params.Vmax_QC ./ Params.aN_QC;
+        end
+
         if any(strcmp('rDOC', varargin)), Params.rOM(FixedParams.DOM_index,1,FixedParams.OM_C_index) = Params.rDOC; end        
         if any(strcmp('rDON', varargin)), Params.rOM(FixedParams.DOM_index,1,FixedParams.OM_N_index) = Params.rDON; end        
         if any(strcmp('rPOC', varargin)), Params.rOM(FixedParams.POM_index,1,FixedParams.OM_C_index) = Params.rPOC; end        
