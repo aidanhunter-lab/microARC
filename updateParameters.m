@@ -9,7 +9,7 @@ if ~isempty(varargin)
         npars = length(parnames);
         V_PP = FixedParams.PPsize;
         for i = 1:npars
-            pn = parnames{i};            
+            pn = parnames{i};
             Params.(pn) = newvals(i); % update scalars
             % update size-dependent parameters - constructed from scalars
             % suffixed with _a and _b
@@ -17,16 +17,22 @@ if ~isempty(varargin)
                 Name = pn(1:end-2);
                 param_a = Params.([Name '_a']);
                 param_b = Params.([Name '_b']);
-                if ~any(strcmp(Name, {'Qmax_delQ'}))
-                    Params.(Name) = volumeDependent(param_a, param_b, V_PP);
+                if ~(any(strcmp(Name, {'Qmax_delQ'})) || any(strcmp(Name, {'wp'})))
+                    Params.(Name) = powerFunction(param_a, param_b, V_PP);
                 else
-                    Params.(Name) = 1 ./ (1 - volumeDependent(param_a, param_b, V_PP));
+                    if any(strcmp(Name, {'wp'}))
+                        Params.(Name) = powerFunction(param_a, param_b, V_PP, ...
+                            'UpperBound', FixedParams.maxSinkSpeed, 'Transpose', true);
+                    end
+                    if any(strcmp(Name, {'Qmax_delQ'}))
+                        Params.(Name) = 1 ./ (1 - powerFunction(param_a, param_b, V_PP));
+                    end
                 end
             end
             
             if strcmp(pn, 'beta1') || strcmp(pn, 'beta2') || strcmp(pn, 'beta3')
-                expBeta3 = exp(log10(V_PP) - Params.beta3);
-                Params.beta = Params.beta1 ./ (1 + expBeta3) .* (1 + Params.beta2 .* expBeta3);
+                Params.beta = doubleLogisticFunction(Params.beta1, Params.beta2, ...
+                    Params.beta3, log10(V_PP));
                 Params.beta(FixedParams.nPP_size+1) = Params.beta(FixedParams.nPP_size); % assume beta for zooplankton is equivalent to largest phytoplankton size class
             end
             
@@ -47,12 +53,9 @@ if ~isempty(varargin)
         if any(strcmp('rDON', parnames)), Params.rOM(FixedParams.DOM_index,1,FixedParams.OM_N_index) = Params.rDON; end
         if any(strcmp('rPOC', parnames)), Params.rOM(FixedParams.POM_index,1,FixedParams.OM_C_index) = Params.rPOC; end
         if any(strcmp('rPON', parnames)), Params.rOM(FixedParams.POM_index,1,FixedParams.OM_N_index) = Params.rPON; end
-
-        if any(strcmp('wk', parnames))
-            % wk probably shouldn't be numerically optimised because it's
-            % related to the maximum permissible integration time step
-            Params.wk = [0 Params.wk];
-        end
+        
+        if any(strcmp('wDOM', parnames)), Params.wk(FixedParams.DOM_index) = Params.wDOM; end
+        if any(strcmp('wPOM', parnames)), Params.wk(FixedParams.POM_index) = Params.wPOM; end
         
     else % if new params are passed as name-values pairs
         
@@ -84,19 +87,23 @@ if ~isempty(varargin)
                     Name = name(1:length(name)-2);
                     param_a = Params.([Name '_a']);
                     param_b = Params.([Name '_b']);
-                    if ~any(strcmp(Name, {'Qmax_delQ'}))
-                        Params.(Name) = volumeDependent(param_a, param_b, V_PP);
+                    if ~(any(strcmp(Name, {'Qmax_delQ'})) || any(strcmp(Name, {'wp'})))
+                        Params.(Name) = powerFunction(param_a, param_b, V_PP);
                     else
-                        Params.(Name) = 1 ./ (1 - volumeDependent(param_a, param_b, V_PP));
+                        if any(strcmp(Name, {'wp'}))
+                            Params.(Name) = powerFunction(param_a, param_b, V_PP, ...
+                                'UpperBound', FixedParams.maxSinkSpeed, 'Transpose', true);
+                        end
+                        if any(strcmp(Name, {'Qmax_delQ'}))
+                            Params.(Name) = 1 ./ (1 - powerFunction(param_a, param_b, V_PP));
+                        end
                     end
                     
                     if strcmp(name, 'beta1') || strcmp(name, 'beta2') || strcmp(name, 'beta3')
-                        expBeta3 = exp(log10(V_PP) - Params.beta3);
-                        Params.beta = Params.beta1 ./ (1 + expBeta3) .* (1 + Params.beta2 .* expBeta3);
+                        Params.beta = doubleLogisticFunction(Params.beta1, Params.beta2, ...
+                            Params.beta3, log10(V_PP)); % flexible 3-parameter double logistic function
                         Params.beta(FixedParams.nPP_size+1) = Params.beta(FixedParams.nPP_size); % assume beta for zooplankton is equivalent to largest phytoplankton size class
                     end
-
-                    
                 end
             end
         end
@@ -108,25 +115,38 @@ if ~isempty(varargin)
             Params.delQ_QC = Params.Qmax_QC - Params.Qmin_QC;
         end
         
-        if any(strcmp('Vmax_QC_a', parnames)) || any(strcmp('Vmax_QC_b', parnames)) || ...
-                any(strcmp('aN_QC_a', parnames)) || any(strcmp('aN_QC_b', parnames))
+        if any(strcmp('Vmax_QC_a', varargin)) || any(strcmp('Vmax_QC_b', varargin)) || ...
+                any(strcmp('aN_QC_a', varargin)) || any(strcmp('aN_QC_b', varargin))
             Params.kN = Params.Vmax_QC ./ Params.aN_QC;
         end
-
-        if any(strcmp('rDOC', varargin)), Params.rOM(FixedParams.DOM_index,1,FixedParams.OM_C_index) = Params.rDOC; end        
-        if any(strcmp('rDON', varargin)), Params.rOM(FixedParams.DOM_index,1,FixedParams.OM_N_index) = Params.rDON; end        
-        if any(strcmp('rPOC', varargin)), Params.rOM(FixedParams.POM_index,1,FixedParams.OM_C_index) = Params.rPOC; end        
-        if any(strcmp('rPON', varargin)), Params.rOM(FixedParams.POM_index,1,FixedParams.OM_N_index) = Params.rPON; end        
         
-        if any(strcmp('wk', varargin))
-            % wk probably shouldn't be numerically optimised because it's
-            % related to the maximum permissible integration time step
-            Params.wk = [0 Params.wk];
-        end
+        if any(strcmp('rDOC', varargin)), Params.rOM(FixedParams.DOM_index,1,FixedParams.OM_C_index) = Params.rDOC; end
+        if any(strcmp('rDON', varargin)), Params.rOM(FixedParams.DOM_index,1,FixedParams.OM_N_index) = Params.rDON; end
+        if any(strcmp('rPOC', varargin)), Params.rOM(FixedParams.POM_index,1,FixedParams.OM_C_index) = Params.rPOC; end
+        if any(strcmp('rPON', varargin)), Params.rOM(FixedParams.POM_index,1,FixedParams.OM_N_index) = Params.rPON; end
+        
+        if any(strcmp('wDOM', varargin)), Params.wk(FixedParams.DOM_index) = Params.wDOM; end
+        if any(strcmp('wPOM', varargin)), Params.wk(FixedParams.POM_index) = Params.wPOM; end
         
     end
 end
 
+end
 
-function p = volumeDependent(a,b,V)
-p = a .* V .^ b;
+function y = powerFunction(a, b, x, varargin)
+y = a .* x .^ b;
+if ~isempty(varargin)
+    tr = strcmp(varargin, 'Transpose');
+    if any(tr) && varargin{find(tr)+1}, y = y'; end
+    ub = strcmp(varargin, 'UpperBound');
+    if any(ub)
+        cap = varargin{find(ub)+1};
+        y(y>cap) = cap;
+    end
+end
+end
+
+function y = doubleLogisticFunction(a, b, c, x)
+u = exp(x - c);
+y = a ./ (1 + u) .* (1 + b .* u);
+end

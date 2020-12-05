@@ -43,6 +43,7 @@ else
    nt_traj = nt_traj';
 end
 
+
 % Loop through trajectories and integrate
 parfor i = 1:nTraj
     % Forcing data
@@ -56,9 +57,7 @@ parfor i = 1:nTraj
     odeSolver = str2func(odeIntegrator);
     % Integrate step-wise between successive data points
     for j = 2:nt
-        if j > nt_traj(i)
-            break;
-        else
+        if j <= nt_traj(i)
             if deepens(:,j,i)
                 % Extract state variable types from input vector
                 N = v_in(N_index);
@@ -75,8 +74,6 @@ parfor i = 1:nTraj
                 v_in = [N; P(:); Z; OM(:)];
             end
             % Integrate
-            %         sol=ode45(@(t, v_in) ODEs(t, v_in, parameterList, forcing, j, false), [0 1], v_in, odeOptions);
-            %         sol=ode23(@(t, v_in) ODEs(t, v_in, parameterList, forcing, j, false), [0 1], v_in, odeOptions);
             sol = odeSolver(@(t, v_in) ODEs(t, v_in, parameterList, forcing, j, false), [0 1], v_in, odeOptions);
             % Store solutions each day (each forcing data time-step)
             OUT(:,j,i) = deval(sol, 1);
@@ -88,6 +85,8 @@ parfor i = 1:nTraj
             AUXVARS(:,j,i) = struct2array(extraOutput);
             AUXVARS_2d(:,j,i) = struct2array(structfun(@(x)x(:)', ...
                 extraOutput_2d, 'UniformOutput', false));
+        else
+            break;
         end
     end
 end

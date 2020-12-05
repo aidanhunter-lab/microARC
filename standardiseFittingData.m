@@ -208,14 +208,14 @@ logy = [logy 'chl_a'];
 
 
 %% Store outputs in the Data struct
-% Data.log_Depth = dat.log_Depth;
-% Data.log_Value = dat.log_Value;
 Data.scalar.scale_mu = dat.scale_mu;
 Data.scalar.scale_sig = dat.scale_sig;
-% Data.scale_intercept = dat.scale_intercept;
-% Data.scale_gradient = dat.scale_gradient;
-% Data.scale_stdDev = dat.scale_stdDev;
 Data.scalar.scaled_Value = dat.scaled_Value;
+
+Data.scalar.scale_mu(~Data.scalar.inCostFunction) = nan;
+Data.scalar.scale_sig(~Data.scalar.inCostFunction) = nan;
+Data.scalar.scaled_Value(~Data.scalar.inCostFunction) = nan;
+
 
 
 %% Standardise size spectra measurements
@@ -224,20 +224,25 @@ Data.scalar.scaled_Value = dat.scaled_Value;
 % substracting the mean and dividing by the standard deviation across size
 % classes, after log-transforming.
 
-Data.size.scaleFun_Ntot = @(mu,sig,x) (log(x)-mu) ./ sig;
-
+vars = unique(sizeDatBinned.Variable); % size spectra measurement types (cell numbers or nitrogen concs)
 usc = unique(sizeDatBinned.scenario);
 nsc = length(usc); % number of size spectra samples
-for i = 1:nsc
-    ind = strcmp(sizeDatBinned.scenario, usc{i});
-    y = sizeDatBinned.Ntot(ind);
-    yl = log(y);
-    mu = mean(yl);
-    sig = std(yl);
-    sizeDatBinned.scale_mu(ind,:) = mu;
-    sizeDatBinned.scale_sig(ind,:) = sig;
-    sizeDatBinned.scaled_Ntot(ind,:) = Data.size.scaleFun_Ntot(mu, sig, y);
+
+for i = 1:length(vars)
+    indi = strcmp(sizeDatBinned.Variable, vars{i});
+    Data.size.(['scaleFun_' vars{i}]) = @(mu,sig,x) (log(x)-mu) ./ sig;
+    for j = 1:nsc
+        indj = indi & strcmp(sizeDatBinned.scenario, usc{j});
+        y = sizeDatBinned.Value(indj);
+        yl = log(y);
+        mu = mean(yl);
+        sig = std(yl);
+        sizeDatBinned.scale_mu(indj,:) = mu;
+        sizeDatBinned.scale_sig(indj,:) = sig;
+        sizeDatBinned.scaled_Value(indj,:) = Data.size.(['scaleFun_' vars{i}])(mu, sig, y);
+    end
 end
+
 
 Data.size.dataBinned = sizeDatBinned;
 
@@ -246,7 +251,8 @@ Data.size.dataBinned = sizeDatBinned;
 %% Plots of standardised data
 
 if ~isempty(v) && any(contains(v(1,:),'Scaled'))
-    v_ind = find(contains(v(1,:),'Scaled'));
+    v_ind = find(contains(v(1,:),'Scaled') & cellfun(@(x) x(:), v(2,:)));
+%     v_ind = find(contains(v(1,:),'Scaled'));
     for jj = 1:length(v_ind)
         vv = v(:,v_ind(jj));
         
@@ -397,7 +403,8 @@ end
 
 pause(0.1)
 
-if ~isempty(v) && any(contains(v(1,:),'All'))
+if ~isempty(v) && any(contains(v(1,:),'All') & cellfun(@(x) x(:), v(2,:)))
+
     % Plot all standardised data sources together
     figure
     

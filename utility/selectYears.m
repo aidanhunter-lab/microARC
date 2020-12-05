@@ -75,7 +75,7 @@ for i = 1:length(fields)
        Data.size.(fields{i}) = Data.size.(fields{i})(iy); 
     end
 end
-Data.size.nSamples = size(Data.size.Ntot,1);
+Data.size.nSamples = size(Data.size.ESD,1);
 iy = ismember(Data.size.dataBinned.Year, whichYears);
 Data.size.dataBinned = structfun(@(x) x(iy), Data.size.dataBinned, ...
     'UniformOutput', false);
