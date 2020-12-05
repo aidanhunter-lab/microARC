@@ -9,7 +9,7 @@ function [cost, costComponents, modData, out, auxVars] = ...
 % Cost function type may be given by name-value pair in varargin, otherwise
 % set as the default
 defaultCostType = 'polyLikelihood';
-costTypes = {'LSS','polyLikelihood'}; % possible cost functions coded below
+costTypes = {'LSS', 'polyLikelihood', 'polyLikelihood2'}; % possible cost functions coded below
 selectFunction = defaultCostType;
 if ~isempty(varargin)
     i = strcmp(varargin, 'selectFunction');
@@ -33,7 +33,8 @@ Params = updateParameters(Params, FixedParams, pars);
 % the output using the same functions that standardised the data.
 
 % Scalar data
-Vars = unique(Data.scalar.Variable);
+Vars = Data.scalar.obsInCostFunction;
+% Vars = unique(Data.scalar.Variable);
 
 evTraj = Data.scalar.evTraj;
 nsamples = size(evTraj, 1); % number of trajectories used per sampling event
@@ -41,21 +42,19 @@ nsamples = size(evTraj, 1); % number of trajectories used per sampling event
 nEvent = Data.scalar.nEvents;
 depths_mod = abs(FixedParams.z);
 
-% Store model outputs in same form as the data
-scalarNaNs = nan(Data.scalar.nSamples,1);
-scalarNaNs_2d = nan(Data.scalar.nSamples, nsamples);
-
-modData.scalar.Yearday = scalarNaNs;
-modData.scalar.Depth = scalarNaNs;
+modData.scalar.Yearday = nan(Data.scalar.nSamples,1);
+modData.scalar.Depth = modData.scalar.Yearday;
 modData.scalar.Variable = cell(Data.scalar.nSamples,1);
-modData.scalar.Value = scalarNaNs_2d;
-modData.scalar.scaled_Value = scalarNaNs_2d;
+modData.scalar.Value = nan(Data.scalar.nSamples, nsamples);
+modData.scalar.scaled_Value = modData.scalar.Value;
+
 
 % Standardise model output with respect to depth and event using linear mixed models
 for i = 1:nEvent    
     iEvent = Data.scalar.Event == i; % index event
     itraj = evTraj(:,i); % index trajectories used for event
     vars = unique(Data.scalar.Variable(Data.scalar.Event == i)); % variables measured during this event
+    vars = vars(ismember(vars, Vars));
     Yearday = Data.scalar.Yearday(find(iEvent, 1));
     Depth = Data.scalar.Depth(iEvent);
     Variable = Data.scalar.Variable(iEvent);
@@ -99,19 +98,42 @@ depths_obs = [unique(Data.size.DepthMin) unique(Data.size.DepthMax)]; % sample d
 depth_ind = -FixedParams.zw(2:end) > depths_obs(1,1) & ...
     -FixedParams.zw(1:end-1) < depths_obs(1,2); % depth layers corresponding to samples
 
-for i = 1:nsamples
-    itraj = et(i,:); % trajectory associated with each sampling event
-    ymod = squeeze(out.P(:,depth_ind,FixedParams.PP_N_index,etime,itraj));
-    [~, J] = max(sum(ymod)); % depth layer of modelled phytoplankton maximum
-    ymod_ = nan(FixedParams.nPP_size, nevent);
-    for j = 1:nevent
-        ymod_(:,j) = ymod(:,J(1,1,j,j),j,j);
+VarsSize = Data.size.obsInCostFunction;
+allVarsSize = unique(Data.size.dataBinned.Variable);
+
+for i = 1:length(allVarsSize)
+    vs = allVarsSize{i};
+%     vs = VarsSize{i};
+    ind = strcmp(Data.size.dataBinned.Variable, vs);
+    modData.size.Variable(ind,:) = Data.size.dataBinned.Variable(ind);
+    for j = 1:nsamples
+        itraj = et(j,:); % trajectory associated with each sampling event
+        [~, J] = max(sum(out.P(:,depth_ind,FixedParams.PP_Chl_index,etime,itraj))); % depth layer of modelled chl maximum
+        J = squeeze(J);
+        switch vs
+            case 'NConc'
+                ymod = squeeze(out.P(:,depth_ind,FixedParams.PP_N_index,etime,itraj));
+                ymod_ = nan(FixedParams.nPP_size, nevent);
+                for k = 1:nevent
+                    ymod_(:,k) = ymod(:,J(k,k),k,k);
+                end
+                ymod = mean(ymod_, 2); % average size-spectra over sampling events
+            case 'CellConc'
+                ymod = auxVars.cellDensity(:,depth_ind,etime,itraj);
+                ymod_ = nan(FixedParams.nPP_size, nevent);
+                for k = 1:nevent
+                    ymod_(:,k) = ymod(:,J(k,k),k,k);
+                end
+                ymod = mean(ymod_, 2); % average size-spectra over sampling events
+        end        
+        modData.size.Value(ind,j) = ymod;
+        modData.size.scaled_Value(ind,j) = Data.size.(['scaleFun_' vs])( ...
+            Data.size.dataBinned.scale_mu(ind), ... 
+            Data.size.dataBinned.scale_sig(ind), ymod);
     end
-    ymod = mean(ymod_, 2); % average size-spectra over sampling events
-    modData.size.Ntot(:,i) = ymod;
-    modData.size.scaled_Ntot(:,i) = Data.size.scaleFun_Ntot( ...
-        Data.size.dataBinned.scale_mu, Data.size.dataBinned.scale_sig, ymod);
 end
+
+
 
 
 %% Cost function
@@ -171,8 +193,7 @@ switch selectFunction
             polyCoefs(:,j) = polyfit(x, ys(:,j), maxDegree);
         end
         modData.size.polyCoefs = polyCoefs;
-        
-        
+                
         % Cost function
         % Negative log-likelihood based on polynomial coefficients describing data
         % shape. Distributions of coefficients describing model output are
@@ -211,5 +232,91 @@ switch selectFunction
         
         costComponents = L;
         cost = sum(struct2array(costComponents));
+    
+    case 'polyLikelihood2' % include some weighting factors for polynomial coefficients
+        % Model misfit to data described using a 'synthetic likelihood',
+        % as described by Wood (2010), Nature Letters, 466. doi:10.1038/nature09319
+        % The standardised data are represented by polynomial coefficients.
+        % Equivalent polynomial coefficients representing modelled output are
+        % compared to data in a Gaussian likelihood function. Running the model
+        % over multiple forcing data trajectories generates the output variability.
+        
+        % Fit polynomials to model output
+        maxDegree = Data.scalar.maxDegree;
+        for i = 1:length(Vars)
+            varLabel = Vars{i};
+            ind = strcmp(modData.scalar.Variable, Vars{i});
+            x = Data.scalar.(['polyXvals_' varLabel]);
+            y = modData.scalar.scaled_Value(ind,:);
+            o = Data.scalar.(['sortOrder_' varLabel]); % sorting order
+            ys = y(o,:); % model output in same order as sorted data
+            polyCoefs = nan(1 + maxDegree, nsamples);
+            for j = 1:nsamples % treat each trajectory as random sample of model output specific to each sampling event
+                polyCoefs(:,j) = polyfit(x, ys(:,j), maxDegree);
+            end
+            modData.scalar.(['polyCoefs_' varLabel]) = polyCoefs;
+        end
+        
+        maxDegree = Data.size.maxDegree;
+        for i = 1:length(allVarsSize)
+            varLabel = allVarsSize{i};
+            ind = strcmp(modData.size.Variable, varLabel);
+            x = Data.size.(['polyXvals_' allVarsSize{i}]);
+            y = modData.size.scaled_Value(ind,:);
+            o = Data.size.(['sortOrder_' varLabel]);
+            ys = y(o,:); % model output in same order as sorted data
+            polyCoefs = nan(1 + maxDegree, nsamples);
+            for j = 1:nsamples % treat each trajectory as random sample of model output specific to each sampling event
+                polyCoefs(:,j) = polyfit(x, ys(:,j), maxDegree);
+            end
+            modData.size.(['polyCoefs_' varLabel]) = polyCoefs;
+        end
+        
+        % Cost function
+        % Use uni-variate normal likelihoods separately for each polynomial
+        % coefficient, weight the different terms, then combine into single
+        % likelihood. This neglects covariance between coefficients...
+        log2pi = log(2*pi);
+        for i = 1:length(Vars)            
+            varLabel = Vars{i};
+            coefs = modData.scalar.(['polyCoefs_' varLabel]);
+            mu = mean(coefs, 2);
+            S = coefs - mu;
+            Cov = (S * S') / (size(S, 2) - 1);
+            Cov = 0.5 * (Cov + Cov'); % guarentees symmetry
+            if ~all(eig(Cov) > 0) % if not positive definite then coerce sig to SPD
+                Cov = nearestSPD(Cov);
+            end            
+            V = diag(Cov); % variance of modelled polynomial coefficients
+            y = Data.scalar.(['polyCoefs_' varLabel])(:) - mu;
+            weights = Data.scalar.(['polyWeights_' varLabel]);
+            weights = weights ./ sum(weights) .* length(weights); % rescale weights about 1
+            negLogLik = 0.5 * (log(V) + y .^ 2 ./ V + log2pi);
+            weightedNegLogLik = weights(:) .* negLogLik;
+            L.(varLabel) = sum(weightedNegLogLik) / length(y);
+        end
+        
+        for i = 1:length(VarsSize)
+            varLabel = VarsSize{i};
+            coefs = modData.size.(['polyCoefs_' varLabel]);
+            mu = mean(coefs, 2);
+            S = coefs - mu;
+            Cov = (S * S') / (size(S, 2) - 1);
+            Cov = 0.5 * (Cov + Cov');
+            if ~all(eig(Cov) > 0)
+                Cov = nearestSPD(Cov);
+            end
+            V = diag(Cov);
+            y = Data.size.(['polyCoefs_' varLabel])(:) - mu;
+            weights = Data.size.(['polyWeights_' varLabel]);
+            weights = weights ./ sum(weights) .* length(weights);
+            negLogLik = 0.5 * (log(V) + y .^ 2 ./ V + log2pi);
+            weightedNegLogLik = weights(:) .* negLogLik;
+            L.(varLabel) = sum(weightedNegLogLik) / length(y);
+        end
+        
+        costComponents = L;
+        cost = sum(struct2array(costComponents));
+
         
 end

@@ -104,12 +104,12 @@ dat_OM.Type = repmat({'organic'}, [height(dat_OM) 1]);
 sizeSpectraObsFile = 'S1-S4_spectra_Nbiomass.csv';
 dat_size = readtable(fullfile(obsDir, sizeSpectraObsFile), 'Format', 'auto');
 
-% A selection of cell size -> N conversions are contained in this data.
-% Although these different conversions produce nitrogen size-spectra of
+% A selection of cell size -> N conversions are contained in these data.
+% Although the different conversions produce nitrogen size-spectra of
 % similar shape, there is some substantial variation in magnitudes
 % (especially at small and large cell sizes). So maybe we should
 % use the measured cell densities in our cost function rather than the
-% nitrogen densities. But use this script to return all of the various data...
+% nitrogen densities...
 varNames = dat_size.Properties.VariableNames;
 varNames = varNames(contains(varNames, 'NperCell'));
 ne = length(varNames);
@@ -119,11 +119,10 @@ for i = 1:ne
     NsizeEqs{i} = varSplit{2};
 end
 
-% ESDmin = 2; % min/max sizes to retain from the data
-ESDmin = 1; % min/max sizes to retain from the data
-ESDmax = 200;
-if ESDmin < min(dat_size.ESD), ESDmin = min(dat_size.ESD); end
-if ESDmax > max(dat_size.ESD), ESDmax = max(dat_size.ESD); end
+% ESDmin = 1; % min/max sizes to retain from the data
+% ESDmax = 200;
+% if ESDmin < min(dat_size.ESD), ESDmin = min(dat_size.ESD); end
+% if ESDmax > max(dat_size.ESD), ESDmax = max(dat_size.ESD); end
 
 % Convert units of original data into units used in model (keep all
 % elemental concentrations in mmol)
@@ -150,9 +149,10 @@ dat_size.Ndensity = mean(dat_size{:,strcat('Ndensity_', NsizeEqs)}, 2);
 % Remove unnecessary variables and rows from data
 scenarios = unique(dat_size.scenario)'; % data collected from different cruises/years
 N = length(scenarios);
-TrophicLevel = 'autotroph'; % At present we're only modelling autotrophs
-keepRows = strcmp(dat_size.trophicLevel, TrophicLevel) & ... 
-    dat_size.ESD >= ESDmin & dat_size.ESD <= ESDmax;
+TrophicLevel = 'autotroph'; % At present we're only modelling size spectra of autotrophs
+% keepRows = strcmp(dat_size.trophicLevel, TrophicLevel) & ... 
+%     dat_size.ESD >= ESDmin & dat_size.ESD <= ESDmax;
+keepRows = strcmp(dat_size.trophicLevel, TrophicLevel);
 dat_size = dat_size(keepRows,:);
 keepVars = [{'scenario', 'season', 'regime', 'ESD', 'cellVolume', ...
     'cellDensity', 'cellDensitySD'}, strcat('Ndensity_', NsizeEqs), 'Ndensity'];
@@ -162,228 +162,108 @@ cols = [[1 0 0]; [0 1 0]; [0 0 1]; [1 0 1]]; % plotting colours for different sc
 
 v = reshape(varargin, [2 0.5*length(varargin)]);
 
-if ~isempty(v) && any(contains(v(1,:),'plotRawSizeSpectra')) && v{2,strcmp(v(1,:), 'plotRawSizeSpectra')}
+%~~~
+% optional plots
+plotNconcSpectra = ~isempty(v) && any(contains(v(1,:),'plotNconcSpectra')) && v{2,strcmp(v(1,:), 'plotNconcSpectra')};
+plotCellConcSpectra = ~isempty(v) && any(contains(v(1,:),'plotCellConcSpectra')) && v{2,strcmp(v(1,:), 'plotCellConcSpectra')};
+if plotNconcSpectra || plotCellConcSpectra
     figure
-    ii = strcmp(dat_size.scenario, scenarios(1));
-    loglog(dat_size.ESD(ii), dat_size.Ndensity(ii), 'Color', cols(1,:))
-    hold on
-    for i = 2:N
-        ii = strcmp(dat_size.scenario, scenarios(i));
-        loglog(dat_size.ESD(ii), dat_size.Ndensity(ii), 'Color', cols(i,:))
-    end
-    gc = gca;
-    gc.YLim(1) = 1e-6;
-    gc.YLim(2) = ceil(max(dat_size.Ndensity) / 100) * 100;
-    xlabel('ESD (\mum)')
-    ylabel('Nitrogen density (mmol N m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
-    title('Size spectra data')
-    for i = N:-1:1
-        j = N-i+1;
-        base = 5; space = 5;
-        yt = space^(j-1) * base * gc.YLim(1);
-        text(gc.XLim(1) * (1 + 0.3 * 10), yt, scenarios{i});
-        line([gc.XLim(1) * (1 + 0.1 * 10) gc.XLim(1) * (1 + 0.2 * 10)], [yt yt], 'Color', cols(i,:))
-    end
-    hold off
-end
-
-
-% Partition the size spectra measurements into size-class bins.
-% Use the scenario 2 data as this is from 2017... This might (probably
-% should) change later...
-mean_scenarios = 2;
-allESD = unique(dat_size.ESD);
-allESDn = length(allESD);
-allESD = table((1:allESDn)', allESD); allESD.Properties.VariableNames = {'index','ESD'};
-mat = nan(height(allESD),N);
-for i = 1:N
-    ind = strcmp(dat_size.scenario, scenarios(i));
-    dt = dat_size(ind, {'ESD','Ndensity'});    
-    dtt = innerjoin(allESD, dt);
-    mat(:,i) = dtt.Ndensity;
-end
-% dt = table(repmat({'null'}, [allESDn 1]), allESD.ESD, repmat({'mean'}, [allESDn 1]), ...
-%     10 .^ nanmean(log10(mat(:,mean_scenarios)), 2));
-dat_size2 = table(allESD.ESD, nanmean(mat(:,mean_scenarios), 2)); % use this table of means to find size class intervals
-dat_size2.Properties.VariableNames = {'ESD', 'Ndensity'};
-
-ibin = partitionSizeSpectra(dat_size2.Ndensity);
-
-plotSizeClassBins = false;
-switch plotSizeClassBins
-    case true
-        figure
-        loglog(dat_size2.ESD, dat_size2.Ndensity, 'Color', [0 0 0])
+    if plotNconcSpectra && plotCellConcSpectra
+        subplot(1,2,1)
+        ii = strcmp(dat_size.scenario, scenarios(1));
+        loglog(dat_size.ESD(ii), dat_size.Ndensity(ii), 'Color', cols(1,:))
         hold on
-        xlabel('ESD (\mum)')
-        ylabel('Nitrogen density (mmol N m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
-        title({'size spectra:', 'intervals bounded by turning points'})
+        for i = 2:N
+            ii = strcmp(dat_size.scenario, scenarios(i));
+            loglog(dat_size.ESD(ii), dat_size.Ndensity(ii), 'Color', cols(i,:))
+        end
         gc = gca;
         gc.YLim(1) = 1e-6;
-        gc.YLim(2) = ceil(max(dat_size2.Ndensity / 100)) * 100;
-        yt = gc.YLim;
-        for i = 1:length(ibin)
-            xt = allESD.ESD(ibin(i));
-            line([xt xt], yt, 'Color', [0 0 0], 'LineStyle', ':')
+        gc.YLim(2) = 2 * max(dat_size.Ndensity);
+        xlabel('ESD (\mum)')
+        ylabel('Nitrogen density (mmol N m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
+        %         title('Size spectra data')
+        for i = N:-1:1
+            j = N-i+1;
+            base = 5; space = 5;
+            yt = space^(j-1) * base * gc.YLim(1);
+            text(gc.XLim(1) * (1 + 0.3 * 10), yt, scenarios{i});
+            line([gc.XLim(1) * (1 + 0.1 * 10) gc.XLim(1) * (1 + 0.2 * 10)], [yt yt], 'Color', cols(i,:))
         end
         hold off
-end
-
-
-
-% Reduce number of size-class bins by incrementally removing the narrowest bins
-nbins = length(ibin) - 1;
-bins = cell(nbins - 2, 1);
-bins{1} = ibin;
-nbd = diff(ibin); % number of data points within each bin
-[nbd_sort, o] = sort(nbd);
-while nbins > 3
-    rb = o(find(nbd_sort == nbd_sort(1), 1, 'last')); % narrowest bin -- remove 1 of its boundaries, from large end of spectrum if tied
-%     rb = o(1); % narrowest bin -- remove 1 of its boundaries
-    if rb == 1, removeBin = 2; end
-    if rb == nbins, removeBin = nbins - 1; end
-    if rb > 1 && rb < nbins
-        trb = [nbd(rb - 1) nbd(rb + 1)]; % number of data points in adjacent bins
-        removeBin = rb + (find(trb == min(trb)) - 1);
-    end
-    ibin(removeBin) = [];
-    nbins = length(ibin) - 1;
-    bins{length(bins)-nbins+3} = ibin;
-    nbd = diff(ibin);
-    nbd(1) = inf; nbd(end) = inf;
-    [nbd_sort, o] = sort(nbd);
-end
-
-plotSizeClassBins = false;
-switch plotSizeClassBins
-    case true
-        figure
-        bp = length(bins);
-        nr = ceil(sqrt(bp));
-        nc = ceil(bp / nr);
-        for i = 1:bp
-            subplot(nr, nc, i)
-            loglog(allESD.ESD, dat_size2.Ndensity, 'Color', [0 0 0])
+        subplot(1,2,2)
+        ii = strcmp(dat_size.scenario, scenarios(1));
+        loglog(dat_size.ESD(ii), dat_size.cellDensity(ii), 'Color', cols(1,:))
+        hold on
+        for i = 2:N
+            ii = strcmp(dat_size.scenario, scenarios(i));
+            loglog(dat_size.ESD(ii), dat_size.cellDensity(ii), 'Color', cols(i,:))
+        end
+        gc = gca;
+        gc.YLim(1) = 1e1;
+        gc.YLim(2) = 2 * max(dat_size.cellDensity);
+        xlabel('ESD (\mum)')
+        ylabel('cell conc. density (cells m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
+        %         title('Size spectra data')
+        for i = N:-1:1
+            j = N-i+1;
+            base = 5; space = 5;
+            yt = space^(j-1) * base * gc.YLim(1);
+            text(gc.XLim(1) * (1 + 0.3 * 10), yt, scenarios{i});
+            line([gc.XLim(1) * (1 + 0.1 * 10) gc.XLim(1) * (1 + 0.2 * 10)], [yt yt], 'Color', cols(i,:))
+        end
+        hold off
+        sgtitle('Size spectra data')
+    else        
+        if plotNconcSpectra
+            ii = strcmp(dat_size.scenario, scenarios(1));
+            loglog(dat_size.ESD(ii), dat_size.Ndensity(ii), 'Color', cols(1,:))
             hold on
-            vl = bins{i};
-            nvl = length(vl);
-            xlabel('ESD (\mum)')
-            ylabel('Nitrogen density', 'Interpreter', 'latex')
-            title([num2str(nvl-1) ' intervals'])
+            for i = 2:N
+                ii = strcmp(dat_size.scenario, scenarios(i));
+                loglog(dat_size.ESD(ii), dat_size.Ndensity(ii), 'Color', cols(i,:))
+            end
             gc = gca;
             gc.YLim(1) = 1e-6;
-            gc.YLim(2) = ceil(max(dat_size2.Ndensity) / 100) * 100;
-            yl = gc.YLim;
-            for j = 1:length(vl)
-                line([allESD.ESD(vl(j)) allESD.ESD(vl(j))], yl, 'LineStyle', ':', 'Color', [0 0 0])
+            gc.YLim(2) = 2 * max(dat_size.Ndensity);
+            xlabel('ESD (\mum)')
+            ylabel('Nitrogen density (mmol N m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
+            title('Size spectra data')
+            for i = N:-1:1
+                j = N-i+1;
+                base = 5; space = 5;
+                yt = space^(j-1) * base * gc.YLim(1);
+                text(gc.XLim(1) * (1 + 0.3 * 10), yt, scenarios{i});
+                line([gc.XLim(1) * (1 + 0.1 * 10) gc.XLim(1) * (1 + 0.2 * 10)], [yt yt], 'Color', cols(i,:))
+            end
+            hold off
+        end        
+        if plotCellConcSpectra
+            ii = strcmp(dat_size.scenario, scenarios(1));
+            loglog(dat_size.ESD(ii), dat_size.cellDensity(ii), 'Color', cols(1,:))
+            hold on
+            for i = 2:N
+                ii = strcmp(dat_size.scenario, scenarios(i));
+                loglog(dat_size.ESD(ii), dat_size.cellDensity(ii), 'Color', cols(i,:))
+            end
+            gc = gca;
+            gc.YLim(1) = 1e1;
+            gc.YLim(2) = 2 * max(dat_size.cellDensity);
+            xlabel('ESD (\mum)')
+            ylabel('cell conc. density (cells m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
+            title('Size spectra data')
+            for i = N:-1:1
+                j = N-i+1;
+                base = 5; space = 5;
+                yt = space^(j-1) * base * gc.YLim(1);
+                text(gc.XLim(1) * (1 + 0.3 * 10), yt, scenarios{i});
+                line([gc.XLim(1) * (1 + 0.1 * 10) gc.XLim(1) * (1 + 0.2 * 10)], [yt yt], 'Color', cols(i,:))
             end
             hold off
         end
-end
-
-
-
-
-% Choose a number of intervals, by eye for now, and plot within-interval
-% distributions. (Then repeat for all intervals to choose between them...)
-% 7 intervals looks good...
-nb = 7; % number of size-class bins
-bns = bins{-1 + cellfun('length', bins) == nb};
-
-if ~isempty(v) && any(contains(v(1,:),'plotSizeClassBins')) && v{2,strcmp(v(1,:), 'plotSizeClassBins')}
-    figure
-    loglog(allESD.ESD, dat_size2.Ndensity, 'Color', [0 0 0])
-    hold on
-    gc = gca;
-    yl = gc.YLim;
-    for i = 1:nb+1
-        line([allESD.ESD(bns(i)) allESD.ESD(bns(i))], yl, 'Color', [0 0 0], 'LineStyle', ':')
-    end
-    xlabel('ESD (\mum)')
-    ylabel('Nitrogen density (mmol N m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
-    title({'mean size spectra', 'intervals bounded by selected turning points'})
-    hold off
-end
-
-% Group the data by size-class bin
-dat_size.sizeClass = nan(height(dat_size), 1);
-for i = 1:nb
-    if i ~= nb
-        ind = allESD.ESD(bns(i)) <= dat_size.ESD & allESD.ESD(bns(i+1)) > dat_size.ESD;
-    else
-        ind = allESD.ESD(bns(i)) <= dat_size.ESD & allESD.ESD(bns(i+1)) >= dat_size.ESD;
-    end
-    dat_size.sizeClass(ind) = i;
-end
-
-Sizes = allESD.ESD(bns(1:nb)) + 0.5 * diff(allESD.ESD(bns)); % midpoints within each interval
-% Sizes = round(Sizes * 2) / 2; % round to 0.5
-Sizes = round(Sizes * 4) / 4; % round to 0.25
-% K = length(Sizes);
-dat_size.size = Sizes(dat_size.sizeClass);
-dat_size.ndat = nan(height(dat_size), 1); % number of data points per size-class bin
-for i = 1:N
-    ind0 = strcmp(dat_size.scenario, scenarios{i});
-    for j = 1:nb
-        ind = ind0 & dat_size.sizeClass == j;
-        ndat = sum(ind);
-        dat_size.ndat(ind) = repmat(ndat, [ndat 1]);
     end
 end
-
-if ~isempty(v) && any(contains(v(1,:),'plotRawSpectraAndBins')) && v{2,strcmp(v(1,:), 'plotRawSpectraAndBins')}
-    figure
-    sc = strcmp(dat_size.scenario, scenarios(1));
-    loglog(dat_size.ESD(sc), dat_size.Ndensity(sc), 'Color', cols(1,:))
-    hold on
-    for i = 2:N
-        sc = strcmp(dat_size.scenario, scenarios(i));
-        loglog(dat_size.ESD(sc), dat_size.Ndensity(sc), 'Color', cols(i,:))        
-    end
-    gc = gca; 
-    if gc.YLim(1) < 1e-6, gc.YLim(1) = 1e-6; end
-    gc.YLim(2) = ceil(max(dat_size.Ndensity) / 100) * 100;
-    yl = gc.YLim;    
-    for i = 1:nb+1
-        line([allESD.ESD(bns(i)) allESD.ESD(bns(i))], yl, 'Color', [0 0 0], 'LineStyle', ':')
-    end
-    for i = N:-1:1
-        j = N-i+1;        
-        base = 5; space = 5;        
-        yt = space^(j-1) .* base .* gc.YLim(1);
-%         yt = 1*10^j * gc.YLim(1);
-        text(gc.XLim(1) * (1 + 0.3 * 10), yt, scenarios{i});
-        line([gc.XLim(1) * (1 + 0.1 * 10) gc.XLim(1) * (1 + 0.2 * 10)], [yt yt], 'Color', cols(i,:))
-    end
-    xlabel('ESD (\mum)')
-    ylabel('Nitrogen density (mmol N m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
-    title({'size spectra data', 'intervals bounded by selected turning points'})
-    hold off
-end
-
-
-dat_size.Celltot = nan(height(dat_size), 1); % integrate cell densities to find total cell number within each size class
-dat_size.Ntot = nan(height(dat_size), 1); % integrate nitrogen densities to find nitrogen mass within each size class
-
-for i = 1:N
-    ind0 = strcmp(dat_size.scenario, scenarios(i));
-    for j = 1:nb
-        ind = ind0 & dat_size.sizeClass == j;
-        n = unique(dat_size.ndat(ind));
-        x = log10(dat_size.ESD(ind));
-        xd = diff(x);
-        
-        y = dat_size.Ndensity(ind);
-        ys = y(1:end-1) + y(2:end);
-        Ntot = sum(0.5 * xd .* ys);
-        dat_size.Ntot(ind) = repmat(Ntot, [n, 1]);
-        
-        y = dat_size.cellDensity(ind);
-        ys = y(1:end-1) + y(2:end);
-        Celltot = sum(0.5 * xd .* ys);
-        dat_size.Celltot(ind) = repmat(Celltot, [n, 1]);
-    end
-end
+%~~~
 
 
 
@@ -449,6 +329,7 @@ end
 dat_size = movevars(dat_size, {'Year', 'YeardayFirst', 'YeardayLast'}, 'Before', 'season');
 dat_size = movevars(dat_size, {'DepthMin', 'DepthMax'}, 'After', 'regime');
 
+
 % Merge nutrient data (inorganic & organic)
 dat = [dat_nut; dat_OM];
 
@@ -461,26 +342,57 @@ Event = (1:length(EventLabel))';
 events = table(Event, EventLabel);
 dat = join(dat, events);
 
-
-% As nitrogen is the only modelled inorganic nutrient (this may change in 
-% future), omit measures of other nutrients.
-remove = strcmp(dat.Type, 'inorganic') & ~strcmp(dat.Variable, 'N');
-dat(remove,:) = [];
+% % As nitrogen is the only modelled inorganic nutrient (this may change in 
+% % future), omit measures of other nutrients.
+% remove = strcmp(dat.Type, 'inorganic') & ~strcmp(dat.Variable, 'N');
+% dat(remove,:) = [];
 
 % Store fitting data as a struct
 scalarData = table2struct(dat, 'ToScalar', true);
 scalarData.Variable = cellstr(scalarData.Variable);
 scalarData.nSamples = size(scalarData.Value,1);
 scalarData.nEvents = length(unique(scalarData.Event));
-sizeData = table2struct(dat_size, 'ToScalar', true);
-sizeData.nSamples = size(sizeData.Ndensity,1);
 
-% Include a reduced size spectra data set containing only the binned values
-sizeDataBinned = unique(dat_size(:,{'scenario', 'Year', 'YeardayFirst', ... 
-    'YeardayLast', 'season', 'regime', 'DepthMin', 'DepthMax', 'size', ... 
-    'sizeClass', 'Ntot'}));
-sizeDataBinned = table2struct(sizeDataBinned, 'ToScalar', true);
-sizeData.dataBinned = sizeDataBinned;
+sizeData = table2struct(dat_size, 'ToScalar', true);
+% sizeData.nSamples = size(sizeData.Year,1);
+
+% Include fields specifying which of these data are used in the cost
+% function
+% scalarData.obsInCostFunction = {'N', 'chl_a', 'PON', 'POC'};
+% scalarData.inCostFunction = ismember(scalarData.Variable, ... 
+%     scalarData.obsInCostFunction);
+
+% sizeData.obsInCostFunction = {'NConc'}; % maybe move this to function that selects size class intervals...
+% sizeData.dataBinned.inCostFunction = ismember(sizeData.dataBinned.Variable, ... 
+%     sizeData.obsInCostFunction);
+
+% % Omit any events where data used in the cost function was not collected
+% fields = fieldnames(scalarData);
+% uev = unique(scalarData.Event);
+% for i = 1:length(uev)
+%     ind = scalarData.Event == uev(i);
+%     x = unique(scalarData.Variable(ind));
+%     y = ismember(x, scalarData.obsInCostFunction);
+%     if ~any(y)
+%         for j = 1:length(fields)
+%             if size(scalarData.(fields{j}), 1) > 1
+%                 scalarData.(fields{j}) = scalarData.(fields{j})(~ind);
+%             end
+%         end
+%     end
+% end
+% if length(unique(scalarData.Event)) < scalarData.nEvents
+%     scalarData.nSamples = size(scalarData.Value,1);    
+%     scalarData.nEvents = length(unique(scalarData.Event));    
+%     oldEventLabs = unique(scalarData.Event);
+%     newEventLabs = (1:length(oldEventLabs))';    
+%     x = table(oldEventLabs, newEventLabs);
+%     for i = 1:height(x)
+%         scalarData.Event(scalarData.Event == x.oldEventLabs(i)) = x.newEventLabs(i);
+%     end
+% end
+
+
 
 Data.scalar = scalarData;
 Data.size = sizeData;
@@ -496,23 +408,225 @@ end
 % Functions
 %~~~~~~~~~~
 
-function y = partitionSizeSpectra(x)
-    % uses stationary points to partition size spectra vectors into size-class
-    % intervals
+% Use stationary and inflection points of size spectra to generate size
+% class intervals
+
+function y = stationaryPoints(x)
+% Return positions of turning points in x (and also endpoints).
+% Only accepts vector arguments... more work needed for matrix inputs
+% because the output will need to be a cell array where each component
+% holds a vector of arbitrary length...
+xdim0 = size(x);
+vec = isvector(x);
+if vec
+    x_ = x(:);
     n = length(x);
+else
+    x_ = x;
+end
+xdim = size(x_);
+y = diff([x_(1,:); x_]);
+y = y > 0;
+y = (y(1:end-1,:) & ~y(2:end,:)) | (~y(1:end-1,:) & y(2:end,:));
+y = [y; zeros(1, xdim(2))];
+[r, c] = find(y);
+if vec
+    y = r;
+    y = [1; y; n];
+else
+    yy = cell(1,xdim(2));
+    for i = 1:xdim(2)
+        yy{i} = r(c == i);
+        yy{i} = [1; yy{i}; dim(1)];
+    end
+    y = yy;
+end
+if all(xdim == flip(xdim0)), y = y'; end
+end
+
+function y = inflectionPoints(x)
+% Return positions of inflection points in x (and also endpoints)
+xdim0 = size(x);
+vec = isvector(x);
+if vec
+    x_ = x(:);
+    n = length(x);
+else
+    x_ = x;
+end
+xdim = size(x_);
+y = diff(diff(x_));
+y = [y(1,:); y; y(end,:)];
+y = y > 0;
+y = (y(1:end-1,:) & ~y(2:end,:)) | (~y(1:end-1,:) & y(2:end,:));
+y = [y; zeros(1, xdim(2))];
+[r, c] = find(y);
+if vec
+    y = r;
+    y = [1; y; n];
+else
+    yy = cell(1,xdim(2));
+    for i = 1:xdim(2)
+        yy{i} = r(c == i);
+        yy{i} = [1; yy{i}; xdim(1)];
+    end
+    y = yy;
+end
+if all(xdim == flip(xdim0)), y = y'; end
+end
+
+
+function y = partitionSizeSpectra2(x, varargin)
+
+% Input size spectra vectors, x.
+% Choose data features in varargin.
+% Returns the positions, y, in x where those features occur, which can be
+% used to partition the size spectra vectors into size class bins.
+if isempty(varargin)
+    % By default use stationary points
+    Type = 'stationary';
+    % By default use stationary and inflecion points, not the midpoints
+    % between them
+    useMidpoints = false;
+else
+    % Currently have options to use stationary and/or inflection points
+    i = strcmp(varargin, 'stationaryPoints');
+    if any(i)
+        if varargin{find(i)+1}
+            Type = 'stationary';
+        end
+    end
+    i = strcmp(varargin, 'inflectionPoints');
+    if any(i)
+        if varargin{find(i)+1}
+            if ~exist('Type', 'var')
+                Type = 'inflection';
+            else
+                Type = 'both';
+            end
+        end
+    end
+    i = strcmp(varargin, 'useMidpoints');
+    if any(i)
+        useMidpoints = varargin{find(i)+1};
+    end
+end
+if ~exist('Type', 'var')
+    y = [];
+    warning('Check validity of optional arguments in partitionSizeSpectra.m')
+else
     xdim = size(x);
     if length(xdim) ~= 2 || ~any(xdim == 1)
         warning('partitionSizeSpectra only accepts vector arguments')
     else
-        y = diff(x(:));
-        y = [y(1); y];
-        y = y > 0;
-        y = (y(1:n-1) & ~y(2:n)) | (~y(1:n-1) & y(2:n));
-        y = [0; y];
-        y = [1; find(y); n]; % endpoints and turning points
-        if xdim(1) == 1
-            y = y';
+        switch Type
+            case 'stationary'
+                y = stationaryPoints(x);
+                if useMidpoints
+                    y = round([y(1,:); 0.5 * (y(1:end-1,:) + y(2:end,:)); y(end,:)]);
+                end                
+            case 'inflection'
+                y = inflectionPoints(x);
+                if useMidpoints
+                    y = round([y(1,:); 0.5 * (y(1:end-1,:) + y(2:end,:)); y(end,:)]);
+                end
+            case 'both'
+                y1 = stationaryPoints(x);
+                y2 = inflectionPoints(x);
+                if useMidpoints
+                    y1 = round([y1(1,:); 0.5 * (y1(1:end-1,:) + y1(2:end,:)); y1(end,:)]);
+                    y2 = round([y2(1,:); 0.5 * (y2(1:end-1,:) + y2(2:end,:)); y2(end,:)]);
+                end
+                y = unique([y1(:); y2(:)]);
         end
     end
 end
+end
 
+
+
+
+
+
+% function y = partitionSizeSpectra2(x, varargin)
+% 
+% % Input size spectra vectors, x.
+% % Choose data features in varargin.
+% % Returns the positions, y, in x where those features occur, which can be
+% % used to partition the size spectra vectors into size class bins.
+% 
+% if isempty(varargin)
+%     % By default use stationary points
+%     Type = 'stationary';
+% else
+%     % Currently have options to use stationary and/or inflection points
+%     i = strcmp(varargin, 'stationaryPoints');
+%     if any(i)
+%         if varargin{find(i)+1}
+%             Type = 'stationary';
+%         end
+%     end
+%     i = strcmp(varargin, 'inflectionPoints');
+%     if any(i)
+%         if varargin{find(i)+1}
+%             if ~exist('Type', 'var')
+%                 Type = 'inflection';
+%             else
+%                 Type = 'both';
+%             end
+%         end
+%     end
+% end
+% 
+% if ~exist('Type', 'var')
+%     y = [];
+%     warning('Check validity of optional arguments in partitionSizeSpectra.m')
+% else
+%     
+%     n = length(x);
+%     xdim = size(x);
+%     
+%     if length(xdim) ~= 2 || ~any(xdim == 1)
+%         warning('partitionSizeSpectra only accepts vector arguments')
+%     else
+%         switch Type
+%             case 'stationary'
+%                 y = diff(x(:));
+%                 y = [y(1); y];
+%                 y = y > 0;
+%                 y = (y(1:n-1) & ~y(2:n)) | (~y(1:n-1) & y(2:n));
+%                 y = [0; y];
+%                 y = [1; find(y); n]; % endpoints and turning points
+%                 if xdim(1) == 1
+%                     y = y';
+%                 end
+%                 
+%             case 'inflection'
+%                 y = diff(diff(x(:)));
+%                 y = [y(1); y(1); y];
+%                 y = y > 0;
+%                 y = (y(1:n-1) & ~y(2:n)) | (~y(1:n-1) & y(2:n));
+%                 y = [0; y];
+%                 y = [1; find(y); n]; % endpoints and inflection points
+%                 if xdim(1) == 1
+%                     y = y';
+%                 end
+%                 
+%             case 'both'
+%                 yd = diff(x(:));
+%                 y = [yd(1); yd];
+%                 y = y > 0;
+%                 y = (y(1:n-1) & ~y(2:n)) | (~y(1:n-1) & y(2:n));
+%                 y = [0; y];
+%                 y0 = [1; find(y); n]; % endpoints and turning points
+%                 
+%                 yd = diff(yd);
+%                 y = [yd(1); yd(1); yd];
+%                 y = y > 0;
+%                 y = (y(1:n-1) & ~y(2:n)) | (~y(1:n-1) & y(2:n));
+%                 y = [0; y];
+%                 y = [1; find(y); n]; % endpoints and inflection points
+%                 y = unique([y; y0]); % endpoints, turning points, and inflection points
+%         end
+%     end
+% end

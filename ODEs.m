@@ -167,9 +167,10 @@ SN = sum(OM_remin_N); % (mmol N / m^3 / day)
 % Diffusion
 %~~~~~~~~~~
 
+B_C_t = B_C';
 OM_C_t = OM_C';
 
-v_diffuse = diffusion_1D([N(:), B_C', OM_C_t], K, fixedParams.zwidth, fixedParams.delz);
+v_diffuse = diffusion_1D([N(:), B_C_t, OM_C_t], K, fixedParams.zwidth, fixedParams.delz);
 
 N_diffuse = v_diffuse(:,1);
 B_C_diffuse = v_diffuse(:,2:nPP_size+2)';
@@ -179,7 +180,10 @@ OM_C_diffuse = v_diffuse(:,end-nOM_nut+1:end)';
 % Sinking
 %~~~~~~~~
 
-OM_C_sink = sinking(OM_C_t, params.wk, fixedParams.zwidth)';
+v_sink = sinking([B_C_t(:,phyto), OM_C_t], [params.wp, params.wk], fixedParams.zwidth);
+
+B_C_sink = [v_sink(:,1:nPP_size), zeros(nz, 1)]';
+OM_C_sink = v_sink(:,nPP_size+1:end)';
 
 %~~~~~
 % ODEs
@@ -188,7 +192,7 @@ OM_C_sink = sinking(OM_C_t, params.wk, fixedParams.zwidth)';
 % Inorganic nutrients
 dNdt = N_diffuse - N_uptake_losses(:) + SN(:);
 % Plankton
-fluxC_ = B_C_diffuse - predation_losses_C - B_C_mortality; % all plankton carbon flux terms (mmol C / m^3 / day) excluding uptake and predation gains
+fluxC_ = B_C_sink + B_C_diffuse - predation_losses_C - B_C_mortality; % terms applicable to both phyto and zoo - all plankton carbon flux terms (mmol C / m^3 / day) excluding uptake and predation gains
 fluxC = fluxC_ + predation_gains_C; % all plankton carbon flux terms excluding uptake
 fluxC_p = fluxC_(phyto,:);
 fluxN = N_uptake + Q_N .* fluxC_p; % mmol N / m^3 / day
@@ -202,20 +206,7 @@ fluxN = OM(:,:,fixedParams.OM_N_index) ./ OM_C .* fluxC_ + SOM_N;
 fluxC = fluxC_ + SOM_C;
 dOMdt = cat(3, fluxC, fluxN);
 
-% dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)]; % rate of change, natural scale
-
-% % Adjust rates if natural-scale variables become negative. I don't like
-% % this method ... want a better way...
-% approxNewVal = v_in_exp + t * dvdt;
-% negTest = approxNewVal < 0;
-% if any(negTest)
-%     dvdt(negTest) = -v_in_exp(negTest) ./ t; % this sets updated value to zero instead of negative    
-% end
-% dvdt = dvdt ./ v_in_exp; % dividing by initial values returns derivatives of log-scale variables [d/dt(log(x)) = 1/x d/dt(x)]
-
 dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)];
-% dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)] ./ v_in_exp; % dividing by initial values returns derivatives of log-scale variables [d/dt(log(x)) = 1/x d/dt(x)]
-
 
 
 
@@ -263,7 +254,7 @@ end
 
 function v = MichaelisMenton(m,k,u)
 % Uptake rate of u, given maximum m and half saturation k
-u(u<0) = 0; % this is needed for robustness... there shouldn't be any negatives
+u(u<0) = 0; % include for robustness... there shouldn't be any negatives
 v = m .* u ./ (u + k);
 end
 

@@ -169,11 +169,8 @@ switch type
                 nr = ceil(fixedParams.nPP_size / nc);
                 plt.Units = 'inches';
                 plt.Position = [0 0 8*nc 3*nr];                
-                if ~mod(fixedParams.nPP_size,2) % even number of size classes
-                    index = reshape(1:fixedParams.nPP_size, [nc nr])';
-                else
-                    index = reshape([1:fixedParams.nPP_size 0], [nc nr])';
-                end                
+                index = reshape([1:fixedParams.nPP_size, ... 
+                    zeros(1, nc * nr - fixedParams.nPP_size)], [nc nr])';
                 for ii = 1:fixedParams.nPP_size
                     subplot(nr,nc,index(ii))
                     x = squeeze(P(ii,:,fixedParams.PP_N_index,:));
@@ -204,11 +201,8 @@ switch type
                 nr = ceil(fixedParams.nPP_size / nc);
                 plt.Units = 'inches';
                 plt.Position = [0 0 8*nc 3*nr];
-                if ~mod(fixedParams.nPP_size,2) % even number of size classes
-                    index = reshape(1:fixedParams.nPP_size, [nc nr])';
-                else
-                    index = reshape([1:fixedParams.nPP_size 0], [nc nr])';
-                end
+                index = reshape([1:fixedParams.nPP_size, ... 
+                    zeros(1, nc * nr - fixedParams.nPP_size)], [nc nr])';
                 for ii = 1:fixedParams.nPP_size
                     subplot(nr,nc,index(ii))
                     x = squeeze(P(ii,:,fixedParams.PP_Chl_index ,:));
@@ -239,11 +233,8 @@ switch type
                 nr = ceil(fixedParams.nPP_size / nc);
                 plt.Units = 'inches';
                 plt.Position = [0 0 8*nc 3*nr];
-                if ~mod(fixedParams.nPP_size,2) % even number of size classes
-                    index = reshape(1:fixedParams.nPP_size, [nc nr])';
-                else
-                    index = reshape([1:fixedParams.nPP_size 0], [nc nr])';
-                end
+                index = reshape([1:fixedParams.nPP_size, ... 
+                    zeros(1, nc * nr - fixedParams.nPP_size)], [nc nr])';
                 for ii = 1:fixedParams.nPP_size
                     subplot(nr,nc,index(ii))
                     x = squeeze(P(ii,:,fixedParams.PP_C_index ,:));
@@ -272,11 +263,8 @@ switch type
                 nr = ceil(fixedParams.nPP_size / nc);
                 plt.Units = 'inches';
                 plt.Position = [0 0 8*nc 3*nr];
-                if ~mod(fixedParams.nPP_size,2) % even number of size classes
-                    index = reshape(1:fixedParams.nPP_size, [nc nr])';
-                else
-                    index = reshape([1:fixedParams.nPP_size 0], [nc nr])';
-                end
+                index = reshape([1:fixedParams.nPP_size, ... 
+                    zeros(1, nc * nr - fixedParams.nPP_size)], [nc nr])';
                 for ii = 1:fixedParams.nPP_size
                     subplot(nr,nc,index(ii))
                     x = squeeze(P(ii,:,fixedParams.PP_N_index,:) ./ P(ii,:,fixedParams.PP_C_index,:));
@@ -305,11 +293,8 @@ switch type
                 nr = ceil(fixedParams.nPP_size / nc);
                 plt.Units = 'inches';
                 plt.Position = [0 0 8*nc 3*nr];
-                if ~mod(fixedParams.nPP_size,2) % even number of size classes
-                    index = reshape(1:fixedParams.nPP_size, [nc nr])';
-                else
-                    index = reshape([1:fixedParams.nPP_size 0], [nc nr])';
-                end
+                index = reshape([1:fixedParams.nPP_size, ... 
+                    zeros(1, nc * nr - fixedParams.nPP_size)], [nc nr])';
                 for ii = 1:fixedParams.nPP_size
                     subplot(nr,nc,index(ii))
                     x = squeeze(P(ii,:,fixedParams.PP_Chl_index,:) ./ ... 
@@ -581,11 +566,8 @@ switch type
                 nr = ceil(fixedParams.nPP_size / nc);
                 plt.Units = 'inches';
                 plt.Position = [0 0 6*nc 4*nr];
-                if ~mod(fixedParams.nPP_size, 2)
-                    index = reshape(1:fixedParams.nPP_size, [nc nr])';
-                else
-                    index = reshape([1:fixedParams.nPP_size 0], [nc nr])';
-                end
+                index = reshape([1:fixedParams.nPP_size, ...
+                    zeros(1, nc * nr - fixedParams.nPP_size)], [nc nr])';
                 for ii = 1:fixedParams.nPP_size
                     subplot(nr,nc,index(ii))
                     col = squeeze(Col(ii,:,:));
@@ -857,11 +839,8 @@ switch type
                 Y = squeeze(max(Y,[],2));
                 nc = floor(sqrt(nPP_size));
                 nr = ceil(nPP_size / nc);
-                if ~mod(nPP_size, 2)
-                    index = reshape(1:nPP_size, [nc nr])';
-                else
-                    index = reshape([1:nPP_size 0], [nc nr])';
-                end
+                index = reshape([1:nPP_size, ... 
+                    zeros(1, nc * nr - nPP_size)], [nc nr])';
                 for ii = 1:nPP_size
                     subplot(nr,nc,index(ii))
                     y = Y(ii,:,:);
@@ -1428,7 +1407,7 @@ switch type
         % Different selection of plots for different cost functions
         switch costfun
            
-            case 'polyLikelihood'
+            case {'polyLikelihood', 'polyLikelihood2'}
                 switch v
                     % summary plots displaying model fit to scalar data
                     case {'N','PON','POC','chl_a'}
@@ -1768,9 +1747,9 @@ switch type
                         line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
                         
                         % summary plots displaying model fit to size spectra data
-                    case 'N_at_size'
+                    case {'NConc', 'CellConc'}
                         
-                        Var = 'Ntot';
+%                         Var = v;
                         
                         coldat = [0 0 0];
                         colmod = [0 1 0];
@@ -1782,8 +1761,8 @@ switch type
                         % Model fit to polynomial coefficients representing data
                         subplot(2,2,1)
                         
-                        cdat = flip(Data.size.polyCoefs);
-                        cmod = flip(modData.size.polyCoefs);
+                        cdat = flip(Data.size.(['polyCoefs_' v]));
+                        cmod = flip(modData.size.(['polyCoefs_' v]));
                         nc = length(cdat);
                         x = 1:nc;
                         mu_c = mean(cmod, 2);
@@ -1833,22 +1812,25 @@ switch type
                         
                         % Sorted data and polynomial curves
                         subplot(2,2,3)
-                        x = Data.size.polyXvals;
-                        o = Data.size.sortOrder;
-                        ymod = modData.size.(['scaled_' Var]);
-                        ydat = Data.size.dataBinned.(['scaled_' Var]);
+                        x = Data.size.(['polyXvals_' v]);
+                        o = Data.size.(['sortOrder_' v]);
+                        
+                        ymod = modData.size.scaled_Value(strcmp(modData.size.Variable, v));
+                        ydat = Data.size.dataBinned.scaled_Value( ...
+                            strcmp(Data.size.dataBinned.Variable, v));
+%                         ydat = Data.size.dataBinned.(['scaled_' Var]);
                         ymod = ymod(o,:);
                         ydat = ydat(o);
-                        
                         
                         for i = 1:size(ymod, 2)
                             scatter(x, ymod(:,i), 'Marker', '.', 'MarkerEdgeColor', colmod);
                             if i == 1, hold on; end
-                            modpoly = polyval(modData.size.polyCoefs(:,i), x);
+%                             modpoly = polyval(modData.size.polyCoefs_Nconc(:,i), x);
+                            modpoly = polyval(modData.size.(['polyCoefs_' v])(:,i), x);
                             plot(x, modpoly, 'Color', colmod)
                         end
                         scatter(x, ydat, 'MarkerEdgeColor', coldat)
-                        datpoly = polyval(Data.size.polyCoefs, x);
+                        datpoly = polyval(Data.size.(['polyCoefs_' v]), x);
                         plot(x, datpoly, 'Color', coldat)
                         hold off
                         
@@ -1859,26 +1841,36 @@ switch type
                         line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.05*diff(yl), [1 2]), 'Color', coldat)
                         line([xl(2)-0.22*diff(xl), xl(2)-0.17*diff(xl)], repmat(yl(2)-0.1*diff(yl), [1 2]), 'Color', colmod)
                         
+                        switch v
+                            case 'Nconc'
+                                ylabel('sorted standardised N-at-size spectra')
+                            case 'cellTot'
+                                ylabel('sorted standardised cell abundance-at-size')
+                        end
                         
-                        ylabel('sorted standardised N spectra')
                         title('Polynomials representing size spectra data')
                         
                         
                         
                         % standardised variable vs size
                         subplot(2,2,2)
-                        
-                        Size = Data.size.dataBinned.size;
-                        SizeClass = Data.size.dataBinned.sizeClass;
-                        value = Data.size.dataBinned.Ntot;
-                        value_scaled = Data.size.dataBinned.scaled_Ntot;
+                        ind = strcmp(Data.size.dataBinned.Variable, v);
+%                         Size = Data.size.dataBinned.size;
+                        Size = Data.size.dataBinned.size(ind);
+%                         SizeClass = Data.size.dataBinned.sizeClass;
+                        SizeClass = Data.size.dataBinned.sizeClass(ind);
+%                         value = Data.size.dataBinned.Ntot;
+                        value = Data.size.dataBinned.Value(ind);
+%                         value_scaled = Data.size.dataBinned.scaled_Ntot;
+                        value_scaled = Data.size.dataBinned.scaled_Value(ind);
                         
                         usize = unique(Size);
                         usizeClass = unique(SizeClass);
                         nsize = length(usize);
                         
-                        valueMod = modData.size.(Var);
-                        valueMod_scaled = modData.size.(['scaled_' Var]);
+                        valueMod = modData.size.Value(strcmp(modData.size.Variable, v));
+                        valueMod_scaled = modData.size.scaled_Value(strcmp(modData.size.Variable, v));
+%                         valueMod_scaled = modData.size.(['scaled_' v]);
                         
                         semilogx(Size, value_scaled, '-o', ...
                             'MarkerEdgeColor', coldat, 'MarkerFaceColor', coldat, ...
@@ -1899,7 +1891,12 @@ switch type
                         %                 legend('data', 'model')
                         
                         xlabel('cell diameter (\mum)')
-                        ylabel('standardised N size spectra')
+                        switch v
+                            case 'Nconc'
+                                ylabel('standardised N size spectra')
+                            case 'cellTot'
+                                ylabel('standardised cell abundance-at-size')
+                        end
                         
                         % legend
                         lxl = log10(xl);
