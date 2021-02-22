@@ -18,7 +18,7 @@ nExtra = [length(namesExtra) length(namesExtra_2d)];
 namesExtra = cat(1, namesExtra, namesExtra_2d);
 AUXVARS = nan(nExtra(1) * nz, nt, nTraj);
 AUXVARS(:,1,1) = struct2array(extraOutput);
-AUXVARS_2d = nan(nExtra(2) * nPP_size * nz, nt, nTraj);
+AUXVARS_2d = nan(nExtra(2) * (nPP_size + 1) * nz, nt, nTraj);
 AUXVARS_2d(:,1,1) = struct2array(structfun(@(x)x(:)', ...
     extraOutput_2d, 'UniformOutput', false));
 for i = 2:nTraj  % Loop through remaining trajectories

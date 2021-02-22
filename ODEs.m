@@ -15,22 +15,16 @@ zoo = fixedParams.zooplankton;
 
 %% INITIAL CONDITIONS
 
-% v_in_exp = exp(v_in); % exponentiate to natural scale
-
 % Inorganic nitrogen
-% N = v_in_exp(fixedParams.IN_index)';
 N = v_in(fixedParams.IN_index)';
 
 % Plankton
-% PP = reshape(v_in_exp(fixedParams.PP_index), [nPP_size nz nPP_nut]); % phytoplankton (all nutrients)
 PP = reshape(v_in(fixedParams.PP_index), [nPP_size nz nPP_nut]); % phytoplankton (all nutrients)
 P_C = PP(:,:,fixedParams.PP_C_index);
-% Z_C = v_in_exp(fixedParams.ZP_index)'; % zooplankton (carbon)
 Z_C = v_in(fixedParams.ZP_index)'; % zooplankton (carbon)
 B_C = [P_C; Z_C]; % all planktonic carbon
 
 % Organic matter
-% OM =reshape(v_in_exp(fixedParams.OM_index), [nOM_type nz nOM_nut]);
 OM =reshape(v_in(fixedParams.OM_index), [nOM_type nz nOM_nut]);
 OM_C = OM(:,:,fixedParams.OM_C_index); % DOC and POC
 
@@ -93,7 +87,8 @@ N_uptake = V_N .* P_C; % mmol N / m^3 / day
 N_uptake_losses = sum(N_uptake);
 
 % Photosynthesis
-if all(I == 0)
+zeroLight = all(I == 0);
+if zeroLight
     V_Chl = zeros_size_nz;
     V_C = zeros(nPP_size+1, nz);
 else
@@ -114,8 +109,12 @@ end
 F = sum(B_C); % total prey carbon
 BC2 = B_C .^ 2;
 Phi = BC2 ./ sum(BC2); % prey preference
-G = (MichaelisMenton(params.Gmax, params.k_G, F) .* ... 
+
+G = (MichaelisMenton([params.Gmax; params.Gmax(end)], params.k_G, F) .* ... 
     gammaT .* (1-exp(params.Lambda .* F))) .* Phi;  % grazing rate (1 / day)
+
+% G = (MichaelisMenton(params.Gmax, params.k_G, F) .* ... 
+%     gammaT .* (1-exp(params.Lambda .* F))) .* Phi;  % grazing rate (1 / day)
 
 % G = (params.Gmax .* gammaT .* F ./ (params.k_G + F) .* ... 
 %     (1-exp(params.Lambda .* F))) .* Phi; % grazing rate (1 / day)
@@ -212,13 +211,74 @@ dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)];
 
 %% AUXILIARY OUTPUTS
 if returnExtra
-    % 1D
+    
+    %~~~~~~~~~~~
+    % 1D (depth)
+    %~~~~~~~~~~~
+    
+    % PAR-at-depth depends upon plankton concentrations
     extraOutput.PAR = I;
-    % 2D (vectorised over cell size)
-    extraOutput_2d = struct();
-    extraOutput_2d.cellDensity = P_C ./ params.Q_C; % phytoplankton cell density [cells / m^3]
-    extraOutput_2d.biovolume = (1e-18 * fixedParams.PPsize) .* ... 
-        extraOutput_2d.cellDensity; % [m^3 / m^3] volume of all cells per m^3 of water
+    % Temperature dependence
+    extraOutput.gammaT = gammaT;
+    % Total prey carbon
+    extraOutput.F = F;
+
+    %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    % 2D (depth & cell size, including zooplankton)
+    %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
+%     extraOutput_2d = struct();
+    % phytoplankton cell density [cells / m^3]
+    extraOutput_2d.cellDensity = P_C ./ params.Q_C;
+    % phytoplankton bio-volume [m^3 / m^3]
+    extraOutput_2d.biovolume = (1e-18 * [fixedParams.PPsize]) .* ... 
+        extraOutput_2d.cellDensity;
+    % Nutrient quotas
+    extraOutput_2d.Q_N = Q_N;
+    extraOutput_2d.Q_Chl = Q_Chl;
+    % Nutrient limitation
+    extraOutput_2d.gammaN = gammaN;
+    % Uptake regulation
+    extraOutput_2d.Qstat = Qstat;    
+    % Nutrient uptake/production rates    
+    extraOutput_2d.V_N = V_N;
+    
+    if ~zeroLight
+        extraOutput_2d.V_Chl = V_Chl;
+        extraOutput_2d.V_C = V_C;
+        % Light saturated photosynthetic (carbon production) rate [1/day]
+        extraOutput_2d.psat = psat;
+        % Photosynthetic rate [1/day]
+        extraOutput_2d.pc = pc;
+        % Nitrogen prodcution fraction allocated to chlorophyll (mg Chl / mmol N)
+        extraOutput_2d.rho = rho;
+    else
+        extraOutput_2d.V_Chl = zeros_size_nz;
+        extraOutput_2d.V_C = zeros_size_nz;
+        % Light saturated photosynthetic (carbon production) rate [1/day]
+        extraOutput_2d.psat = zeros_size_nz;
+        % Photosynthetic rate [1/day]
+        extraOutput_2d.pc = zeros_size_nz;
+        % Nitrogen prodcution fraction allocated to chlorophyll (mg Chl / mmol N)
+        extraOutput_2d.rho = zeros_size_nz;
+    end
+    % Prey preference
+    extraOutput_2d.Phi = Phi;
+    % Grazing rate
+    extraOutput_2d.G = G;
+    % Predation losses/gains
+    extraOutput_2d.predation_losses_C = predation_losses_C;
+    extraOutput_2d.predation_gains_C = predation_gains_C;
+
+    % Include extra row for zooplankton -- unspecified size prohibits
+    % actual values, use NaNs...
+    fields = fieldnames(extraOutput_2d);
+    for i = 1:length(fields)
+        if size(extraOutput_2d.(fields{i}), 1) == nPP_size
+            extraOutput_2d.(fields{i}) = [extraOutput_2d.(fields{i}); nan(1, nz)];
+        end
+    end
+    
 %     if all(I == 0)
 %         extraOutput_2d.Qeq = repmat(params.Qmax, [1 nz]); % equilibrium nitrogen Qeq=Qmax when I=0
 %     else
@@ -257,5 +317,4 @@ function v = MichaelisMenton(m,k,u)
 u(u<0) = 0; % include for robustness... there shouldn't be any negatives
 v = m .* u ./ (u + k);
 end
-
 

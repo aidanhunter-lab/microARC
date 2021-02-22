@@ -1,30 +1,126 @@
-function [Data, Forc, FixedParams] = selectYears(data, forc, fixedpars)
+function [Data, Forc, FixedParams] = selectYears(data, forc, fixedpars, varargin)
+
 % Select which years to model and filter the other years out of the data
+
 Data = data;
 Forc = forc;
 FixedParams = fixedpars;
 
+% years available for each data type
 nut_years = unique(Data.scalar.Year(strcmp(Data.scalar.Type, 'inorganic')));
 OM_years = unique(Data.scalar.Year(strcmp(Data.scalar.Type, 'organic')));
 size_years = unique(Data.size.Year);
-forc_years = Forc.years;
+forc_years = Forc.years(:);
 all_years = unique([nut_years(:); OM_years(:); size_years(:)]);
-% nyears = length(all_years);
+
+% if there is no year where all data types are available then we need to
+% aggregate data types across different years -- the last data type 
+% specified in prefOrd is most likely to come from different year (forc
+% must be in 1st position)
+prefOrd = {'forc', 'size', 'OM', 'nut'};
+datYear = cell(size(prefOrd)); % datYear stores the year(s) used for each data type
+
 % index which years are present in each data set
-mat = [ismember(all_years, forc_years), ...
-    ismember(all_years, nut_years), ...
-    ismember(all_years, OM_years), ...
-    ismember(all_years, size_years)];
-% Select all years with complete data (rows of 1 in mat) and discard the
-% rest. If years with complete data are not present then return the year
-% with the most complete data, and infill with other years where needed.
-mostData = sum(mat(:,2:end), 2);
-mostData = mostData == max(mostData);
-yrs = mostData & mat(:,1) == 1;
-whichYears = all_years(yrs);
+mat = false(length(all_years),length(prefOrd)); % [years, data type]
+for i = 1:length(prefOrd)
+    mat(:,i) = ismember(all_years, eval([prefOrd{i} '_years']));
+end
+
+% do any years have all fitting-data types?
+anyCompleteYears = any(sum(mat, 2) == length(prefOrd));
+
+singleYear = true; % return data from a single year? (default true... false will be trickier and would need a multi-year cost function)
+if ~isempty(varargin)
+    if any(strcmp(varargin, 'singleYear'))
+        singleYear = varargin{find(strcmp(varargin, 'singleYear'))+1};
+    end
+end
+
+mat(~mat(:,1),:) = false; % Forcing data is always required
+dataCount = sum(mat(:,2:end), 2);
+mostData = dataCount == max(dataCount); % index years with most complete data
+% yrs = mostData; % years with most complete data
+
+% Fill datYear wih values dependent upon singleYear and anyCompleteYears
+switch singleYear
+
+    case true
+    
+        switch anyCompleteYears
+            
+            case true
+                % Select the latest year with complete data (rows of 1 in
+                % mat) and discard the rest.
+                ind = find(mostData, 1, 'last');
+                bestYear = all_years(ind);
+                for i = 1:length(datYear)
+                    datYear{i} = bestYear;
+                end
+                
+            case false                
+                % Use the year with the most complete data, then infill
+                % remaining missing data from another year.
+                tiedYears = sum(mostData) > 1; % do multiple years have equal amounts of data types?
+
+                if tiedYears % then choose between them using prefOrd
+                    mat_ = cumsum(mat, 2);
+                    [~, I] = max(mat_, [], 2);
+                    I(~mostData) = inf;
+                    bestYear_ind = I == min(I); % this works because columns of mat are ordered by prefOrd
+                    bestYear = all_years(bestYear_ind);
+                    missingDataType = prefOrd(~mat(bestYear_ind,:)); % data types not available in bestYear
+                    for i = 1:length(datYear)
+                        if ~ismember(missingDataType, prefOrd{i})
+                            datYear{i} = bestYear;
+                        end
+                    end
+                    for i = 1:length(missingDataType)
+                        iy = eval([missingDataType{i}, '_years']); % years available for missing data type
+                        dy = abs(iy - bestYear); % proximity to target year
+                        dy = dy == min(dy); % choose year closest to target year
+                        if sum(dy) > 1
+                            % if multiple choices are equally close to target year then choose the later year
+                            id = find(dy == 1, 1, 'last');
+                            dy = false(size(dy));
+                            dy(id) = true;
+                        end
+                        datYear{strcmp(missingDataType{i}, prefOrd)} = iy(dy);
+                    end
+                    
+                else % no tied years => a bit simpler
+                    bestYear_ind = mostData;
+                    bestYear = all_years(bestYear_ind);
+                    missingDataType = prefOrd(~mat(bestYear_ind,:)); % data types not available in bestYear
+                    for i = 1:length(datYear)
+                        if ~ismember(missingDataType, prefOrd{i})
+                            datYear{i} = bestYear;
+                        end
+                    end
+                    for i = 1:length(missingDataType)
+                        iy = eval([missingDataType{i}, '_years']); % years available for missing data type
+                        dy = abs(iy - bestYear); % proximity to target year
+                        dy = dy == min(dy); % choose year closest to target year
+                        if sum(dy) > 1
+                            % if multiple choices are equally close to target year then choose the later year
+                            id = find(dy == 1, 1, 'last');
+                            dy = false(size(dy));
+                            dy(id) = true;
+                        end
+                        datYear{strcmp(missingDataType{i}, prefOrd)} = iy(dy);
+                    end
+                end
+        end
+        
+    case false
+        
+        warning('More coding required for multiple target years! More work to do...')
+end
+
+
+
 
 % Filter out unused years of forcing data
-iy = ismember(forc_years, whichYears);
+iy = ismember(forc_years, bestYear);
 [Y,~] = datevec(Forc.t);
 ind = any(ismember(Y, Forc.years(iy)));
 ntraj = length(ind);
@@ -44,19 +140,11 @@ FixedParams.years = FixedParams.years(iy);
 
 % Filter the scalar data
 % organic matter
-iy = ismember(OM_years, whichYears);
-if ~all(iy == 0)
-    keep = ismember(Data.scalar.Year, OM_years(iy)) & strcmp(Data.scalar.Type, 'organic');
-else
-    keep = strcmp(Data.scalar.Type, 'organic');
-end
+keep = ismember(Data.scalar.Year, datYear{strcmp(prefOrd, 'OM')}) & ...
+    strcmp(Data.scalar.Type, 'organic');
 % inorganic nutrient
-iy = ismember(nut_years, whichYears);
-if ~all(iy == 0)
-    keep = keep | (ismember(Data.scalar.Year, nut_years(iy)) & strcmp(Data.scalar.Type, 'inorganic'));
-else
-    keep = keep | strcmp(Data.scalar.Type, 'inorganic');
-end
+keep = keep | (ismember(Data.scalar.Year, datYear{strcmp(prefOrd, 'nut')}) & ...
+    strcmp(Data.scalar.Type, 'inorganic'));
 
 fields = fieldnames(Data.scalar);
 for i = 1:length(fields)
@@ -68,17 +156,44 @@ Data.scalar.nSamples = length(Data.scalar.Value);
 Data.scalar.nEvents = length(unique(Data.scalar.Event));
 
 % Filter size spectra data
-iy = ismember(Data.size.Year, whichYears);
+if ~isempty(varargin)
+    if any(strcmp(varargin, 'singleSpectra'))
+        useSingleSizeSpectra = varargin{find(strcmp(varargin, 'singleSpectra')) + 1};
+    end
+end
+
+keep = ismember(Data.size.Year, datYear{strcmp(prefOrd, 'size')});
 fields = fieldnames(Data.size);
 for i = 1:length(fields)
     if size(Data.size.(fields{i}), 1) == Data.size.nSamples
-       Data.size.(fields{i}) = Data.size.(fields{i})(iy); 
+       Data.size.(fields{i})(~keep) = []; 
     end
 end
 Data.size.nSamples = size(Data.size.ESD,1);
-iy = ismember(Data.size.dataBinned.Year, whichYears);
-Data.size.dataBinned = structfun(@(x) x(iy), Data.size.dataBinned, ...
+
+if useSingleSizeSpectra
+    uscenario = unique(Data.size.scenario);
+    if length(uscenario) > 1
+        keep = strcmp(Data.size.scenario, uscenario{1}); % this could be better coded, but it works given the data we have!
+        for i = 1:length(fields)
+            if size(Data.size.(fields{i}), 1) == Data.size.nSamples
+                Data.size.(fields{i})(~keep) = [];
+            end
+        end
+    end
+end
+Data.size.nSamples = size(Data.size.ESD,1);
+
+keep = ismember(Data.size.dataBinned.Year, datYear{strcmp(prefOrd, 'size')});
+if useSingleSizeSpectra
+    uscenario = unique(Data.size.dataBinned.scenario(keep));
+    if length(uscenario) > 1
+        keep = keep & strcmp(Data.size.dataBinned.scenario, uscenario{1});
+    end
+end
+Data.size.dataBinned = structfun(@(x) x(keep), Data.size.dataBinned, ...
     'UniformOutput', false);
+
 
 % Relabel the event numbers
 eventLabs = table((1:Data.scalar.nEvents)', unique(Data.scalar.Event));
