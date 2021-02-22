@@ -29,7 +29,7 @@ lat_link = linkage(dist_dtw);
 
 if ~isempty(v) && any(strcmp(v(1,:),'dendrogram')) && v{2,strcmp(v(1,:),'dendrogram')}
     figure
-    dendrogram(lat_link,'ColorThreshold','default')
+    dendrogram(lat_link,'ColorThreshold','default');
     xlabel('particle groups')
     title({'Particle trajectories clustered by latitude', ... 
         'Two main clusters separate water of Arctic & Atlantic origin'})
@@ -73,7 +73,6 @@ if ~isempty(v) && any(strcmp(v(1,:),'trajectoryPlot')) && v{2,strcmp(v(1,:),'tra
     end
 end
 
-
 % Associate each sample with Arctic or Atlantic waters, or both...
 waterMass = zeros(Data.nEvents,2); % for each event, count particles originating from Atlantic or Arctic
 for i = 1:Data.nEvents
@@ -82,14 +81,13 @@ for i = 1:Data.nEvents
     waterMass(i,1) = sum(strcmp(x,'Atlantic'));
     waterMass(i,2) = sum(strcmp(x,'Arctic'));
 end
-% Given the way in which trajectories have been filtered simply by distance
-% from sampling event, it is likely that most (or all) trajectories used
-% for each event entirely originate from either the Arctic or Atlantic, so
-% let's just assume there is zero mixing so that each sampling event is
-% either within Atlantic OR Arctic water... This could/should be modified
-% later...
-ind = waterMass ./ sum(waterMass,2) > 0.5;
-Data.waterMass = cell(Data.nEvents,1);
-Data.waterMass(ind(:,1)) = {'Atlantic'};
-Data.waterMass(ind(:,2)) = {'Arctic'};
 
+Data.waterMass = cell(Data.nEvents,1); % label each sampling event as from Arctic, Atlantic, or a mix of water depending on origin of particle trajectories
+Arctic = waterMass(:,1) == 0;
+Atlantic = waterMass(:,2) == 0;
+Mix = ~(Arctic | Atlantic);
+Data.waterMass(Arctic) = {'Arctic'};
+Data.waterMass(Atlantic) = {'Atlantic'};
+Data.waterMass(Mix) = {'Arctic/Atlantic'};
+Data.AtlanticOrigin = waterMass(:,1) ./ sum(waterMass,2); % proportion of trajectories of Atlantic or Arctic origin for each sampling event
+Data.ArcticOrigin = waterMass(:,2) ./ sum(waterMass,2);

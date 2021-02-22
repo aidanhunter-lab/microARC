@@ -22,7 +22,7 @@ if ~isempty(varargin)
                 else
                     if any(strcmp(Name, {'wp'}))
                         Params.(Name) = powerFunction(param_a, param_b, V_PP, ...
-                            'UpperBound', FixedParams.maxSinkSpeed, 'Transpose', true);
+                            'UpperBound', FixedParams.maxSinkSpeed_P, 'Transpose', true);
                     end
                     if any(strcmp(Name, {'Qmax_delQ'}))
                         Params.(Name) = 1 ./ (1 - powerFunction(param_a, param_b, V_PP));
@@ -92,7 +92,7 @@ if ~isempty(varargin)
                     else
                         if any(strcmp(Name, {'wp'}))
                             Params.(Name) = powerFunction(param_a, param_b, V_PP, ...
-                                'UpperBound', FixedParams.maxSinkSpeed, 'Transpose', true);
+                                'UpperBound', FixedParams.maxSinkSpeed_P, 'Transpose', true);
                         end
                         if any(strcmp(Name, {'Qmax_delQ'}))
                             Params.(Name) = 1 ./ (1 - powerFunction(param_a, param_b, V_PP));

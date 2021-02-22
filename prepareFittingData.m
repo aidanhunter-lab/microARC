@@ -1,104 +1,282 @@
 function Data = prepareFittingData(obsDir, varargin)
 
+% Include time-of-day in data output
+
 % Load and clean fitting data, output as struct
 
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-% Inorganic nutrient
+%% Inorganic nutrient
+
+%~~~~~~~~~~~~
+% PS99 cruise
+%~~~~~~~~~~~~
 
 nutrientObsFile = 'PS99_2_nutrients_rev.csv';
 
-dat_nut = readtable(fullfile(obsDir,nutrientObsFile), 'Format', 'auto');
-date = split(dat_nut.Date, 'T');
-dat_nut.Date = date(:,1);
-dat_nut.Time = date(:,2);
-dat_nut = movevars(dat_nut, 'Time', 'After', 'Date');
-% dat_nut.Year = year(dat_nut.Date); % this 'year' function apparently causes problems on some MatLab versions
-dat_nut.Year = cellfun(@(x) str2double(x), ...
-    cellfun(@(x) x(1:4), dat_nut.Date, 'UniformOutput', false));
-dat_nut = movevars(dat_nut, 'Year', 'After', 'Time');
-dat_nut.Yearday = yearday(datenum(dat_nut.Date));
-dat_nut = movevars(dat_nut, 'Yearday', 'After', 'Year');
-% filter out data columns
-% dat_nut = dat_nut(:,{'Year','Yearday','Event','Event_2','Latitude', ... 
-%     'Longitude','Depth','NO3_NO2_corrected','Flag_NO3_NO2_c'});
-dat_nut = dat_nut(:,{'Year','Yearday','Event','Event_2','Latitude', ... 
+dat = readtable(fullfile(obsDir,nutrientObsFile), 'Format', 'auto');
+date = split(dat.Date, 'T');
+dat.Date = date(:,1);
+dat.Time = date(:,2);
+dat.Time = cellfun(@(x) x(1:5), dat.Time, 'UniformOutput', false); % omit the seconds
+dat.t = datenum(dat.Date);
+[dat.Year, ~] = datevec(dat.t);
+dat.Yearday = yearday(dat.t);
+% filter out columns
+dat = dat(:,{'Event','t','Date','Time','Year','Yearday','Latitude', ... 
     'Longitude','Depth','NO3_NO2_corrected','Flag_NO3_NO2_c', ... 
     'PO4_corrected','Flag_PO4_c','Si_OH4_corrected','Flag_Si_OH4_c'});
-
 % remove rows flagged as (potentially) poor quality measurements
-dat_nut.Properties.VariableNames(contains( ... 
-    dat_nut.Properties.VariableNames, 'corrected')) = {'N','P','Si'};
-dat_nut.Properties.VariableNames(contains( ... 
-    dat_nut.Properties.VariableNames, 'Flag')) = {'Flag_N','Flag_P','Flag_Si'};
-dat_nut.N(dat_nut.Flag_N ~= 0) = nan; dat_nut.Flag_N = [];
-dat_nut.P(dat_nut.Flag_P ~= 0) = nan; dat_nut.Flag_P = [];
-dat_nut.Si(dat_nut.Flag_Si ~= 0) = nan; dat_nut.Flag_Si = [];
-
+dat.Properties.VariableNames(contains( ... 
+    dat.Properties.VariableNames, 'corrected')) = {'N','P','Si'};
+dat.Properties.VariableNames(contains( ... 
+    dat.Properties.VariableNames, 'Flag')) = {'Flag_N','Flag_P','Flag_Si'};
+dat.N(dat.Flag_N ~= 0) = nan; dat.Flag_N = [];
+dat.P(dat.Flag_P ~= 0) = nan; dat.Flag_P = [];
+dat.Si(dat.Flag_Si ~= 0) = nan; dat.Flag_Si = [];
 % convert from short to long format
-dat_nut = stack(dat_nut, {'N','P','Si'}, ... 
+dat = stack(dat, {'N','P','Si'}, ... 
     'IndexVariableName','Variable','NewDataVariableName','Value');
-dat_nut.Variable = cellstr(dat_nut.Variable);
-dat_nut(isnan(dat_nut.Value),:) = [];
-dat_nut.Type = repmat({'inorganic'}, [height(dat_nut) 1]);
+dat.Variable = cellstr(dat.Variable);
+dat(isnan(dat.Value),:) = [];
+dat.Type = repmat({'inorganic'}, [height(dat) 1]);
+% reformat event label to include leading zero on sample number
+dat.Properties.VariableNames{'Event'} = 'Label';
+x = split(dat.Label, '-');
+x2 = x(:,2);
+for i = 1:length(x2)
+    if length(x2{i}) == 1
+        x2{i} = ['0' x2{i}];
+    end
+end
+dat.Label = join([x(:,1), x2], '-');
 
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+dat_nut = dat; % nutrient data suffixed with '_nut'
 
-% POM and Chl_a
+
+%~~~~~~~~~~~~~
+% PS114 cruise
+%~~~~~~~~~~~~~
+
+nutrientObsFile = 'PS114_Nuts_Final_PANGAEA_v1.csv';
+stationList = 'PS114_station_list.csv';
+
+dat = readtable(fullfile(obsDir,nutrientObsFile), 'Format', 'auto');
+stations = readtable(fullfile(obsDir,stationList), 'Format', 'auto');
+% There is no date provided in dat(!), so need to combine table of
+% sampling station data with table of measurements... but the formating is
+% inconsistent...
+dat.Label = join([dat.Cruise, dat.Station], '/');
+dat.Label = strrep(dat.Label, '_', '-');
+stations.Properties.VariableNames{'Station'} = 'Label';
+% remove underway measures
+stations = stations(~contains(stations.Label, 'Underway'),:);
+% reformat
+stations.Label = strrep(stations.Label, '_', '/');
+% include leading zeros
+x = split(stations.Label, '/');
+x2 = x(:,2);
+x_ = split(x2, '-');
+x_1 = x_(:,1);
+x_2 = x_(:,2);
+for i = 1:length(x_1)
+    n1 = length(x_1{i});
+    n2 = length(x_2{i});
+    if n1 == 1, x_1{i} = ['00' x_1{i}]; end
+    if n1 == 2, x_1{i} = ['0' x_1{i}]; end
+    if n2 == 1, x_2{i} = ['0' x_2{i}]; end
+end
+x_ = join([x_1, x_2], '-');
+stations.Label = join([x(:,1), x_], '/');
+
+% extract event dates/times
+stations = stations(:,{'Label', 'Date', 'Time', 'Action'});
+stations = stations(contains(stations.Action, 'start'),:); % use event starting times
+stations.Action = [];
+% some events (around midnight) have two dates because casts started pm
+% ended am -- use the 1st date.
+stations_ = table(unique(stations.Label));
+stations_.Properties.VariableNames = {'Label'};
+for i = 1:height(stations_)
+    d = sort(stations.Date(strcmp(stations.Label, stations_.Label{i})));
+    t = sort(stations.Time(strcmp(stations.Label, stations_.Label{i})));
+    stations_.Date(i) = d(1);
+    stations_.Time(i) = t(1);
+end
+dat = innerjoin(dat, stations_, 'Keys', 'Label');
+% rename columns
+dat.Properties.VariableNames({'Longitude_E', 'Latitude_N'}) = ... 
+    {'Longitude', 'Latitude'};
+% include extra timing columns
+dat.t = datenum(dat.Date);
+[dat.Year, ~] = datevec(dat.t);
+dat.Yearday = yearday(dat.t);
+% filter out columns
+dat = dat(:,{'Label','t','Date','Time','Year','Yearday','Latitude','Longitude','Depth', ... 
+    'NO3_NO2_C','QF_NO3_NO2_C','PO4_C','QF_PO4_C','Si_OH4_C','QF_Si_OH4_C'});
+% remove rows flagged as (potentially) poor quality measurements
+dat.Properties.VariableNames(contains(dat.Properties.VariableNames, '_C') ...
+    & ~contains(dat.Properties.VariableNames, 'QF_')) = {'N','P','Si'};
+dat.Properties.VariableNames(contains(dat.Properties.VariableNames, 'QF_')) ...
+    = {'Flag_N','Flag_P','Flag_Si'};
+dat.N(dat.Flag_N ~= 0) = nan; dat.Flag_N = [];
+dat.P(dat.Flag_P ~= 0) = nan; dat.Flag_P = [];
+dat.Si(dat.Flag_Si ~= 0) = nan; dat.Flag_Si = [];
+% convert from short to long format
+dat = stack(dat, {'N','P','Si'}, ... 
+    'IndexVariableName','Variable','NewDataVariableName','Value');
+dat.Variable = cellstr(dat.Variable);
+dat(isnan(dat.Value),:) = [];
+dat.Type = repmat({'inorganic'}, [height(dat) 1]);
+% merge with PS99 data
+dat_nut = [dat_nut; dat];
+
+
+
+%% Organic nutrient
+
+%~~~~~~~~~~~~~~~~~~~~~
+% PS99 & PS107 cruises
+%~~~~~~~~~~~~~~~~~~~~~
 
 OMObsFile = 'copy_data_Engel_etal2019.csv';
 
-dat_OM = readtable(fullfile(obsDir,OMObsFile), 'Format', 'auto');
-% The lat-long column entries are not formatted consistently across rows,
-% and also contain degree symbols and measurements both in decimal-degrees 
-% and degree-minutes. This needs fixed...
-ind = ~cellfun('isempty', strfind(dat_OM.Latitude, char(176)));
-degr = split(dat_OM.Latitude(ind),char(176)); % convert degree-minutes/seconds into degree-decimal
+dat = readtable(fullfile(obsDir,OMObsFile), 'Format', 'auto');
+
+% Extract the PS99 & PS107 cruise data (omitting everything pre-2016)
+dat = dat(contains(dat.EventNumber, {'PS99','PS107'}),:);
+
+% The lat-long columns have inconsistent format -- contain degree symbols 
+% and measurements both in decimal-degrees and degree-minutes. Reformat...
+ind = ~cellfun('isempty', strfind(dat.Latitude, char(176)));
+degr = split(dat.Latitude(ind),char(176)); % convert degree-minutes/seconds into degree-decimal
 minute = split(degr(:,2),'.');
 degr = cellfun(@(x)str2double(x),degr(:,1));
 second = cellfun(@(x)str2double(x),minute(:,2));
 minute = cellfun(@(x)str2double(x),minute(:,1));
 lat = cellstr(num2str(degr + minute ./ 60 + second ./ 3600));
-dat_OM.Latitude(ind) = lat;
-dat_OM.Latitude = cellfun(@(x)str2double(x), dat_OM.Latitude);
-
-dat_OM.Longitude = strrep(dat_OM.Longitude,'E00','');
-dat_OM.Longitude = strrep(dat_OM.Longitude,'E0','');
-dat_OM.Longitude = strrep(dat_OM.Longitude,'E','');
-dat_OM.Longitude = strrep(dat_OM.Longitude,'W00','-');
-dat_OM.Longitude = strrep(dat_OM.Longitude,'W0','-');
-dat_OM.Longitude = strrep(dat_OM.Longitude,'W','-');
-ind = ~cellfun('isempty', strfind(dat_OM.Longitude, char(176)));
-degr = split(dat_OM.Longitude(ind),char(176));
+dat.Latitude(ind) = lat;
+dat.Latitude = cellfun(@(x)str2double(x), dat.Latitude);
+ind = ~cellfun('isempty', strfind(dat.Longitude, char(176)));
+west = contains(dat.Longitude(ind), 'W');
+dat.Longitude = strrep(dat.Longitude,'E00','');
+dat.Longitude = strrep(dat.Longitude,'E0','');
+dat.Longitude = strrep(dat.Longitude,'E','');
+dat.Longitude = strrep(dat.Longitude,'W00','');
+dat.Longitude = strrep(dat.Longitude,'W0','');
+dat.Longitude = strrep(dat.Longitude,'W','');
+degr = split(dat.Longitude(ind),char(176));
 minute = split(degr(:,2),'.');
 degr = cellfun(@(x)str2double(x),degr(:,1));
 second = cellfun(@(x)str2double(x),minute(:,2));
 minute = cellfun(@(x)str2double(x),minute(:,1));
-lon = cellstr(num2str(degr + minute ./ 60 + second ./ 3600));
-dat_OM.Longitude(ind) = lon;
-dat_OM.Longitude = cellfun(@(x)str2double(x), dat_OM.Longitude);
-% Use only 2017 from this data set, because we have particle trajectories
-% for this year.
-dat_OM = dat_OM(dat_OM.Year == 2017,:);
-dat_OM.Yearday = yearday(datenum(dat_OM.Date));
+lon = degr + minute ./ 60 + second ./ 3600;
+lon(west) = -lon(west);
+dat.Longitude(ind) = cellstr(num2str(lon));
+dat.Longitude = cellfun(@(x)str2double(x), dat.Longitude);
+% Event format is inconsistent... reformat
+dat.Properties.VariableNames{'EventNumber'} = 'Label';
+dat.Label = strrep(dat.Label, '/', '_');
+dat.Label = strrep(dat.Label, '-', '_');
+x = regexp(dat.Label, '_');
+for i = 1:length(x)
+    dat.Label{i}(x{i}(1)) = '/';
+end
+dat.Label = strrep(dat.Label, '_', '-');
+dat.Label = strrep(dat.Label, ' ', '');
+% include leading zeros
+x = split(dat.Label, '/');
+x2 = x(:,2);
+x_ = split(x2, '-');
+x_1 = x_(:,1);
+x_2 = x_(:,2);
+for i = 1:length(x_1)
+    n1 = length(x_1{i});
+    n2 = length(x_2{i});
+    if n1 == 1, x_1{i} = ['00' x_1{i}]; end
+    if n1 == 2, x_1{i} = ['0' x_1{i}]; end
+    if n2 == 1, x_2{i} = ['0' x_2{i}]; end
+end
+x_ = join([x_1, x_2], '-');
+dat.Label = join([x(:,1), x_], '/');
+% include extra timing columns
+dat.t = datenum(dat.Date);
+dat.Yearday = yearday(dat.t);
 % filter out data columns
-dat_OM = dat_OM(:,{'Year','Yearday','ARK_oder_PS','HG_stations','Station','EventNumber','Latitude','Longitude','Depth','chl_a','POC','PON'});
+dat = dat(:,{'Label','t','Date','Year','Yearday','Latitude','Longitude','Depth','chl_a','POC','PON'});
 % Convert POM units from (mu g / L) to (m mol / m^3)
-dat_OM.PON = dat_OM.PON ./ 14;
-dat_OM.POC = dat_OM.POC ./ 12;
-% % Convert chl units from mu g / L to mu g / m^3
-% dat_OM.chl_a = dat_OM.chl_a * 1000;
-% dat_OM.Properties.VariableNames{'chl_a'} = 'Chl';
+dat.PON = dat.PON ./ 14;
+dat.POC = dat.POC ./ 12;
+% Chl-a units from mu g / L -> m g / m^3, no conversion necessary
 % convert from short to long format
-dat_OM = stack(dat_OM, {'chl_a','POC','PON'}, ... 
+dat = stack(dat, {'chl_a','POC','PON'}, ... 
     'IndexVariableName','Variable','NewDataVariableName','Value');
-dat_OM.Variable = cellstr(dat_OM.Variable);
-dat_OM(isnan(dat_OM.Value),:) = [];
-dat_OM.Type = repmat({'organic'}, [height(dat_OM) 1]);
+dat.Variable = cellstr(dat.Variable);
+dat(isnan(dat.Value),:) = [];
+dat.Type = repmat({'organic'}, [height(dat) 1]);
 
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+dat_OM = dat;
 
-% Size spectra
+
+%~~~~~~~~~~~~~
+% PS114 cruise
+%~~~~~~~~~~~~~
+
+OMObsFile = 'ARK32-1_PS114_2018_Chla_POC_Nothig_CORRECTED.csv';
+
+dat = readtable(fullfile(obsDir,OMObsFile), 'Format', 'auto');
+
+% reformat lat/long columns -- use +/- insteqad of E/W, and use decimal-degrees
+% instead of degree-minutes-seconds
+west = contains(dat.Longitude, 'W');
+dat.Longitude = strrep(dat.Longitude,'E ','');
+dat.Longitude = strrep(dat.Longitude,'W ','');
+dat.Longitude = strrep(dat.Longitude,' ','.');
+degr = split(dat.Longitude, '.'); % convert degree-minutes/seconds into degree-decimal
+minute = str2double(degr(:,2));
+second = str2double(degr(:,3));
+degr = str2double(degr(:,1));
+lon = degr + minute ./ 60 + second ./ 3600;
+lon(west) = -lon(west);
+dat.Longitude = lon;
+dat.Latitude = strrep(dat.Latitude, ' ', '.');
+degr = split(dat.Latitude, '.');
+minute = str2double(degr(:,2));
+second = str2double(degr(:,3));
+degr = str2double(degr(:,1));
+dat.Latitude = degr + minute ./ 60 + second ./ 3600;
+% reformat event labelling...
+dat.Properties.VariableNames{'Station'} = 'Label';
+x = regexp(dat.Label, '_');
+for i = 1:length(x)
+    dat.Label{i}(x{i}(1)) = '/';
+end
+dat.Label = strrep(dat.Label, '_', '-');
+dat.Label = strrep(dat.Label, ' ', '');
+% include extra timing columns
+dat.t = datenum(dat.Date);
+[dat.Year,~] = datevec(dat.t);
+dat.Yearday = yearday(dat.t);
+dat.Properties.VariableNames{'TimeUTC'} = 'Time';
+% filter out data columns
+dat = dat(:,{'Label','t','Date','Time','Year','Yearday','Latitude','Longitude','Depth','Chla','POC','PON'});
+dat.Properties.VariableNames{'Chla'} = 'chl_a';
+% Convert POM units from (mu g / L) to (m mol / m^3)
+dat.PON = dat.PON ./ 14;
+dat.POC = dat.POC ./ 12;
+% convert from short to long format
+dat = stack(dat, {'chl_a','POC','PON'}, ... 
+    'IndexVariableName','Variable','NewDataVariableName','Value');
+dat.Variable = cellstr(dat.Variable);
+dat(isnan(dat.Value),:) = [];
+dat.Type = repmat({'organic'}, [height(dat) 1]);
+% merge with PS99 & PS107 data
+
+dat_OM.Time = cell(height(dat_OM),1);
+dat_OM = movevars(dat_OM, 'Time', 'After', 'Date');
+dat_OM = [dat_OM; dat];
+
+
+%% Size spectra
 
 % load data
 sizeSpectraObsFile = 'S1-S4_spectra_Nbiomass.csv';
@@ -119,11 +297,6 @@ for i = 1:ne
     NsizeEqs{i} = varSplit{2};
 end
 
-% ESDmin = 1; % min/max sizes to retain from the data
-% ESDmax = 200;
-% if ESDmin < min(dat_size.ESD), ESDmin = min(dat_size.ESD); end
-% if ESDmax > max(dat_size.ESD), ESDmax = max(dat_size.ESD); end
-
 % Convert units of original data into units used in model (keep all
 % elemental concentrations in mmol)
 dat_size.cellDensity = 1e3 * dat_size.cellDensity; % cells/L -> cells/m^3
@@ -136,6 +309,9 @@ for i = 1:ne
     dat_size.(['NperCell_' NsizeEqs{i}]) = ... 
         (1/14) * 1e-9 * dat_size.(['NperCell_' NsizeEqs{i}]);
 end
+
+dat_size.BioVolDensity = 1e-18 * dat_size.cellVolume .* dat_size.cellDensity; % m^3 / m^3
+
 for i = 1:ne
     % nitrogen density: mug N / L -> mmol N / m^3
     dat_size.(['Ndensity_' NsizeEqs{i}]) = ... 
@@ -155,7 +331,7 @@ TrophicLevel = 'autotroph'; % At present we're only modelling size spectra of au
 keepRows = strcmp(dat_size.trophicLevel, TrophicLevel);
 dat_size = dat_size(keepRows,:);
 keepVars = [{'scenario', 'season', 'regime', 'ESD', 'cellVolume', ...
-    'cellDensity', 'cellDensitySD'}, strcat('Ndensity_', NsizeEqs), 'Ndensity'];
+    'cellDensity', 'cellDensitySD', 'BioVolDensity'}, strcat('Ndensity_', NsizeEqs), 'Ndensity'];
 dat_size = dat_size(:,keepVars);
 
 cols = [[1 0 0]; [0 1 0]; [0 0 1]; [1 0 1]]; % plotting colours for different scenarios
@@ -166,102 +342,55 @@ v = reshape(varargin, [2 0.5*length(varargin)]);
 % optional plots
 plotNconcSpectra = ~isempty(v) && any(contains(v(1,:),'plotNconcSpectra')) && v{2,strcmp(v(1,:), 'plotNconcSpectra')};
 plotCellConcSpectra = ~isempty(v) && any(contains(v(1,:),'plotCellConcSpectra')) && v{2,strcmp(v(1,:), 'plotCellConcSpectra')};
-if plotNconcSpectra || plotCellConcSpectra
+plotBioVolSpectra = ~isempty(v) && any(contains(v(1,:),'plotBioVolSpectra')) && v{2,strcmp(v(1,:), 'plotBioVolSpectra')};
+
+makePlots = table(plotNconcSpectra, plotCellConcSpectra, plotBioVolSpectra);
+makePlots.Properties.VariableNames = {'Ndensity', 'cellDensity', 'BioVolDensity'};
+
+if any(makePlots{1,:})
     figure
-    if plotNconcSpectra && plotCellConcSpectra
-        subplot(1,2,1)
+    nc = sum(makePlots{1,:});
+    for i = 1:nc
+        pv = makePlots.Properties.VariableNames{:,i};
+        subplot(1,nc,i)
         ii = strcmp(dat_size.scenario, scenarios(1));
-        loglog(dat_size.ESD(ii), dat_size.Ndensity(ii), 'Color', cols(1,:))
+        loglog(dat_size.ESD(ii), dat_size.(pv)(ii), 'Color', cols(1,:))
         hold on
-        for i = 2:N
-            ii = strcmp(dat_size.scenario, scenarios(i));
-            loglog(dat_size.ESD(ii), dat_size.Ndensity(ii), 'Color', cols(i,:))
+        for ij = 2:N
+            ii = strcmp(dat_size.scenario, scenarios(ij));
+            loglog(dat_size.ESD(ii), dat_size.(pv)(ii), 'Color', cols(ij,:))
         end
         gc = gca;
-        gc.YLim(1) = 1e-6;
-        gc.YLim(2) = 2 * max(dat_size.Ndensity);
+        switch pv
+            case 'Ndensity'
+                gc.YLim(1) = 1e-6;
+                ylab = 'Nitrogen density';
+                yunit = 'mmol N m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
+            case 'cellDensity'
+                gc.YLim(1) = 1e1;
+                ylab = 'cell conc. density';
+%                 yunit = 'cells m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$';
+                yunit = 'cells m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
+            case 'BioVolDensity'
+                gc.YLim(1) = 1e-3 * 1e-6;
+                ylab = 'bio vol density';
+                yunit = 'm$^3\,$m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
+        end
+        gc.YLim(2) = 2 * max(dat_size.(pv));
         xlabel('ESD (\mum)')
-        ylabel('Nitrogen density (mmol N m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
-        %         title('Size spectra data')
-        for i = N:-1:1
-            j = N-i+1;
-            base = 5; space = 5;
-            yt = space^(j-1) * base * gc.YLim(1);
-            text(gc.XLim(1) * (1 + 0.3 * 10), yt, scenarios{i});
-            line([gc.XLim(1) * (1 + 0.1 * 10) gc.XLim(1) * (1 + 0.2 * 10)], [yt yt], 'Color', cols(i,:))
-        end
-        hold off
-        subplot(1,2,2)
-        ii = strcmp(dat_size.scenario, scenarios(1));
-        loglog(dat_size.ESD(ii), dat_size.cellDensity(ii), 'Color', cols(1,:))
-        hold on
-        for i = 2:N
-            ii = strcmp(dat_size.scenario, scenarios(i));
-            loglog(dat_size.ESD(ii), dat_size.cellDensity(ii), 'Color', cols(i,:))
-        end
-        gc = gca;
-        gc.YLim(1) = 1e1;
-        gc.YLim(2) = 2 * max(dat_size.cellDensity);
-        xlabel('ESD (\mum)')
-        ylabel('cell conc. density (cells m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
-        %         title('Size spectra data')
-        for i = N:-1:1
-            j = N-i+1;
-            base = 5; space = 5;
-            yt = space^(j-1) * base * gc.YLim(1);
-            text(gc.XLim(1) * (1 + 0.3 * 10), yt, scenarios{i});
-            line([gc.XLim(1) * (1 + 0.1 * 10) gc.XLim(1) * (1 + 0.2 * 10)], [yt yt], 'Color', cols(i,:))
-        end
-        hold off
-        sgtitle('Size spectra data')
-    else        
-        if plotNconcSpectra
-            ii = strcmp(dat_size.scenario, scenarios(1));
-            loglog(dat_size.ESD(ii), dat_size.Ndensity(ii), 'Color', cols(1,:))
-            hold on
-            for i = 2:N
-                ii = strcmp(dat_size.scenario, scenarios(i));
-                loglog(dat_size.ESD(ii), dat_size.Ndensity(ii), 'Color', cols(i,:))
-            end
-            gc = gca;
-            gc.YLim(1) = 1e-6;
-            gc.YLim(2) = 2 * max(dat_size.Ndensity);
-            xlabel('ESD (\mum)')
-            ylabel('Nitrogen density (mmol N m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
-            title('Size spectra data')
-            for i = N:-1:1
-                j = N-i+1;
+        ylabel([ylab ' (' yunit ')'], 'Interpreter', 'latex')
+        if i == 1
+            for ii = N:-1:1
+                j = N-ii+1;
                 base = 5; space = 5;
                 yt = space^(j-1) * base * gc.YLim(1);
-                text(gc.XLim(1) * (1 + 0.3 * 10), yt, scenarios{i});
-                line([gc.XLim(1) * (1 + 0.1 * 10) gc.XLim(1) * (1 + 0.2 * 10)], [yt yt], 'Color', cols(i,:))
+                text(gc.XLim(1) * (1 + 0.3 * 10), yt, scenarios{ii});
+                line([gc.XLim(1) * (1 + 0.1 * 10) gc.XLim(1) * (1 + 0.2 * 10)], [yt yt], 'Color', cols(ii,:))
             end
-            hold off
-        end        
-        if plotCellConcSpectra
-            ii = strcmp(dat_size.scenario, scenarios(1));
-            loglog(dat_size.ESD(ii), dat_size.cellDensity(ii), 'Color', cols(1,:))
-            hold on
-            for i = 2:N
-                ii = strcmp(dat_size.scenario, scenarios(i));
-                loglog(dat_size.ESD(ii), dat_size.cellDensity(ii), 'Color', cols(i,:))
-            end
-            gc = gca;
-            gc.YLim(1) = 1e1;
-            gc.YLim(2) = 2 * max(dat_size.cellDensity);
-            xlabel('ESD (\mum)')
-            ylabel('cell conc. density (cells m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
-            title('Size spectra data')
-            for i = N:-1:1
-                j = N-i+1;
-                base = 5; space = 5;
-                yt = space^(j-1) * base * gc.YLim(1);
-                text(gc.XLim(1) * (1 + 0.3 * 10), yt, scenarios{i});
-                line([gc.XLim(1) * (1 + 0.1 * 10) gc.XLim(1) * (1 + 0.2 * 10)], [yt yt], 'Color', cols(i,:))
-            end
-            hold off
         end
+        hold off
     end
+    sgtitle('Size spectra data')
 end
 %~~~
 
@@ -271,28 +400,6 @@ end
 
 % Merge data sets: group all the 'scalar' data into single table and store
 % the size data separately.
-
-% Match column names
-dat_nut.Properties.VariableNames{'Event_2'} = 'Station';
-dat_nut.Properties.VariableNames{'Event'} = 'EventLabel';
-dat_nut = movevars(dat_nut, 'EventLabel', 'After', 'Station');
-dat_OM = removevars(dat_OM, {'ARK_oder_PS','Station'});
-dat_OM.Properties.VariableNames{'EventNumber'} = 'EventLabel';
-dat_OM.Properties.VariableNames{'HG_stations'} = 'Station';
-
-% Station names used in each data set are written inconsistently
-% disp(unique(dat_nut.Station)')
-% disp(unique(dat_OM.Station)')
-dat_OM.Station = strrep(dat_OM.Station,' shallow','');
-dat_OM.Station = strrep(dat_OM.Station,'I ','I');
-dat_OM.Station = strrep(dat_OM.Station,' ','_');
-dat_nut.Station = strrep(dat_nut.Station,'S_3','S3');
-
-% Event format is inconsistent
-dat_nut.EventLabel = strrep(dat_nut.EventLabel, '/', '_');
-dat_nut.EventLabel = strrep(dat_nut.EventLabel, '-', '_');
-dat_OM.EventLabel = strrep(dat_OM.EventLabel, '/', '_');
-dat_OM.EventLabel = strrep(dat_OM.EventLabel, '-', '_');
 
 % Match dates & depths to scenarios in size data
 scenarioInfo.S1.dateFirst = datetime(2016,6,23);
@@ -329,23 +436,68 @@ end
 dat_size = movevars(dat_size, {'Year', 'YeardayFirst', 'YeardayLast'}, 'Before', 'season');
 dat_size = movevars(dat_size, {'DepthMin', 'DepthMax'}, 'After', 'regime');
 
-
 % Merge nutrient data (inorganic & organic)
 dat = [dat_nut; dat_OM];
 
 % Remove NaNs & rows with non-positive measures
 dat(dat.Value <= 0 | isnan(dat.Value),:) = [];
 
-% Index each unique sampling event
-EventLabel = unique(dat.EventLabel, 'stable');
-Event = (1:length(EventLabel))';
-events = table(Event, EventLabel);
-dat = join(dat, events);
+% Separate cruise, station, and sample from label
+x1 = regexp(dat.Label, '/');
+x2 = regexp(dat.Label, '-');
+for i = 1:length(x1)
+    dat.Cruise{i} = dat.Label{i}(1:x1{i}-1);    
+    dat.Station{i} = dat.Label{i}(x1{i}+1:x2{i}-1);
+    dat.Sample{i} = dat.Label{i}(x2{i}+1:end);
+end
+dat = movevars(dat, {'Cruise','Station','Sample'}, 'After', 'Label');
 
-% % As nitrogen is the only modelled inorganic nutrient (this may change in 
-% % future), omit measures of other nutrients.
-% remove = strcmp(dat.Type, 'inorganic') & ~strcmp(dat.Variable, 'N');
-% dat(remove,:) = [];
+% Order rows by time, then station, then sample
+x = [dat.t, str2double(string(dat.Station)), str2double(string(dat.Sample))];
+[~, datOrd] = sortrows(x);
+dat = dat(datOrd,:);
+
+% Index each unique sampling event...
+Label = unique(dat.Label, 'stable');
+Event = (1:length(Label))';
+events = table(Event, Label);
+dat = join(dat, events);
+dat = movevars(dat, 'Event', 'After', 'Sample');
+
+
+% Consistency checks...
+% Different data sets (inorganic & organic nutrients) sampled from the same
+% cruises should have consistent metadata such that measurements (space-time
+% coords) from the same sampling events are identical. This is not
+% guarenteed because metadata is recorded by different people at slightly
+% different times...
+cruises = unique(dat.Cruise, 'stable');
+for i = 1:length(cruises)    
+    di = dat(strcmp(dat.Cruise, cruises{i}),:);
+    dataTypes = unique(di.Type);
+    if length(dataTypes) > 1
+        events = unique(di.Event);
+        for j = 1:length(events)
+            dj = di(di.Event == events(j),:);
+            dataTypes_j = unique(dj.Type);
+            if length(dataTypes_j) > 1
+                dj.Latitude = repmat(mean(unique(dj.Latitude)), [height(dj) 1]);
+                dj.Longitude = repmat(mean(unique(dj.Longitude)), [height(dj) 1]);
+                emptyTime = cellfun(@(x) isempty(x), dj.Time);
+                if all(~emptyTime)
+                    dj.Time = cellstr(repmat(dj.Time{1}, size(dj.Time)));
+                end
+                if any(emptyTime) && ~all(emptyTime)
+                    times = unique(dj.Time(~emptyTime));
+                    dj.Time(emptyTime) = repmat(times(1), [sum(emptyTime) 1]);
+                end
+            end
+            di(di.Event == events(j),:) = dj;
+        end
+    end
+    dat(strcmp(dat.Cruise, cruises{i}),:) = di;
+end
+
 
 % Store fitting data as a struct
 scalarData = table2struct(dat, 'ToScalar', true);
@@ -354,45 +506,6 @@ scalarData.nSamples = size(scalarData.Value,1);
 scalarData.nEvents = length(unique(scalarData.Event));
 
 sizeData = table2struct(dat_size, 'ToScalar', true);
-% sizeData.nSamples = size(sizeData.Year,1);
-
-% Include fields specifying which of these data are used in the cost
-% function
-% scalarData.obsInCostFunction = {'N', 'chl_a', 'PON', 'POC'};
-% scalarData.inCostFunction = ismember(scalarData.Variable, ... 
-%     scalarData.obsInCostFunction);
-
-% sizeData.obsInCostFunction = {'NConc'}; % maybe move this to function that selects size class intervals...
-% sizeData.dataBinned.inCostFunction = ismember(sizeData.dataBinned.Variable, ... 
-%     sizeData.obsInCostFunction);
-
-% % Omit any events where data used in the cost function was not collected
-% fields = fieldnames(scalarData);
-% uev = unique(scalarData.Event);
-% for i = 1:length(uev)
-%     ind = scalarData.Event == uev(i);
-%     x = unique(scalarData.Variable(ind));
-%     y = ismember(x, scalarData.obsInCostFunction);
-%     if ~any(y)
-%         for j = 1:length(fields)
-%             if size(scalarData.(fields{j}), 1) > 1
-%                 scalarData.(fields{j}) = scalarData.(fields{j})(~ind);
-%             end
-%         end
-%     end
-% end
-% if length(unique(scalarData.Event)) < scalarData.nEvents
-%     scalarData.nSamples = size(scalarData.Value,1);    
-%     scalarData.nEvents = length(unique(scalarData.Event));    
-%     oldEventLabs = unique(scalarData.Event);
-%     newEventLabs = (1:length(oldEventLabs))';    
-%     x = table(oldEventLabs, newEventLabs);
-%     for i = 1:height(x)
-%         scalarData.Event(scalarData.Event == x.oldEventLabs(i)) = x.newEventLabs(i);
-%     end
-% end
-
-
 
 Data.scalar = scalarData;
 Data.size = sizeData;
@@ -401,232 +514,3 @@ Data.size = sizeData;
 
 end
 
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-%~~~~~~~~~~
-% Functions
-%~~~~~~~~~~
-
-% Use stationary and inflection points of size spectra to generate size
-% class intervals
-
-function y = stationaryPoints(x)
-% Return positions of turning points in x (and also endpoints).
-% Only accepts vector arguments... more work needed for matrix inputs
-% because the output will need to be a cell array where each component
-% holds a vector of arbitrary length...
-xdim0 = size(x);
-vec = isvector(x);
-if vec
-    x_ = x(:);
-    n = length(x);
-else
-    x_ = x;
-end
-xdim = size(x_);
-y = diff([x_(1,:); x_]);
-y = y > 0;
-y = (y(1:end-1,:) & ~y(2:end,:)) | (~y(1:end-1,:) & y(2:end,:));
-y = [y; zeros(1, xdim(2))];
-[r, c] = find(y);
-if vec
-    y = r;
-    y = [1; y; n];
-else
-    yy = cell(1,xdim(2));
-    for i = 1:xdim(2)
-        yy{i} = r(c == i);
-        yy{i} = [1; yy{i}; dim(1)];
-    end
-    y = yy;
-end
-if all(xdim == flip(xdim0)), y = y'; end
-end
-
-function y = inflectionPoints(x)
-% Return positions of inflection points in x (and also endpoints)
-xdim0 = size(x);
-vec = isvector(x);
-if vec
-    x_ = x(:);
-    n = length(x);
-else
-    x_ = x;
-end
-xdim = size(x_);
-y = diff(diff(x_));
-y = [y(1,:); y; y(end,:)];
-y = y > 0;
-y = (y(1:end-1,:) & ~y(2:end,:)) | (~y(1:end-1,:) & y(2:end,:));
-y = [y; zeros(1, xdim(2))];
-[r, c] = find(y);
-if vec
-    y = r;
-    y = [1; y; n];
-else
-    yy = cell(1,xdim(2));
-    for i = 1:xdim(2)
-        yy{i} = r(c == i);
-        yy{i} = [1; yy{i}; xdim(1)];
-    end
-    y = yy;
-end
-if all(xdim == flip(xdim0)), y = y'; end
-end
-
-
-function y = partitionSizeSpectra2(x, varargin)
-
-% Input size spectra vectors, x.
-% Choose data features in varargin.
-% Returns the positions, y, in x where those features occur, which can be
-% used to partition the size spectra vectors into size class bins.
-if isempty(varargin)
-    % By default use stationary points
-    Type = 'stationary';
-    % By default use stationary and inflecion points, not the midpoints
-    % between them
-    useMidpoints = false;
-else
-    % Currently have options to use stationary and/or inflection points
-    i = strcmp(varargin, 'stationaryPoints');
-    if any(i)
-        if varargin{find(i)+1}
-            Type = 'stationary';
-        end
-    end
-    i = strcmp(varargin, 'inflectionPoints');
-    if any(i)
-        if varargin{find(i)+1}
-            if ~exist('Type', 'var')
-                Type = 'inflection';
-            else
-                Type = 'both';
-            end
-        end
-    end
-    i = strcmp(varargin, 'useMidpoints');
-    if any(i)
-        useMidpoints = varargin{find(i)+1};
-    end
-end
-if ~exist('Type', 'var')
-    y = [];
-    warning('Check validity of optional arguments in partitionSizeSpectra.m')
-else
-    xdim = size(x);
-    if length(xdim) ~= 2 || ~any(xdim == 1)
-        warning('partitionSizeSpectra only accepts vector arguments')
-    else
-        switch Type
-            case 'stationary'
-                y = stationaryPoints(x);
-                if useMidpoints
-                    y = round([y(1,:); 0.5 * (y(1:end-1,:) + y(2:end,:)); y(end,:)]);
-                end                
-            case 'inflection'
-                y = inflectionPoints(x);
-                if useMidpoints
-                    y = round([y(1,:); 0.5 * (y(1:end-1,:) + y(2:end,:)); y(end,:)]);
-                end
-            case 'both'
-                y1 = stationaryPoints(x);
-                y2 = inflectionPoints(x);
-                if useMidpoints
-                    y1 = round([y1(1,:); 0.5 * (y1(1:end-1,:) + y1(2:end,:)); y1(end,:)]);
-                    y2 = round([y2(1,:); 0.5 * (y2(1:end-1,:) + y2(2:end,:)); y2(end,:)]);
-                end
-                y = unique([y1(:); y2(:)]);
-        end
-    end
-end
-end
-
-
-
-
-
-
-% function y = partitionSizeSpectra2(x, varargin)
-% 
-% % Input size spectra vectors, x.
-% % Choose data features in varargin.
-% % Returns the positions, y, in x where those features occur, which can be
-% % used to partition the size spectra vectors into size class bins.
-% 
-% if isempty(varargin)
-%     % By default use stationary points
-%     Type = 'stationary';
-% else
-%     % Currently have options to use stationary and/or inflection points
-%     i = strcmp(varargin, 'stationaryPoints');
-%     if any(i)
-%         if varargin{find(i)+1}
-%             Type = 'stationary';
-%         end
-%     end
-%     i = strcmp(varargin, 'inflectionPoints');
-%     if any(i)
-%         if varargin{find(i)+1}
-%             if ~exist('Type', 'var')
-%                 Type = 'inflection';
-%             else
-%                 Type = 'both';
-%             end
-%         end
-%     end
-% end
-% 
-% if ~exist('Type', 'var')
-%     y = [];
-%     warning('Check validity of optional arguments in partitionSizeSpectra.m')
-% else
-%     
-%     n = length(x);
-%     xdim = size(x);
-%     
-%     if length(xdim) ~= 2 || ~any(xdim == 1)
-%         warning('partitionSizeSpectra only accepts vector arguments')
-%     else
-%         switch Type
-%             case 'stationary'
-%                 y = diff(x(:));
-%                 y = [y(1); y];
-%                 y = y > 0;
-%                 y = (y(1:n-1) & ~y(2:n)) | (~y(1:n-1) & y(2:n));
-%                 y = [0; y];
-%                 y = [1; find(y); n]; % endpoints and turning points
-%                 if xdim(1) == 1
-%                     y = y';
-%                 end
-%                 
-%             case 'inflection'
-%                 y = diff(diff(x(:)));
-%                 y = [y(1); y(1); y];
-%                 y = y > 0;
-%                 y = (y(1:n-1) & ~y(2:n)) | (~y(1:n-1) & y(2:n));
-%                 y = [0; y];
-%                 y = [1; find(y); n]; % endpoints and inflection points
-%                 if xdim(1) == 1
-%                     y = y';
-%                 end
-%                 
-%             case 'both'
-%                 yd = diff(x(:));
-%                 y = [yd(1); yd];
-%                 y = y > 0;
-%                 y = (y(1:n-1) & ~y(2:n)) | (~y(1:n-1) & y(2:n));
-%                 y = [0; y];
-%                 y0 = [1; find(y); n]; % endpoints and turning points
-%                 
-%                 yd = diff(yd);
-%                 y = [yd(1); yd(1); yd];
-%                 y = y > 0;
-%                 y = (y(1:n-1) & ~y(2:n)) | (~y(1:n-1) & y(2:n));
-%                 y = [0; y];
-%                 y = [1; find(y); n]; % endpoints and inflection points
-%                 y = unique([y; y0]); % endpoints, turning points, and inflection points
-%         end
-%     end
-% end

@@ -93,7 +93,7 @@ end
 
 
 % Omit values deeper than sea floor
-if any(dry(:))    
+if any(dry(:))
     % state variables
     N = OUT(N_index,:,:);
     P = reshape(OUT(P_index,:,:), [nPP_size nz nPP_nut nt nTraj]);
@@ -109,14 +109,14 @@ if any(dry(:))
     % extra outputs
     AUXVARS = reshape(AUXVARS, [nz nExtra(1) nt nTraj]);
     AUXVARS(repmat(reshape(dry, [nz 1 nt nTraj]), [1 nExtra(1) 1 1])) = nan;
-    AUXVARS_2d = reshape(AUXVARS_2d, [nPP_size nz nExtra(2) nt nTraj]);
-    AUXVARS_2d(repmat(reshape(dry, [1 nz 1 nt nTraj]), [nPP_size 1 nExtra(2) 1 1])) = nan;
+    AUXVARS_2d = reshape(AUXVARS_2d, [(nPP_size + 1) nz nExtra(2) nt nTraj]);
+    AUXVARS_2d(repmat(reshape(dry, [1 nz 1 nt nTraj]), [(nPP_size + 1) 1 nExtra(2) 1 1])) = nan;
 end
 
 
 % Tidy up
 AUXVARS = reshape(AUXVARS, [nz nExtra(1) nt nTraj]);
-AUXVARS_2d = reshape(AUXVARS_2d, [nPP_size nz nExtra(2) nt nTraj]);
+AUXVARS_2d = reshape(AUXVARS_2d, [(nPP_size + 1) nz nExtra(2) nt nTraj]);
 
 % Extract solutions from array, OUT, into a more readable struct, out.
 % Same for extra outputs...
@@ -133,10 +133,4 @@ if sum(nExtra) > 0
         auxVars.(namesExtra{k+nExtra(1)}) = squeeze(AUXVARS_2d(:,:,k,:,:));
     end
 end
-
-
-
-
-
-
 

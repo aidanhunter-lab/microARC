@@ -1,11 +1,17 @@
-function [FixedParams, Params] = initialiseParameters(Forc, Data)
+function [FixedParams, Params] = initialiseParameters(Forc, Data, varargin)
 
 % Load default parameter set and output initialised FixedParams and Params
 % structs
 
-%% Load default parameters
+%% Load default initial parameters
+parFile = [];
+if ~isempty(varargin)
+    if any(strcmp(varargin, 'load'))
+        parFile = varargin{find(strcmp(varargin, 'load'))+1};
+    end
+end
 
-[FixedParams, Params, Bounds] = defaultParameters('Data', Data);
+[FixedParams, Params, Bounds] = defaultParameters('Data', Data, 'load', parFile);
 
 %% Fixed Parameters
 
@@ -104,7 +110,8 @@ FixedParams = createIndexes(FixedParams);
 
 % If state variables sink using backwards difference scheme then there's an
 % upper limit on integration time steps
-dt_max = min(FixedParams.zwidth) ./ FixedParams.maxSinkSpeed;
+dt_max = min(FixedParams.zwidth) ./ ([FixedParams.maxSinkSpeed_POM, ... 
+    FixedParams.maxSinkSpeed_P]);
 con = true;
 tx = 1;
 while con
@@ -137,9 +144,14 @@ end
 if isempty(Params.pmax)
     Params.pmax = powerFunction(Params.pmax_a, Params.pmax_b, Vol);
 end
+
+if isempty(Params.Gmax)
+    Params.Gmax = powerFunction(Params.Gmax_a, Params.Gmax_b, Vol);
+end
+
 if isempty(Params.wp)
     Params.wp = powerFunction(Params.wp_a, Params.wp_b, Vol, ... 
-        'UpperBound', FixedParams.maxSinkSpeed, 'Transpose', true);
+        'UpperBound', FixedParams.maxSinkSpeed_P, 'Transpose', true);
 end
 if isempty(Params.beta)
     Params.beta = doubleLogisticFunction(Params.beta1, Params.beta2, ...

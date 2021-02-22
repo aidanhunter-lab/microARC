@@ -4,6 +4,9 @@ function Data = standardiseFittingData(Data, varargin)
 % Returns linear-model coefficients used to rescale data as a function of
 % depth and (if significant) sampling event.
 
+obsInCostFunction_scalar = Data.scalar.obsInCostFunction;
+obsInCostFunction_size = Data.size.obsInCostFunction;
+
 dat = Data.scalar;
 % sizeDat = Data.size;
 sizeDatBinned = Data.size.dataBinned;
@@ -21,7 +24,8 @@ dat = struct2table(dat);
 
 % Extra arguments control whether plots are returned. Name-value pairs with
 % options: 'plotScaledPON', 'plotScaledPOC', 'plotScaledN', 'plotAllData'
-v = reshape(varargin, [2 0.5*length(varargin)]);
+v = [];
+if ~isempty(varargin), v = reshape(varargin, [2 0.5*length(varargin)]); end
 
 
 %% Find scaling factors for all fitting data
@@ -39,8 +43,10 @@ for jj = 1:length(dPOM)
     d_ind = strcmp(dat.Variable, dv);
     d = dat(d_ind,:);
     
-    uev = unique(d.Event);
-    nev = length(uev);
+    Event = unique(d.Event);
+    nev = length(Event);
+    Events = table(Event);
+    Events.Index = (1:nev)';
     
     % Fit linear mixed models
     lme_mods{1} = fitlme(d, 'log_Value~1');
@@ -50,7 +56,7 @@ for jj = 1:length(dPOM)
     lme_mods{5} = fitlme(d, 'log_Value~Depth+(Depth|Event)');
     
     % Use AIC score to choose most appropriate model
-    test_aic = cellfun(@(x)x.ModelCriterion.AIC, lme_mods);
+    test_aic = cellfun(@(x) x.ModelCriterion.AIC, lme_mods);
     whichMod = find(test_aic==min(test_aic));
     mod = lme_mods{whichMod};    
     clear lme_mods
@@ -70,14 +76,16 @@ for jj = 1:length(dPOM)
     stdDev = std(rsd);
     
     % Calculate depth- and event-dependent expected values and store
-    % functions used to scale the data and model output
-    intercept = cf(1) + cr(dat.Event(d_ind)-min(uev)+1,1);
-    gradient = cf(2) + cr(dat.Event(d_ind)-min(uev)+1,2);
-    dat.scale_mu(d_ind) = intercept + gradient .* dat.Depth(d_ind);
+    % functions used to scale the data and model output    
+    Events = join(d(:,'Event'), Events);
+    cr_ = cr(Events.Index,:);
+    intercept = cf(1) + cr_(:,1);
+    gradient = cf(2) + cr_(:,2);
+
+    dat.scale_mu(d_ind) = intercept + gradient .* d.Depth;
     dat.scale_sig(d_ind) = stdDev;
     
     Data.scalar.(['scaleFun_' dv]) = @(mu,sig,x) (log(x) - mu) ./ sig; % scaling function
-    
     dat.scaled_Value(d_ind) = Data.scalar.(['scaleFun_' dv]) ... 
         (dat.scale_mu(d_ind), dat.scale_sig(d_ind), dat.Value(d_ind)); % scaled data
 
@@ -97,8 +105,10 @@ dv = 'N';
 d_ind = strcmp(dat.Variable, dv);
 d = dat(d_ind,:);
 
-uev = unique(d.Event);
-nev = length(uev);
+Event = unique(d.Event);
+nev = length(Event);
+Events = table(Event);
+Events.Index = (1:nev)';
 
 % Fit linear mixed models
 lme_mods{1} = fitlme(d, 'Value~1');
@@ -129,9 +139,12 @@ stdDev = std(rsd);
 
 % Calculate depth- and event-dependent expected values and store
 % functions used to scale the data and model output
-intercept = cf(1) + cr(dat.Event(d_ind)-min(uev)+1,1);
-gradient = cf(2) + cr(dat.Event(d_ind)-min(uev)+1,2);
-dat.scale_mu(d_ind) = intercept + gradient .* dat.log_Depth(d_ind);
+Events = join(d(:,'Event'), Events);
+cr_ = cr(Events.Index,:);
+intercept = cf(1) + cr_(:,1);
+gradient = cf(2) + cr_(:,2);
+
+dat.scale_mu(d_ind) = intercept + gradient .* d.log_Depth;
 dat.scale_sig(d_ind) = stdDev;
 
 Data.scalar.(['scaleFun_' dv]) = @(mu,sig,x) (x - mu) ./ sig; % scaling function
@@ -161,8 +174,10 @@ dv = 'chl_a';
 d_ind = strcmp(dat.Variable, dv);
 d = dat(d_ind,:);
 
-uev = unique(d.Event);
-nev = length(uev);
+Event = unique(d.Event);
+nev = length(Event);
+Events = table(Event);
+Events.Index = (1:nev)';
 
 % Fit linear mixed models
 lme_mods{1} = fitlme(d, 'log_Value~1');
@@ -193,9 +208,13 @@ stdDev = std(rsd);
 
 % Calculate depth- and event-dependent expected values and store
 % functions used to scale the data and model output
-intercept = cf(1) + cr(dat.Event(d_ind)-min(uev)+1,1);
-gradient = cf(2) + cr(dat.Event(d_ind)-min(uev)+1,2);
-dat.scale_mu(d_ind) = intercept + gradient .* dat.Depth(d_ind);
+
+Events = join(d(:,'Event'), Events);
+cr_ = cr(Events.Index,:);
+intercept = cf(1) + cr_(:,1);
+gradient = cf(2) + cr_(:,2);
+
+dat.scale_mu(d_ind) = intercept + gradient .* d.Depth;
 dat.scale_sig(d_ind) = stdDev;
 
 Data.scalar.(['scaleFun_' dv]) = @(mu,sig,x) (log(x) - mu) ./ sig; % scaling function
@@ -218,193 +237,288 @@ Data.scalar.scaled_Value(~Data.scalar.inCostFunction) = nan;
 
 
 
+
 %% Standardise size spectra measurements
 
 % There are no covariates available in these data, so standardise by
 % substracting the mean and dividing by the standard deviation across size
-% classes, after log-transforming.
+% classes, after log-transforming (cell and N concentrations) or
+% logit-transforming (bio-volume)
 
-vars = unique(sizeDatBinned.Variable); % size spectra measurement types (cell numbers or nitrogen concs)
+vars = unique(sizeDatBinned.Variable, 'stable'); % size spectra measurement types (cell concentration, bio-volume, or nitrogen concentration)
 usc = unique(sizeDatBinned.scenario);
 nsc = length(usc); % number of size spectra samples
 
 for i = 1:length(vars)
-    indi = strcmp(sizeDatBinned.Variable, vars{i});
-    Data.size.(['scaleFun_' vars{i}]) = @(mu,sig,x) (log(x)-mu) ./ sig;
+    varLabel = vars{i};
+    indi = strcmp(sizeDatBinned.Variable, vars{i});    
+    switch varLabel
+        case {'CellConc', 'NConc'}
+            Data.size.(['scaleFun_' varLabel]) = @(mu,sig,x) (log(x)-mu) ./ sig;
+        case 'BioVol'
+            Data.size.(['scaleFun_' varLabel]) = @(mu,sig,x) (log(x ./ (1-x)) - mu) ./ sig;
+    end
     for j = 1:nsc
         indj = indi & strcmp(sizeDatBinned.scenario, usc{j});
         y = sizeDatBinned.Value(indj);
-        yl = log(y);
+        switch varLabel
+            case {'CellConc', 'NConc'}
+                yl = log(y);
+            case 'BioVol'
+                yl = log(y ./ (1-y));
+        end
         mu = mean(yl);
         sig = std(yl);
         sizeDatBinned.scale_mu(indj,:) = mu;
         sizeDatBinned.scale_sig(indj,:) = sig;
-        sizeDatBinned.scaled_Value(indj,:) = Data.size.(['scaleFun_' vars{i}])(mu, sig, y);
+        sizeDatBinned.scaled_Value(indj,:) = Data.size.(['scaleFun_' varLabel])(mu, sig, y);
     end
 end
-
 
 Data.size.dataBinned = sizeDatBinned;
 
 
-
 %% Plots of standardised data
 
-if ~isempty(v) && any(contains(v(1,:),'Scaled'))
-    v_ind = find(contains(v(1,:),'Scaled') & cellfun(@(x) x(:), v(2,:)));
-%     v_ind = find(contains(v(1,:),'Scaled'));
-    for jj = 1:length(v_ind)
-        vv = v(:,v_ind(jj));
-        
-        if contains(vv{1}, 'N_at_size'), continue; end % make the size plot separately after this loop
-        
-        if endsWith(vv{1},logy)
-            dv = logy{cellfun(@(x)~isempty(x),regexp(vv{1},logy))};
-            d_ind = strcmp(dat.Variable, dv);
-            d = dat(d_ind,:);
-            uev = unique(d.Event);
-            nev = length(uev);
-            % Plotting variables
-            xraw = d.Depth; xmod = d.Depth;
-            yraw = d.Value; ymod = d.log_Value;
-%             x = d.Depth;
-%             y = d.log_Value;
-            % Plot labels
-            xlabraw = [dv ' (mmol N m^{-3})']; xlabmod = ['ln(' dv ')']; xlabstd = ['standardised ' dv];
-            ylabraw = 'depth (m)'; ylab = 'depth (m)'; ylab2 = 'sampling event';
-%             x_lab = ['ln(' dv ')']; x_lab2 = ['standardised ' dv];
-%             y_lab = 'depth (m)'; y_lab2 = 'sampling event';
+% Scalar data
+if ~isempty(v) && any(strcmp(v(1,:), 'plotScalarData'))
+    if v{2,strcmp(v(1,:), 'plotScalarData')}
+        for jj = 1:length(obsInCostFunction_scalar)
+            vv = obsInCostFunction_scalar{jj};
+            if ismember(vv, logy)
+                dv = logy{cellfun(@(x)~isempty(x),regexp(vv,logy))};
+                d_ind = strcmp(dat.Variable, dv);
+                d = dat(d_ind,:);
+                uev = unique(d.Event);
+                nev = length(uev);
+                % Plotting variables
+                xraw = d.Depth; xmod = d.Depth;
+                yraw = d.Value; ymod = d.log_Value;
+                %             x = d.Depth;
+                %             y = d.log_Value;
+                % Plot labels
+                xlabraw = [dv ' (mmol N m^{-3})']; xlabmod = ['ln(' dv ')']; xlabstd = ['standardised ' dv];
+                ylabraw = 'depth (m)'; ylab = 'depth (m)'; ylab2 = 'sampling event';
+                %             x_lab = ['ln(' dv ')']; x_lab2 = ['standardised ' dv];
+                %             y_lab = 'depth (m)'; y_lab2 = 'sampling event';
+            end
+            if ismember(vv,logx)
+                dv = 'N';
+                d_ind = strcmp(dat.Variable, dv);
+                d = dat(d_ind,:);
+                uev = unique(d.Event);
+                nev = length(uev);
+                % Plotting model variables
+                xraw = d.Depth; xmod = d.log_Depth;
+                yraw = d.Value; ymod = d.Value;
+                %             x = d.log_Depth;
+                %             y = d.Value;
+                % Plot labels
+                xlabraw = [dv ' (mmol N m^{-3})']; xlabmod = [dv ' (mmol N m^{-3})']; xlabstd = ['standardised ' dv];
+                ylabraw = 'depth (m)'; ylab = 'ln(depth)'; ylab2 = 'sampling event';
+                %             x_lab = [dv ' (mmol N m^{-3})']; x_lab2 = ['standardised ' dv];
+                %             y_lab = 'ln(depth)'; y_lab2 = 'sampling event';
+            end
+            
+            ys = d.scaled_Value; % scaled data
+            
+            % Compare raw data to standardised data
+            figure
+            subplot(3,2,1)
+            scatter(yraw, xraw, 'k')
+            hold on
+            ca = gca; xl = ca.XLim; yl = ca.YLim;
+            xl_ = [-0.06 0.06] .* diff(xl) + xl;
+            yl_ = [-0.06 0.06] .* diff(yl) + yl;
+            mu = mean(yraw);
+            s = std(yraw);
+            pgon = polyshape([mu-s mu+s mu+s mu-s mu-s], [yl_(1) yl_(1) yl_(2) yl_(2) yl_(1)]);
+            pg = plot(pgon);
+            pg.FaceColor = [1 1 1] ./ 255;
+            pg.FaceAlpha = 0.2;
+            plot(repmat(mu, [1 2]), yl, 'k')
+            xlim(xl); ylim(yl);
+            xlabel(xlabraw); ylabel(ylabraw);
+            hold off
+            
+            subplot(3,2,2)
+            G = cell(nev,1);
+            for i = 1:nev
+                G{i} = yraw(d.Event==uev(i));
+            end
+            grp = cell2mat(arrayfun(@(i){i*ones(numel(G{i}),1)},(1:numel(G))'));
+            boxplot(vertcat(G{:}),grp,'orientation','horizontal')
+            hold on
+            xlabel(xlabraw); ylabel(ylab2);
+            yticklabels(num2str(uev))
+            mu = mean(yraw);
+            ca = gca;
+            plot(repmat(mu,[1 2]), ca.YLim,'k')
+            hold off
+            
+            subplot(3,2,3)
+            scatter(ymod, xmod, 'k')
+            hold on
+            ca = gca; xl = ca.XLim; yl = ca.YLim;
+            xl_ = [-0.06 0.06] .* diff(xl) + xl;
+            yl_ = [-0.06 0.06] .* diff(yl) + yl;
+            mu = mean(ymod);
+            s = std(ymod);
+            pgon = polyshape([mu-s mu+s mu+s mu-s mu-s], [yl_(1) yl_(1) yl_(2) yl_(2) yl_(1)]);
+            pg = plot(pgon);
+            pg.FaceColor = [1 1 1] ./ 255;
+            pg.FaceAlpha = 0.2;
+            plot(repmat(mu, [1 2]), yl, 'k')
+            xlim(xl); ylim(yl);
+            xlabel(xlabmod); ylabel(ylab);
+            hold off
+            
+            subplot(3,2,4)
+            G = cell(nev,1);
+            for i = 1:nev
+                G{i} = ymod(d.Event==uev(i));
+            end
+            grp = cell2mat(arrayfun(@(i){i*ones(numel(G{i}),1)},(1:numel(G))'));
+            boxplot(vertcat(G{:}),grp,'orientation','horizontal')
+            hold on
+            xlabel(xlabmod); ylabel(ylab2);
+            yticklabels(num2str(uev))
+            mu = mean(ymod);
+            ca = gca;
+            plot(repmat(mu,[1 2]), ca.YLim,'k')
+            hold off
+            
+            subplot(3,2,5)
+            scatter(ys, xmod, 'k')
+            hold on
+            ca = gca; xl = ca.XLim; yl = ca.YLim;
+            xl_ = [-0.06 0.06] .* diff(xl) + xl;
+            yl_ = [-0.06 0.06] .* diff(yl) + yl;
+            mu = mean(ys);
+            s = std(ys);
+            pgon = polyshape([mu-s mu+s mu+s mu-s mu-s], [yl_(1) yl_(1) yl_(2) yl_(2) yl_(1)]);
+            pg = plot(pgon);
+            pg.FaceColor = [1 1 1] ./ 255;
+            pg.FaceAlpha = 0.2;
+            plot(repmat(mu, [1 2]), yl, 'k')
+            xlim(xl); ylim(yl);
+            xlabel(xlabstd); ylabel(ylab);
+            hold off
+            
+            subplot(3,2,6)
+            G = cell(nev,1);
+            for i = 1:nev
+                G{i} = ys(d.Event==uev(i));
+            end
+            grp = cell2mat(arrayfun(@(i){i*ones(numel(G{i}),1)},(1:numel(G))'));
+            boxplot(vertcat(G{:}),grp,'orientation','horizontal')
+            hold on
+            xlabel(xlabstd); ylabel(ylab2);
+            yticklabels(num2str(uev))
+            mu = mean(ys);
+            ca = gca;
+            plot(repmat(mu,[1 2]), ca.YLim,'k')
+            hold off
+            
+            sgtitle(['Compare raw and standardised ' dv ' measurements'])
+            
+            pause(0.1)
         end
-        if endsWith(vv{1},{'ScaledN'})
-            dv = 'N';
-            d_ind = strcmp(dat.Variable, dv);
-            d = dat(d_ind,:);
-            uev = unique(d.Event);
-            nev = length(uev);
-            % Plotting model variables
-            xraw = d.Depth; xmod = d.log_Depth;
-            yraw = d.Value; ymod = d.Value;
-%             x = d.log_Depth;
-%             y = d.Value;
-            % Plot labels
-            xlabraw = [dv ' (mmol N m^{-3})']; xlabmod = [dv ' (mmol N m^{-3})']; xlabstd = ['standardised ' dv];
-            ylabraw = 'depth (m)'; ylab = 'ln(depth)'; ylab2 = 'sampling event';
-%             x_lab = [dv ' (mmol N m^{-3})']; x_lab2 = ['standardised ' dv];
-%             y_lab = 'ln(depth)'; y_lab2 = 'sampling event';
-        end
-        
-        ys = d.scaled_Value; % scaled data
-
-        % Compare raw data to standardised data
-        figure
-        subplot(3,2,1)
-        scatter(yraw, xraw, 'k')
-        hold on
-        ca = gca; xl = ca.XLim; yl = ca.YLim;
-        xl_ = [-0.06 0.06] .* diff(xl) + xl;
-        yl_ = [-0.06 0.06] .* diff(yl) + yl;
-        mu = mean(yraw);
-        s = std(yraw);
-        pgon = polyshape([mu-s mu+s mu+s mu-s mu-s], [yl_(1) yl_(1) yl_(2) yl_(2) yl_(1)]);
-        pg = plot(pgon);
-        pg.FaceColor = [1 1 1] ./ 255;
-        pg.FaceAlpha = 0.2;
-        plot(repmat(mu, [1 2]), yl, 'k')
-        xlim(xl); ylim(yl);
-        xlabel(xlabraw); ylabel(ylabraw);
-        hold off
-        
-        subplot(3,2,2)
-        G = cell(nev,1);
-        for i = 1:nev
-            G{i} = yraw(d.Event==uev(i));
-        end
-        grp = cell2mat(arrayfun(@(i){i*ones(numel(G{i}),1)},(1:numel(G))'));
-        boxplot(vertcat(G{:}),grp,'orientation','horizontal')
-        hold on
-        xlabel(xlabraw); ylabel(ylab2);
-        yticklabels(num2str(uev))
-        mu = mean(yraw);
-        ca = gca;
-        plot(repmat(mu,[1 2]), ca.YLim,'k')
-        hold off
-        
-        subplot(3,2,3)
-        scatter(ymod, xmod, 'k')
-        hold on
-        ca = gca; xl = ca.XLim; yl = ca.YLim;
-        xl_ = [-0.06 0.06] .* diff(xl) + xl;
-        yl_ = [-0.06 0.06] .* diff(yl) + yl;
-        mu = mean(ymod);
-        s = std(ymod);
-        pgon = polyshape([mu-s mu+s mu+s mu-s mu-s], [yl_(1) yl_(1) yl_(2) yl_(2) yl_(1)]);
-        pg = plot(pgon);
-        pg.FaceColor = [1 1 1] ./ 255;
-        pg.FaceAlpha = 0.2;
-        plot(repmat(mu, [1 2]), yl, 'k')
-        xlim(xl); ylim(yl);
-        xlabel(xlabmod); ylabel(ylab);
-        hold off
-        
-        subplot(3,2,4)
-        G = cell(nev,1);
-        for i = 1:nev
-            G{i} = ymod(d.Event==uev(i));
-        end
-        grp = cell2mat(arrayfun(@(i){i*ones(numel(G{i}),1)},(1:numel(G))'));
-        boxplot(vertcat(G{:}),grp,'orientation','horizontal')
-        hold on
-        xlabel(xlabmod); ylabel(ylab2);
-        yticklabels(num2str(uev))
-        mu = mean(ymod);
-        ca = gca;
-        plot(repmat(mu,[1 2]), ca.YLim,'k')
-        hold off
-        
-        subplot(3,2,5)
-        scatter(ys, xmod, 'k')
-        hold on
-        ca = gca; xl = ca.XLim; yl = ca.YLim;
-        xl_ = [-0.06 0.06] .* diff(xl) + xl;
-        yl_ = [-0.06 0.06] .* diff(yl) + yl;
-        mu = mean(ys);
-        s = std(ys);
-        pgon = polyshape([mu-s mu+s mu+s mu-s mu-s], [yl_(1) yl_(1) yl_(2) yl_(2) yl_(1)]);
-        pg = plot(pgon);
-        pg.FaceColor = [1 1 1] ./ 255;
-        pg.FaceAlpha = 0.2;
-        plot(repmat(mu, [1 2]), yl, 'k')
-        xlim(xl); ylim(yl);
-        xlabel(xlabstd); ylabel(ylab);
-        hold off
-        
-        subplot(3,2,6)
-        G = cell(nev,1);
-        for i = 1:nev
-            G{i} = ys(d.Event==uev(i));
-        end
-        grp = cell2mat(arrayfun(@(i){i*ones(numel(G{i}),1)},(1:numel(G))'));
-        boxplot(vertcat(G{:}),grp,'orientation','horizontal')
-        hold on
-        xlabel(xlabstd); ylabel(ylab2);
-        yticklabels(num2str(uev))
-        mu = mean(ys);
-        ca = gca;
-        plot(repmat(mu,[1 2]), ca.YLim,'k')
-        hold off
-        
-        sgtitle(['Compare raw and standardised ' dv ' measurements'])
-
-        pause(0.1)
-        
     end
-        
 end
+
+
+% Size data
+if ~isempty(v) && any(strcmp(v(1,:), 'plotSizeData'))
+    if v{2,strcmp(v(1,:), 'plotSizeData')}
+        for jj = 1:length(obsInCostFunction_size)
+            vv = obsInCostFunction_size{jj};
+            
+            d_ind = strcmp(sizeDatBinned.Variable, vv);
+            d = structfun(@(x) x(d_ind), sizeDatBinned, 'UniformOutput', false);
+            
+            y = d.Value; % raw data
+            ys = d.scaled_Value; % scaled data
+            x = d.size;
+            
+            % Compare raw data to standardised data
+            figure
+            subplot(1,2,1)
+            loglog(x, y, 'ko-')
+            hold on
+            
+            ca = gca; xl = ca.XLim; yl = ca.YLim;
+            
+            mu = mean(log10(y));
+            s = std(log10(y));
+            lb = 10 .^ (mu-s);
+            ub = 10 .^ (mu+s);
+            
+            line(xl, 10 .^ [mu mu], 'Color', [0 0 0], 'LineStyle', '--')
+            line(xl, [lb lb], 'Color', [0 0 0], 'LineStyle', ':')
+            line(xl, [ub ub], 'Color', [0 0 0], 'LineStyle', ':')
+            
+            
+            xlabel('ESD (\mum)');
+            
+            switch vv
+                case 'CellConc'
+                    ylab = 'raw cell conc. data (cells m^{-3})';
+                case 'BioVol'
+                    ylab = 'raw biovolume data (m^3 m^{-3})';
+                case 'NConc'
+                    ylab = 'raw N conc. data (mmol N m^{-3})';
+            end
+            
+            ylabel(ylab);
+            hold off
+            
+            
+            subplot(1,2,2)
+            semilogx(x, ys, 'ko-')
+            hold on
+            
+            ca = gca; xl = ca.XLim; yl = ca.YLim;
+            
+            mu = mean(ys);
+            s = std(ys);
+            lb = mu-s;
+            ub = mu+s;
+            
+            line(xl, [mu mu], 'Color', [0 0 0], 'LineStyle', '--')
+            line(xl, [lb lb], 'Color', [0 0 0], 'LineStyle', ':')
+            line(xl, [ub ub], 'Color', [0 0 0], 'LineStyle', ':')
+            
+            
+            xlabel('ESD (\mum)');
+            
+            switch vv
+                case 'CellConc'
+                    ylab = 'standardised cell conc. data';
+                    tl = 'Compare raw and standardised cell conc. measurements';
+                case 'BioVol'
+                    ylab = 'standardised biovolume data';
+                    tl = 'Compare raw and standardised biovolume measurements';
+                case 'NConc'
+                    ylab = 'standardised N conc. data';
+                    tl = 'Compare raw and standardised N conc. measurements';
+            end
+            
+            ylabel(ylab);
+            hold off
+            sgtitle(tl)
+            
+            pause(0.1)
+        end
+    end
+end
+
+
 
 pause(0.1)
 
-if ~isempty(v) && any(contains(v(1,:),'All') & cellfun(@(x) x(:), v(2,:)))
-
+if ~isempty(v) && any(strcmp(v(1,:), 'plotAllData'))
+    if v{2,strcmp(v(1,:), 'plotAllData')}
     % Plot all standardised data sources together
     figure
     
@@ -508,8 +622,7 @@ if ~isempty(v) && any(contains(v(1,:),'All') & cellfun(@(x) x(:), v(2,:)))
     
     pause(0.1)
 
-
+    end
 end
-
-
-
+    
+    

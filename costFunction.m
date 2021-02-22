@@ -6,23 +6,40 @@ function [cost, costComponents, modData, out, auxVars] = ...
 % ascribed to each separate data type, all model outputs and the modelled
 % equivalents of the data.
 
+% disp(pars') % useful for debugging
 % Cost function type may be given by name-value pair in varargin, otherwise
 % set as the default
-defaultCostType = 'polyLikelihood';
-costTypes = {'LSS', 'polyLikelihood', 'polyLikelihood2'}; % possible cost functions coded below
+defaultCostType = 'LSS';
 selectFunction = defaultCostType;
 if ~isempty(varargin)
     i = strcmp(varargin, 'selectFunction');
     if any(i)
-        sf = varargin{find(i)+1};
-        if ismember(sf, costTypes), selectFunction = sf; end
+        selectFunction = varargin{find(i)+1};
     end
 end
+
+% % Cost function type may be given by name-value pair in varargin, otherwise
+% % set as the default
+% defaultCostType = 'LSS';
+% costTypes = {'LSS', 'polyLikelihood', 'polyLikelihood2', ... 
+%     'syntheticLikelihood_normal_Dirichlet', 'syntheticLikelihood_normalShape_Dirichlet', ...
+%     'syntheticLikelihood_normal_multinomialDirichlet'}; % possible cost functions coded below
+% selectFunction = defaultCostType;
+% if ~isempty(varargin)
+%     i = strcmp(varargin, 'selectFunction');
+%     if any(i)
+%         sf = varargin{find(i)+1};
+%         if ismember(sf, costTypes), selectFunction = sf; end
+%     end
+% end
 
 %% Run model
 
 % Set parameter values
 Params = updateParameters(Params, FixedParams, pars);
+
+% Set initial state variable values -- some of which are selected using
+% parameter values
 
 % Integrate
 [out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, odeIntegrator, odeOptions);
@@ -48,23 +65,24 @@ modData.scalar.Variable = cell(Data.scalar.nSamples,1);
 modData.scalar.Value = nan(Data.scalar.nSamples, nsamples);
 modData.scalar.scaled_Value = modData.scalar.Value;
 
-
 % Standardise model output with respect to depth and event using linear mixed models
-for i = 1:nEvent    
+for i = 1:nEvent
     iEvent = Data.scalar.Event == i; % index event
-    itraj = evTraj(:,i); % index trajectories used for event
-    vars = unique(Data.scalar.Variable(Data.scalar.Event == i)); % variables measured during this event
+    itraj = evTraj(:,i); % trajectories used for event i
+    vars = unique(Data.scalar.Variable(iEvent)); % variables measured in event i
     vars = vars(ismember(vars, Vars));
+    iEvent = ismember(Data.scalar.Variable, vars) & iEvent; % omit unmodelled variables from the event index
     Yearday = Data.scalar.Yearday(find(iEvent, 1));
-    Depth = Data.scalar.Depth(iEvent);
+    Depth = Data.scalar.Depth(iEvent);    
     Variable = Data.scalar.Variable(iEvent);
     modData.scalar.Yearday(iEvent) = Yearday;
     modData.scalar.Depth(iEvent) = Depth;
     modData.scalar.Variable(iEvent) = Variable;
     for j = 1:length(vars)
+        % loop through all data types sampled during event i
         jvar = vars{j};
         ind = iEvent & strcmp(Data.scalar.Variable, jvar);
-        depth = modData.scalar.Depth(ind);        
+        depth = modData.scalar.Depth(ind);
         switch jvar
             % modelled values [depth,trajectory]
             case 'N'
@@ -84,15 +102,18 @@ for i = 1:nEvent
     end
 end
 
+
 % Size spectra
 ind = ismember(Data.scalar.Year, unique(Data.size.Year)); % index relavent sampling events
 ev = unique(Data.scalar.Event(ind));
-et = evTraj(:,ev);
+et = evTraj(:,ev); % sampling events and associated trajectories
 nevent = size(et, 2);
 % sample times of each event
 etime = nan(nevent, 1);
 for i = 1:nevent
-    etime(i) = unique(Data.scalar.Yearday(Data.scalar.Event == ev(i)));
+    ue = unique(Data.scalar.Yearday(Data.scalar.Event == ev(i)));
+    etime(i) = ue(1);
+%     etime(i) = unique(Data.scalar.Yearday(Data.scalar.Event == ev(i)));
 end
 depths_obs = [unique(Data.size.DepthMin) unique(Data.size.DepthMax)]; % sample depth range
 depth_ind = -FixedParams.zw(2:end) > depths_obs(1,1) & ...
@@ -103,36 +124,49 @@ allVarsSize = unique(Data.size.dataBinned.Variable);
 
 for i = 1:length(allVarsSize)
     vs = allVarsSize{i};
-%     vs = VarsSize{i};
     ind = strcmp(Data.size.dataBinned.Variable, vs);
     modData.size.Variable(ind,:) = Data.size.dataBinned.Variable(ind);
     for j = 1:nsamples
-        itraj = et(j,:); % trajectory associated with each sampling event
-        [~, J] = max(sum(out.P(:,depth_ind,FixedParams.PP_Chl_index,etime,itraj))); % depth layer of modelled chl maximum
+        itraj = et(j,:); % trajectories associated with sampling event j
+        [~, J] = max(sum(out.P(:,depth_ind,FixedParams.PP_Chl_index,etime,itraj))); % use modelled values from chl-max depth layer to compare to data
         J = squeeze(J);
         switch vs
             case 'NConc'
-                ymod = squeeze(out.P(:,depth_ind,FixedParams.PP_N_index,etime,itraj));
+                ymod = squeeze(out.P(1:1:FixedParams.nPP_size,depth_ind,FixedParams.PP_N_index,etime,itraj));
                 ymod_ = nan(FixedParams.nPP_size, nevent);
                 for k = 1:nevent
                     ymod_(:,k) = ymod(:,J(k,k),k,k);
                 end
-                ymod = mean(ymod_, 2); % average size-spectra over sampling events
+                ymod = ymod_;
+                ymodMean = mean(ymod, 2); % average size-spectra over sampling events
             case 'CellConc'
-                ymod = auxVars.cellDensity(:,depth_ind,etime,itraj);
+                ymod = auxVars.cellDensity(1:1:FixedParams.nPP_size,depth_ind,etime,itraj);
                 ymod_ = nan(FixedParams.nPP_size, nevent);
                 for k = 1:nevent
                     ymod_(:,k) = ymod(:,J(k,k),k,k);
                 end
-                ymod = mean(ymod_, 2); % average size-spectra over sampling events
-        end        
-        modData.size.Value(ind,j) = ymod;
-        modData.size.scaled_Value(ind,j) = Data.size.(['scaleFun_' vs])( ...
+                ymod = ymod_;
+                ymodMean = mean(ymod, 2); % average size-spectra over sampling events
+            case 'BioVol'
+                ymod = auxVars.biovolume(1:FixedParams.nPP_size,depth_ind,etime,itraj);
+                ymod_ = nan(FixedParams.nPP_size, nevent);
+                for k = 1:nevent
+                    ymod_(:,k) = ymod(:,J(k,k),k,k);
+                end
+                ymod = ymod_;
+                ymodMean = mean(ymod, 2); % average size-spectra over sampling events
+        end
+        modData.size.Value(ind,j) = ymodMean;
+        modData.size.Value_allEvents(ind,:,j) = ymod;
+
+        modData.size.scaled_Value(ind,:,j) = Data.size.(['scaleFun_' vs])( ...
+            Data.size.dataBinned.scale_mu(ind), ...
+            Data.size.dataBinned.scale_sig(ind), ymodMean);
+        modData.size.scaled_Value_allEvents(ind,:,j) = Data.size.(['scaleFun_' vs])( ...
             Data.size.dataBinned.scale_mu(ind), ... 
             Data.size.dataBinned.scale_sig(ind), ymod);
     end
 end
-
 
 
 
@@ -142,181 +176,372 @@ switch selectFunction
     case 'LSS'
         % Least sum of squares
         
+        % Scalar data
         for i = 1:length(Vars)
-            varLabel = Vars{i};
-            ind = strcmp(modData.scalar.Variable, varLabel);
-            ymod = modData.scalar.scaled_Value(ind,:);
-            yobs = Data.scalar.scaled_Value(ind);
-            y = (ymod - yobs) .^ 2;
-            L.(varLabel) = sum(y(:)) / numel(y);
+            varLabel = Vars{i};            
+            yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+            ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);            
+            squaredError = (yobs - ymod) .^ 2;
+            L.(varLabel) = sum(squaredError(:)) / numel(squaredError);
         end
         
-        ymod = modData.size.scaled_Ntot;
-        yobs = Data.size.dataBinned.scaled_Ntot;
-        y = (ymod - yobs) .^ 2;
-        L.size = sum(y(:)) / size(y, 2);
+        % Size spectra data        
+        for i = 1:length(VarsSize)
+            varLabel = VarsSize{i};
+            yobs = Data.size.dataBinned.scaled_Value(strcmp(Data.size.dataBinned.Variable, varLabel));
+            ymod = modData.size.scaled_Value(strcmp(modData.size.Variable, varLabel),:);
+            squaredError = (yobs - ymod) .^ 2;
+            L.(varLabel) = sum(squaredError(:)) / numel(squaredError);
+        end
         
         costComponents = L;
-        cost = sum(struct2array(costComponents));
+        cost = 0;
+        for i = 1:length(Vars)
+            cost = cost + costComponents.(Vars{i});
+        end
+%         cost = cost / length(Vars); % group all scalar variables together, with weighting equal to the size spectra
+        for i = 1:length(VarsSize)
+            cost = cost + costComponents.(VarsSize{i});
+        end
         
-    case 'polyLikelihood'        
-        % Model misfit to data described using a 'synthetic likelihood',
-        % as described by Wood (2010), Nature Letters, 466. doi:10.1038/nature09319
-        % The standardised data are represented by polynomial coefficients.
-        % Equivalent polynomial coefficients representing modelled output are
-        % compared to data in a Gaussian likelihood function. Running the model
-        % over multiple forcing data trajectories generates the output variability.
+    case 'RMS'
+        % Root mean square
         
-        % Fit polynomials to model output
-        maxDegree = Data.scalar.maxDegree;
+        % Scalar data
         for i = 1:length(Vars)
             varLabel = Vars{i};
-            ind = strcmp(modData.scalar.Variable, Vars{i});
-            x = Data.scalar.(['polyXvals_' varLabel]);
-            y = modData.scalar.scaled_Value(ind,:);
-            o = Data.scalar.(['sortOrder_' varLabel]); % sorting order
-            ys = y(o,:); % model output in same order as sorted data
-            polyCoefs = nan(1 + maxDegree, nsamples);
-            for j = 1:nsamples % treat each trajectory as random sample of model output specific to each sampling event
-                polyCoefs(:,j) = polyfit(x, ys(:,j), maxDegree);
-            end
-            modData.scalar.(['polyCoefs_' varLabel]) = polyCoefs;
+            yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+            ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+            absError = sqrt((yobs - ymod) .^ 2);
+            L.(varLabel) = sum(absError(:)) / numel(absError);
         end
         
-        maxDegree = Data.size.maxDegree;
-        x = Data.size.polyXvals;
-        y = modData.size.scaled_Ntot;
-        o = Data.size.sortOrder;
-        ys = y(o,:); % model output in same order as sorted data
-        polyCoefs = nan(1 + maxDegree, nsamples);
-        for j = 1:nsamples % treat each trajectory as random sample of model output specific to each sampling event
-            polyCoefs(:,j) = polyfit(x, ys(:,j), maxDegree);
+        % Size spectra data
+        for i = 1:length(VarsSize)
+            varLabel = VarsSize{i};
+            yobs = Data.size.dataBinned.scaled_Value(strcmp(Data.size.dataBinned.Variable, varLabel));
+            ymod = modData.size.scaled_Value(strcmp(modData.size.Variable, varLabel),:);
+            absError = sqrt((yobs - ymod) .^ 2);
+            L.(varLabel) = sum(absError(:)) / numel(absError);
         end
-        modData.size.polyCoefs = polyCoefs;
-                
-        % Cost function
-        % Negative log-likelihood based on polynomial coefficients describing data
-        % shape. Distributions of coefficients describing model output are
-        % generated by running the model over multiplevforcing data trajectories.
+        
+        costComponents = L;
+        cost = 0;
+        for i = 1:length(Vars)
+            cost = cost + costComponents.(Vars{i});
+        end
+        %         cost = cost / length(Vars); % group all scalar variables together, with weighting equal to the size spectra
+        for i = 1:length(VarsSize)
+            cost = cost + costComponents.(VarsSize{i});
+        end
+        
+    case 'syntheticLikelihood_ScalarNormal_SizeSpectraLogNormalDirichlet' % fit every data point...
+        % Model misfit to data described using a 'synthetic likelihood',
+        % as described by Wood (2010), Nature Letters, 466. doi:10.1038/nature09319
+        % Standardised scalar data are approximately normally distributed.
+        % A variety of trajectory combinations are used to generate model
+        % outputs, which are transformed identically to the data. Model
+        % outputs define normal distributions used as likelihood terms --
+        % what is likelihood of observing data given model expectations?
+        % Running the model over multiple forcing data trajectories
+        % generates the output variability (process error which is probably
+        % underestimated).
+        
+        % Scalar data
+        % Each standardised data point is assigned an independent normal 
+        % distribution parameterised using model outputs over multiple 
+        % trajectories. The likelihood is the product of probabilities of 
+        % observing all data points given these model-estimated 
+        % distributions.
+
         log2pi = log(2*pi);
         for i = 1:length(Vars)
             varLabel = Vars{i};
-            coefs = modData.scalar.(['polyCoefs_' varLabel]);
-            ncoefs = size(coefs, 1);
-            mu = mean(coefs, 2);
-            S = coefs - mu;
-            sig = (S * S') / (size(S, 2) - 1);
-            sig = 0.5 * (sig + sig'); % guarentees symmetry
-            if ~all(eig(sig) > 0) % if not positive definite then coerce sig to SPD
-                sig = nearestSPD(sig);
-            end
-            y = Data.scalar.(['polyCoefs_' Vars{i}])(:) - mu;
-            sigChol = chol(sig);             % numerically stable determinant of
-            logdetsig = 2*sum(log(diag(sigChol))); % covariance matrix
-            L.(Vars{i}) = 0.5 * (y' * (sig \ y) + logdetsig + ncoefs * log2pi);
+            yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+            ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+            mu = mean(ymod, 2); % expectation of each data point
+            sig = std(ymod, 0, 2); % standard deviation of model output
+            sig(sig == 0) = min(sig(sig > 0)); % include for robustness (we only see zero variability when using single trajectories for any sampling event)
+            sig2 = sig .^ 2;
+            n = length(yobs); % sample size
+%             L = prod(1 ./ ((2*pi*sig2) .^ 0.5) .* exp(-0.5 ./ sig2 .* (yobs - mu) .^ 2)) .^ (1/n);
+            negLogLik = 0.5 .* (log2pi + 1/n .* sum(log(sig2) + (yobs - mu) .^ 2 ./ sig2));
+            L.(varLabel) = negLogLik;
         end
-        
-        coefs = modData.size.polyCoefs;
-        ncoefs = size(coefs, 1);
-        mu = mean(coefs, 2);
-        S = coefs - mu;
-        sig = (S * S') / (size(S, 2) - 1);
-        sig = 0.5 * (sig + sig');
-        if ~all(eig(sig) > 0)
-            sig = nearestSPD(sig);
+
+        % Size data        
+        % Dirichlet distribution on relative abundance info in size
+        % spectra. Log-normal distribution on total abundance in size data        
+        for i = 1:length(VarsSize)
+            varLabel = VarsSize{i};
+            yobs = Data.size.dataBinned.Value(strcmp(Data.size.dataBinned.Variable, varLabel));
+            ymod = modData.size.Value(strcmp(modData.size.Variable, varLabel),:);
+            % Derive Dirichlet distribution parameters from model output.
+            yobsTot = sum(yobs);
+            ymodTot = sum(ymod);
+            pobs = yobs ./ yobsTot; % observed relative abundance -- simplex
+            pmod = ymod ./ ymodTot;
+            alpha = fitDirichlet(pmod); % estimate concentration parameter
+            % Dirichlet likelihood for simplex
+%            L = gamma(alpha0) ./ prod(gamma(alpha)) .* prod(p_obs .^ (alpha-1));
+            negLogLik = sum(gammaln(alpha)) - gammaln(sum(alpha)) - sum((alpha - 1) .* log(pobs));            
+            
+            % Lognormal likelihood for total
+            yobsTot_log = log(yobsTot);
+            ymodTot_log = log(ymodTot);
+            mu = mean(ymodTot_log);
+            sig = std(ymodTot_log);
+            sig2 = sig .^ 2;
+            negLogLik2 = 0.5 .* (log2pi + sum(log(sig2) + 1 ./ sig2 .* (yobsTot_log - mu) .^ 2));
+            L.([varLabel '_Rel']) = negLogLik;
+            L.([varLabel '_Tot']) = negLogLik2;
+            L.(varLabel) = negLogLik + negLogLik2;
         end
-        y = Data.size.polyCoefs(:) - mu;
-        sigChol = chol(sig);
-        logdetsig = 2*sum(log(diag(sigChol)));
-        L.size = 0.5 * (y' * (sig \ y) + logdetsig + ncoefs * log2pi);
         
         costComponents = L;
-        cost = sum(struct2array(costComponents));
+        cost = 0;
+        for i = 1:length(Vars)
+            cost = cost + costComponents.(Vars{i});
+        end
+%         cost = cost / length(Vars); % group all scalar variables together, with weighting equal to the size spectra
+        for i = 1:length(VarsSize)
+            cost = cost + costComponents.(VarsSize{i});
+        end
+%         cost = sum(struct2array(costComponents));
     
-    case 'polyLikelihood2' % include some weighting factors for polynomial coefficients
-        % Model misfit to data described using a 'synthetic likelihood',
-        % as described by Wood (2010), Nature Letters, 466. doi:10.1038/nature09319
-        % The standardised data are represented by polynomial coefficients.
-        % Equivalent polynomial coefficients representing modelled output are
-        % compared to data in a Gaussian likelihood function. Running the model
-        % over multiple forcing data trajectories generates the output variability.
+    
+    case 'syntheticLikelihood_ScalarNormal_SizeSpectraLogNormal_logisticNormal'
         
-        % Fit polynomials to model output
-        maxDegree = Data.scalar.maxDegree;
+        % Scalar data
+        
+        log2pi = log(2*pi);
         for i = 1:length(Vars)
             varLabel = Vars{i};
-            ind = strcmp(modData.scalar.Variable, Vars{i});
-            x = Data.scalar.(['polyXvals_' varLabel]);
-            y = modData.scalar.scaled_Value(ind,:);
-            o = Data.scalar.(['sortOrder_' varLabel]); % sorting order
-            ys = y(o,:); % model output in same order as sorted data
-            polyCoefs = nan(1 + maxDegree, nsamples);
-            for j = 1:nsamples % treat each trajectory as random sample of model output specific to each sampling event
-                polyCoefs(:,j) = polyfit(x, ys(:,j), maxDegree);
-            end
-            modData.scalar.(['polyCoefs_' varLabel]) = polyCoefs;
+            yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+            ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+            n = size(ymod, 1); % sample size
+            m = size(ymod, 2); % number of replicates
+            mu = mean(ymod); % modelled expectations and 
+            sig = std(ymod); % standard deviations for selected trajectories
+            sig2 = sig .^ 2;
+            negLogLik = 0.5 .* (log2pi + log(sig2) + (yobs - mu) .^ 2 ./ sig2);
+            negLogLik = sum(negLogLik(:)) / n / m;
+            L.(varLabel) = negLogLik;
         end
         
-        maxDegree = Data.size.maxDegree;
-        for i = 1:length(allVarsSize)
-            varLabel = allVarsSize{i};
-            ind = strcmp(modData.size.Variable, varLabel);
-            x = Data.size.(['polyXvals_' allVarsSize{i}]);
-            y = modData.size.scaled_Value(ind,:);
-            o = Data.size.(['sortOrder_' varLabel]);
-            ys = y(o,:); % model output in same order as sorted data
-            polyCoefs = nan(1 + maxDegree, nsamples);
-            for j = 1:nsamples % treat each trajectory as random sample of model output specific to each sampling event
-                polyCoefs(:,j) = polyfit(x, ys(:,j), maxDegree);
-            end
-            modData.size.(['polyCoefs_' varLabel]) = polyCoefs;
-        end
-        
-        % Cost function
-        % Use uni-variate normal likelihoods separately for each polynomial
-        % coefficient, weight the different terms, then combine into single
-        % likelihood. This neglects covariance between coefficients...
-        log2pi = log(2*pi);
-        for i = 1:length(Vars)            
-            varLabel = Vars{i};
-            coefs = modData.scalar.(['polyCoefs_' varLabel]);
-            mu = mean(coefs, 2);
-            S = coefs - mu;
-            Cov = (S * S') / (size(S, 2) - 1);
-            Cov = 0.5 * (Cov + Cov'); % guarentees symmetry
-            if ~all(eig(Cov) > 0) % if not positive definite then coerce sig to SPD
-                Cov = nearestSPD(Cov);
-            end            
-            V = diag(Cov); % variance of modelled polynomial coefficients
-            y = Data.scalar.(['polyCoefs_' varLabel])(:) - mu;
-            weights = Data.scalar.(['polyWeights_' varLabel]);
-            weights = weights ./ sum(weights) .* length(weights); % rescale weights about 1
-            negLogLik = 0.5 * (log(V) + y .^ 2 ./ V + log2pi);
-            weightedNegLogLik = weights(:) .* negLogLik;
-            L.(varLabel) = sum(weightedNegLogLik) / length(y);
-        end
+        % Size data
         
         for i = 1:length(VarsSize)
             varLabel = VarsSize{i};
-            coefs = modData.size.(['polyCoefs_' varLabel]);
-            mu = mean(coefs, 2);
-            S = coefs - mu;
-            Cov = (S * S') / (size(S, 2) - 1);
-            Cov = 0.5 * (Cov + Cov');
-            if ~all(eig(Cov) > 0)
-                Cov = nearestSPD(Cov);
+            yobs = Data.size.dataBinned.Value(strcmp(Data.size.dataBinned.Variable, varLabel));
+            ymod = modData.size.Value_allEvents(strcmp(modData.size.Variable, varLabel),:,:); % modelled values for each separate sampling event
+            ymodMean = modData.size.Value(strcmp(modData.size.Variable, varLabel),:); % modelled values averaged over sampling events
+            % dimension of ymod is [size, sampling event, replicate (trajectory choice), sample number (year or cruise)]
+            nsize = size(ymod, 1); % number of sizes
+            ne = size(ymod, 2); % number of sampling events
+            m = size(ymod, 3); % number of replicates (trajectory choices)
+            n = size(ymod, 4); % number of samples/years/cruises etc
+
+            % decompose spectra into total and relative abundance (a single number and a simplex)
+            yobsTot = sum(yobs); % totals
+            ymodTot = sum(ymod);
+            ymodMeanTot = sum(ymodMean);
+            pobs = yobs ./ yobsTot; % simplices
+            pmod = ymod ./ ymodTot;
+            pmodMean = ymodMean ./ ymodMeanTot;
+            
+            % Use a logistic-normal distribution to calculate likelihood of
+            % observed relative abundance (simplex) given the modelled
+            % equivalents.
+            % Methods detailed in: Francis, R.I.C.C. (2014) Fish.Res.151:70-84. doi:10.1016/j.fishres.2013.12.015
+            
+            % Assuming observed simplex, pobs, has a logistic-normal
+            % distribution with expectation, pmod => X is multi-variate normal
+            % if pobs = exp(X) / sum(exp(X)), where X has expectation, log(pmod),
+            % and covariance, C.
+            % The pobs-X transform is not one-to-one, so transform pobs
+            % by reducing the size dimension by one.
+            Yobs = log(pobs(1:end-1) ./ pobs(end));
+            % Now assume that Yobs is multi-variate normal with
+            % expectation, mu, and covariance, V.
+            mu = log(pmod(1:end-1,:,:) ./ pmod(end,:,:)); % expectations for [nsize-1] multi-variate normal Yobs (all sampling events)
+            Mu = log(pmodMean(1:end-1,:) ./ pmodMean(end,:)); % expectations for [nsize-1] multi-variate normal Yobs (averaged sampling events)
+
+            log_pmod = log(pmod); % expectations (for each separate sampling event) of [nsize] multivariate-normal distribution for X
+            
+            K = [eye(nsize-1) -ones(nsize-1,1)];
+            
+            % Use modelled output for each separate sampling event to
+            % estimate (co)variance parameter for the event-averaged data
+            
+            C = nan(nsize, nsize, m); % Covaraince of multi-variate normal distribution
+            V = nan(nsize-1, nsize-1, m); % Transformed covariance -- useful form for likelihood
+            
+            covarianceTypes = {'var', 'CVtridiag', 'CVfull'}; % variance, tri-diagonal covariance matrix, full covariance matrix
+            covarianceType = covarianceTypes{1};
+            
+            switch covarianceType
+                case 'var'
+                    for j = 1:m
+                        C(:,:,j) = diag(diag(cov(log_pmod(:,:,j)')));
+                        V(:,:,j) = K * C(:,:,j) * K';
+                    end
+                case 'CVfull'
+                    for j = 1:m
+                        C(:,:,j) = cov(log_pmod(:,:,j)');
+                        V(:,:,j) = K * C(:,:,j) * K';
+                    end
+                case 'CVtridiag'
+                    for j = 1:m
+                        C(:,:,j) = cov(log_pmod(:,:,j)');
+                        C(:,:,j) = diag(diag(C(:,:,j))) + ... 
+                            diag(diag(C(:,:,j), -1), -1) + ... 
+                            diag(diag(C(:,:,j), 1), 1);
+                        V(:,:,j) = K * C(:,:,j) * K';
+                    end
             end
-            V = diag(Cov);
-            y = Data.size.(['polyCoefs_' varLabel])(:) - mu;
-            weights = Data.size.(['polyWeights_' varLabel]);
-            weights = weights ./ sum(weights) .* length(weights);
-            negLogLik = 0.5 * (log(V) + y .^ 2 ./ V + log2pi);
-            weightedNegLogLik = weights(:) .* negLogLik;
-            L.(varLabel) = sum(weightedNegLogLik) / length(y);
+            
+            w = Yobs - Mu; % error vectors
+            
+            for j = 1:m
+                negLogLik(j) = log(det(V(:,:,j))) + (w(:,j)' / V(:,:,j) * w(:,j));
+            end
+%             negLogLik = 0.5 .* (negLogLik + (nsize - 1) .* log2pi) + sum(log(pobs));
+            negLogLik = 0.5 .* (negLogLik + (nsize - 1) .* log2pi);
+            negLogLik_rel = sum(negLogLik) / m;
+%             negLogLik_rel = sum(negLogLik) / m / (nsize-1);
+            
+            % Lognormal likelihood for total abundance
+            yobsTot_log = log(yobsTot);
+            ymodTot_log = log(ymodTot);
+            mu = squeeze(mean(ymodTot_log));
+            sig = squeeze(std(ymodTot_log));
+            sig2 = sig .^ 2;
+            
+%             Lik = prod(1 ./ ((2*pi*sig2) .^ 0.5) .* exp(-0.5 .* (yobsTot_log - mu) .^ 2 ./ sig2)) .^ (1/m)            
+            negLogLik_tot = 0.5 .* (m .* log2pi + sum(log(sig2) + (yobsTot_log - mu) .^ 2 ./ sig2)) ./ m;
+            
+            L.([varLabel '_Rel']) = negLogLik_rel;
+            L.([varLabel '_Tot']) = negLogLik_tot;
+            L.(varLabel) = negLogLik_rel + negLogLik_tot;
+
         end
         
         costComponents = L;
-        cost = sum(struct2array(costComponents));
+        cost = 0;
+        for i = 1:length(Vars)
+            cost = cost + costComponents.(Vars{i});
+        end
+%         cost = cost / length(Vars); % group all scalar variables together, with weighting equal to the size spectra
+        for i = 1:length(VarsSize)
+            cost = cost + costComponents.(VarsSize{i});
+        end
+%         cost = sum(struct2array(costComponents));
 
+
+
+    case 'syntheticLikelihood_ScalarNormalShape_SizeSpectraLogNormalDirichlet'
+        % Model misfit to data described using a 'synthetic likelihood',
+        % as described by Wood (2010), Nature Letters, 466. doi:10.1038/nature09319
+        % Standardised scalar data are approximately normally distributed.
+        % A variety of trajectory combinations are used to generate model
+        % outputs, which are transformed identically to the data. Model
+        % outputs define normal distributions used as likelihood terms --
+        % what is likelihood of observing data given model expectations?
+        % Running the model over multiple forcing data trajectories
+        % generates the output variability (process error which is probably
+        % underestimated).
         
+        % Scalar data
+        % Each standardised data point is assigned an independent normal 
+        % distribution parameterised using model outputs over multiple 
+        % trajectories. The likelihood is the product of probabilities of 
+        % observing all data points given these model-estimated 
+        % distributions.
+        log2pi = log(2*pi);
+        for i = 1:length(Vars)
+            varLabel = Vars{i};
+            yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+            ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+%             n = length(yobs);
+            n = size(ymod, 2);
+            mu_obs = mean(yobs);
+            v_obs = var(yobs);
+            Mu = mean(ymod);
+            V = var(ymod);
+            % likelihood of mu_obs
+            mu = mean(Mu);
+            v = var(Mu);
+            negLogLik_mu = log2pi + log(v) + (mu_obs - mu) .^ 2 ./ v;
+            % likelihood of v_obs
+            mu = mean(V);
+            v = var(V);
+            negLogLik_v = log2pi + log(v) + (v_obs - mu) .^ 2 ./ v;
+            % combine
+            negLogLik = 0.5 * n * (negLogLik_mu + negLogLik_v);
+            L.(varLabel) = negLogLik;
+        end
+        
+
+        % Size data        
+        % Dirichlet distribution on relative abundance info in size
+        % spectra. Log-normal distribution on total abundance in size data        
+        for i = 1:length(VarsSize)
+            varLabel = VarsSize{i};
+            yobs = Data.size.dataBinned.Value(strcmp(Data.size.dataBinned.Variable, varLabel));
+            ymod = modData.size.Value(strcmp(modData.size.Variable, varLabel),:);
+            % Derive Dirichlet distribution parameters from model output.
+            yobsTot = sum(yobs);
+            ymodTot = sum(ymod);
+            pobs = yobs ./ yobsTot; % observed relative abundance -- simplex
+            pmod = ymod ./ ymodTot;
+            alpha = fitDirichlet(pmod); % estimate concentration parameter
+            % Dirichlet likelihood for simplex
+%            L = gamma(alpha0) ./ prod(gamma(alpha)) .* prod(p_obs .^ (alpha-1));
+            negLogLik = sum(gammaln(alpha)) - gammaln(sum(alpha)) - sum((alpha - 1) .* log(pobs));            
+            
+            % Lognormal likelihood for total
+            yobsTot_log = log(yobsTot);
+            ymodTot_log = log(ymodTot);
+            mu = mean(ymodTot_log);
+            sig = std(ymodTot_log);
+            sig2 = sig .^ 2;
+            negLogLik2 = 0.5 .* (log2pi + sum(log(sig2) + 1 ./ sig2 .* (yobsTot_log - mu) .^ 2));
+            L.([varLabel '_Rel']) = negLogLik;
+            L.([varLabel '_Tot']) = negLogLik2;
+            L.(varLabel) = negLogLik + negLogLik2;
+        end
+        
+        costComponents = L;
+        cost = 0;
+        for i = 1:length(Vars)
+            cost = cost + costComponents.(Vars{i});
+        end
+%         cost = cost / length(Vars); % group all scalar variables together, with weighting equal to the size spectra
+        for i = 1:length(VarsSize)
+            cost = cost + costComponents.(VarsSize{i});
+        end
+%         cost = sum(struct2array(costComponents));
+
+
+end
+
+
+%%
+
+if exist('cost', 'var') == 0
+    cost = nan;
+    warning('Could not evaluate cost... Check that the name-value pair (selectFunction,costFunctionType) is properly specified and corresponds to a viable option within costFunction.m')
+end
+if exist('costComponents', 'var') == 0
+    costComponents = nan;
+end
+if exist('modData', 'var') == 0
+    modData = nan;
+end
+if exist('out', 'var') == 0
+    out = nan;
+end
+if exist('auxVars', 'var') == 0
+    auxVars = nan;
 end

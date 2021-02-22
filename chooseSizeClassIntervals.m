@@ -34,7 +34,7 @@ dat = dat(inRange,:);
 
 % Has the number of intervals been passed as an argument?
 nsizes = [];
-if ~isempty(varargin)    
+if ~isempty(varargin)
     vnsizes = strcmp(varargin, 'nsizes');
     if any(vnsizes)
         nsizes = varargin{find(vnsizes)+1};
@@ -106,6 +106,7 @@ switch Case
         for i = 1:length(nInt)
             dat3 = dat_list.(['nIntervals' num2str(nInt(i))]);
             dat3.CellConc = nan(height(dat3), 1); % integrate cell densities to find total cell number within each size class
+            dat3.BioVol = nan(height(dat3), 1); % integrate biovolume densities to find biovolume within each size class
             dat3.NConc = nan(height(dat3), 1); % integrate nitrogen densities to find nitrogen concentration within each size class
             for j = 1:nscenarios
                 ind0 = strcmp(dat3.scenario, scenarios(j));
@@ -119,6 +120,11 @@ switch Case
                     ys = y(1:end-1) + y(2:end);
                     CellConc = sum(0.5 * xd .* ys);
                     dat3.CellConc(ind) = repmat(CellConc, [n, 1]);
+                    % biovolume
+                    y = dat3.BioVolDensity(ind);
+                    ys = y(1:end-1) + y(2:end);
+                    BioVol = sum(0.5 * xd .* ys);
+                    dat3.BioVol(ind) = repmat(BioVol, [n, 1]);
                     % nitrogen concentration
                     y = dat3.Ndensity(ind);
                     ys = y(1:end-1) + y(2:end);
@@ -134,10 +140,10 @@ switch Case
             dat3 = dat_list.(['nIntervals' num2str(nInt(i))]);
             dat_binned = unique(dat3(:,{'scenario', 'Year', 'YeardayFirst', ...
                 'YeardayLast', 'season', 'regime', 'DepthMin', 'DepthMax', 'size', ...
-                'sizeClass', 'CellConc', 'NConc'}));
+                'sizeClass', 'CellConc', 'BioVol', 'NConc'}));
             
             % convert from short to long format
-            dat_binned = stack(dat_binned, {'CellConc','NConc'}, ...
+            dat_binned = stack(dat_binned, {'CellConc','BioVol','NConc'}, ...
                 'IndexVariableName','Variable','NewDataVariableName','Value');
             dat_binned.Variable = cellstr(dat_binned.Variable);
             
@@ -168,7 +174,7 @@ switch Case
            end
         end
         if makePlot
-            plotVars = {'cellDensity', 'Ndensity'};
+            plotVars = {'cellDensity', 'BioVolDensity', 'Ndensity'};
             N = length(nInt); % number of subplots (one for each number of intervals)
             maxSubplots = 20; % max subplots per figure
             nfig = ceil(N / maxSubplots); % number of figures            
@@ -206,6 +212,9 @@ switch Case
                         if strcmp(plotVar, 'cellDensity')
                             gc.YLim(1) = 1e1;
                         end
+                        if strcmp(plotVar, 'BioVolDensity')
+                            gc.YLim(1) = 1e-9;
+                        end
                         if strcmp(plotVar, 'Ndensity')
                             gc.YLim(1) = 1e-6;
                         end
@@ -222,6 +231,9 @@ switch Case
                     end
                     if strcmp(plotVars{ij}, 'cellDensity')
                         sgtitle({'Cell concentration density spectra','partitioned into various resolutions'})
+                    end
+                    if strcmp(plotVars{ij}, 'BioVolDensity')
+                        sgtitle({'Biovolume density spectra','partitioned into various resolutions'})
                     end
                     if strcmp(plotVars{ij}, 'Ndensity')
                         sgtitle({'Nitrogen concentration density spectra','partitioned into various resolutions'})
@@ -269,6 +281,7 @@ switch Case
             
         % Integrate size spectra across each size class interval
         dat.CellConc = nan(height(dat), 1); % integrate cell densities to find total cell number within each size class
+        dat.BioVol = nan(height(dat), 1); % integrate biovolume densities to find total bio-volume within each size class
         dat.NConc = nan(height(dat), 1); % integrate nitrogen densities to find nitrogen concentration within each size class
         for j = 1:nscenarios
             ind0 = strcmp(dat.scenario, scenarios(j));
@@ -277,12 +290,17 @@ switch Case
                 n = sum(ind);
                 x = log10(dat.ESD(ind));
                 xd = diff(x);
-                % cell density
+                % cell density (cells m^-3)
                 y = dat.cellDensity(ind);
                 ys = y(1:end-1) + y(2:end);
                 CellConc = sum(0.5 * xd .* ys);
                 dat.CellConc(ind) = repmat(CellConc, [n, 1]);
-                % nitrogen concentration
+                % biovolume (m^3 m^-3)
+                y = dat.BioVolDensity(ind);
+                ys = y(1:end-1) + y(2:end);
+                BioVol = sum(0.5 * xd .* ys);
+                dat.BioVol(ind) = repmat(BioVol, [n, 1]);
+                % nitrogen concentration (mmol N m^-3)
                 y = dat.Ndensity(ind);
                 ys = y(1:end-1) + y(2:end);
                 NConc = sum(0.5 * xd .* ys);
@@ -293,10 +311,10 @@ switch Case
         % Include reduced size spectra data set containing only the binned values
         dat_binned = unique(dat(:,{'scenario', 'Year', 'YeardayFirst', ...
             'YeardayLast', 'season', 'regime', 'DepthMin', 'DepthMax', 'size', ...
-            'sizeClass', 'CellConc', 'NConc'}));
+            'sizeClass', 'CellConc', 'BioVol', 'NConc'}));
         
         % convert from short to long format
-        dat_binned = stack(dat_binned, {'CellConc','NConc'}, ...
+        dat_binned = stack(dat_binned, {'CellConc','BioVol','NConc'}, ...
             'IndexVariableName','Variable','NewDataVariableName','Value');
         dat_binned.Variable = cellstr(dat_binned.Variable);
         
@@ -328,49 +346,83 @@ switch Case
             %                  Bottom row: nitrogen concentration
             %                  Columns: sampling scenarios
             figure
-            plotVars0 = {'cellDensity', 'Ndensity'};
-            plotVars = unique(dat.dataBinned.Variable);
+            plotVars0 = {'cellDensity', 'BioVolDensity', 'Ndensity'};
+            plotVars = unique(dat.dataBinned.Variable, 'stable');
             nr = length(plotVars); % number of rows
             nc = nscenarios; % number of columns
             b = linspace(lESDmin, lESDmax, nsizes+1); % interval boundaries
             db = diff(b);
             
             for i = 1:nr
+                pv0 = plotVars0{i};
                 for j = 1:nc
                     k = (i-1) * nc + j;
                     subplot(nr, nc, k);
-                    ind0 = strcmp(dat.scenario, scenarios{j});
+                    ind0 = strcmp(dat.scenario, scenarios{j}); % indexes continuous spectra
+                    
                     ind = strcmp(dat.dataBinned.scenario, scenarios{j}) & ...
-                        strcmp(dat.dataBinned.Variable, plotVars{i});
-                    loglog(dat.ESD(ind0), dat.(plotVars0{i})(ind0), 'Color', cols(j,:))
+                        strcmp(dat.dataBinned.Variable, plotVars{i}); % indexes binned (integrated) spectra
+                    
+                    loglog(dat.ESD(ind0), dat.(plotVars0{i})(ind0), '--', 'Color', cols(j,:)) % plot continuous spectra (densities)
+                    
                     hold on
                     
-                    y = dat.(plotVars{i})(ind0) ./ db(dat.sizeClass(ind0));
-                    loglog(dat.ESD(ind0), y, 'Color', cols(j,:))
+                    y = dat.(plotVars{i})(ind0) ./ db(dat.sizeClass(ind0)); % divide by interval width to get densities from absolute values
+                    loglog(dat.ESD(ind0), y, 'Color', cols(j,:)) % plot binned spectra (densities)
                     
                     gc = gca;
                     
-                    if strcmp(plotVars0{i}, 'cellDensity'), gc.YLim(1) = 1e1; end
-                    if strcmp(plotVars0{i}, 'Ndensity'), gc.YLim(1) = 1e-6; end
-                    gc.YLim(2) = 2 * max(dat.(plotVars0{i}));
+%                     switch pv0
+%                         case 'cellDensity'
+%                             gc.YLim(1) = 1e1;
+%                             ylab = 'cell concentration';
+%                             yunit = 'cells$\;$m$^{-3}$';
+%                         case 'BioVolDensity'
+%                             gc.YLim(1) = 1e-9;
+%                             ylab = 'bio-volume';
+%                             yunit = 'm$^3\;$m$^{-3}$';
+%                         case 'Ndensity'
+%                             gc.YLim(1) = 1e-6;
+%                             ylab = 'nitrogen concentration';
+%                             yunit = 'mmol$\,$N m$^{-3}$';
+%                     end
+                    switch pv0
+                        case 'cellDensity'
+                            gc.YLim(1) = 1e1;
+                            ylab = 'cell concentration density';
+                            yunit = 'cells$\;$m$^{-3}\;\log_{10}($ESD$/1\mu m)^{-1}$';
+                        case 'BioVolDensity'
+                            gc.YLim(1) = 1e-9;
+                            ylab = 'bio-volume density';
+                            yunit = 'm$^3\;$m$^{-3}\;\log_{10}($ESD$/1\mu m)^{-1}$';
+                        case 'Ndensity'
+                            gc.YLim(1) = 1e-6;
+                            ylab = 'nitrogen concentration density';
+                            yunit = 'mmol$\,$N m$^{-3}\;\log_{10}($ESD$/1\mu m)^{-1}$';
+                    end
+                    
+                    gc.YLim(2) = 2 * max(dat.(pv0));
                     for q = 1:length(b)
                         line(10 .^ [b(q) b(q)], gc.YLim, 'Color', [0.5, 0.5, 0.5], 'LineStyle', ':')
                     end
                     
                     if i == nr, xlabel('ESD (\mum)'); end
                     if j == 1
-                        if strcmp(plotVars{i}, 'NConc')
-                            ylabel('Nitrogen density (mmol N m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
-                        end
-                        if strcmp(plotVars{i}, 'CellConc')
-                            ylabel('cell conc. density (cells m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
-                        end
+                        ylabel({ylab, ['(' yunit ')']}, 'Interpreter', 'latex');
+                        
+%                         if strcmp(plotVars{i}, 'CellConc')
+%                             ylabel('cell conc. density (cells m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
+%                         end
+%                         if strcmp(plotVars{i}, 'BioVol')
+%                             ylabel('bio vol density ($m^3\,m^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
+%                         end
+%                         if strcmp(plotVars{i}, 'NConc')
+%                             ylabel('Nitrogen density (mmol N m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
+%                         end
                     end
                     if i == 1
                         yr = unique(dat.Year(ind0));
-%                         se = unique(dat.season(ind0));
                         title(['scenario ' scenarios{j} ': ' num2str(yr)])
-%                         title(['scenario ' scenarios{j} ': ' se{1} ' ' num2str(yr)])
                     end
                     
                     hold off

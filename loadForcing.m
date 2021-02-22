@@ -25,6 +25,11 @@ for iy = 1:length(years)
         error('Forcing file does not exist:\n ==> %s.', fullfile(forcDir, forcFile));
     end
     
+%     % Use single precision    
+%     forcing = structDouble2Single(forcing);
+%     forcing.profiles = structDouble2Single(forcing.profiles);
+%     grid = structDouble2Single(grid);
+
     % filter trajectories with geographical jumps
     forcing = filterTrajectoryJumps(forcing);
 
@@ -38,6 +43,7 @@ for iy = 1:length(years)
     if  isempty(useTraj)
         % no specific trajectories seleced => use all
         iTraj = 1:nTraj;
+%         iTraj = uint32(1:nTraj);
     else
         iSel = false(1,nTraj);
         if  sum(useTraj>0)>0
@@ -45,6 +51,7 @@ for iy = 1:length(years)
             iSel(useTraj(useTraj>0 & useTraj<=nTraj)) = true;
         end
         iTraj = find(iSel); % convert logical mask into index vector
+%         iTraj = uint32(find(iSel)); % convert logical mask into index vector
     end
 
     % filter forcing data
@@ -77,7 +84,14 @@ for iy = 1:length(years)
     end
 end
 
+end
 
-
-
-
+function out = structDouble2Single(x)
+out = x;
+fields = fieldnames(out);
+for j = 1:length(fields)
+    if isa(out.(fields{j}), 'double')
+        out.(fields{j}) = single(out.(fields{j}));
+    end
+end
+end

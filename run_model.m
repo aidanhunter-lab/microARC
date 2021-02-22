@@ -1,54 +1,83 @@
-%% Size-structured 1D NPZD model with a single predator class
+%% Size-structured 1D NPZD model
 
 clear
 clc
 close all
+delete(gcp('nocreate'))
 
-% rng(1) % set random seed
+rng(1) % set random seed
 
-%% Load and filter forcing data
+%##########################################################################
+%##########################################################################
 
-% Directories and files
+%% Directories and files
 
-% What forcing?
+% Choose forcing data
 forcModel = 'sinmod';
-% Forcing name (i.e. forcing subfolder)
+% Forcing name (subfolder)
 forcName = 'FramStrait_dep0-100';
-% Run name
-runName = 'FramStrait_dep0-100';
 % Experiment name
 expName = 'AWI-Hausgarten';
-% Select years
-years = 2017:2018;
-
+% Forcing data directories
 forcDir = fullfile('DATA', 'particle_trajectories', forcModel, forcName);
 forcDummy = 'particles_MODEL_DOMAIN_EXPERIMENT-YEAR_YEAR_t*iSub03.mat';
 
-% Select trajectories
-% - options: 1. Use all trajectories by setting useTraj = [].
-%            2. Manually define trajectory index vector, e.g., useTraj = 1:50:5000.
-% Choose all trajectories -- they're filtered during model set-up
-useTraj = [];
-% useTraj = 1:25:5000;
+% In-situ data directory
+obsDir = fullfile('DATA', 'AWI_Hausgarten');
 
-F = loadForcing(forcModel, forcName, expName, years, forcDir, forcDummy, useTraj);
+% Choose model type -- this will influence model set-up and some aspects of
+% the ODEs.
+bioModelOptions = {'singlePredatorClass', 'multiplePredatorClasses', 'mixotrophy'};
+bioModel = bioModelOptions{1}; % Only singlePredatorClass is available so far
 
+%##########################################################################
+%##########################################################################
 
 %% Model set-up
 
-% bioModel  = 'singlePredatorClass'; % name of model (will have more options later)
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% Model input is stored in 4 structs: Forc, FixedParams, Params, and Data.
+% Forc:        forcing data from physical model particle trajectories.
+% FixedParams: constant model parameters (not numerically tuned).
+% Params:      model parameters that MAY be tuned.
+% Data:        observed data included in cost function to tune parameters.
+% These structs are created in this code section.
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-% Model input is stored in 4 structs, Forc, FixedParams, Params, and Data, 
-% containing particle-trajectory forcing data, constant parameters,
-% variable parameters that may be numerically tuned, and observed data used
-% to tune parameters.
+% Select trajectories to use from physical model
+% - options: 1. Use all trajectories by setting useTraj = []. Trajectories
+%               are filtered later during model set-up.
+%            2. Save RAM by manually defining trajectory index vector, 
+%                e.g., useTraj = 1:50:5000 to extract every 50th trajectory
+useTraj = [];
+% useTraj = 1:200:5000;
 
-% Load/prepare in-situ fitting data
-obsDir = fullfile('DATA', 'AWI_Hausgarten');
+% Specify years of available forcing data
+years = 2017:2018;
+
+% Load and extract relevant forcing data from physical model 'forcModel'.
+F = loadForcing(forcModel, forcName, expName, years, forcDir, forcDummy, useTraj);
+
+viewForcing = true;
+switch viewForcing
+    case true
+        display(F); fprintf('\n\n')
+        fields = fieldnames(F);
+        disp('First year of forcing data. Dimensions include: yearday, depth layer, and particle trajectory.')
+        display(F.(fields{1}))
+end
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+% Load/prepare in-situ fitting data.
+% prepareFittingData.m must be tailored to specific data sets.
 Data = prepareFittingData(obsDir, ...
-    'plotNconcSpectra', true, 'plotCellConcSpectra', true); % tailor this function to specific data sets
+    'plotNconcSpectra', true, 'plotCellConcSpectra', true, ...
+    'plotBioVolSpectra', true);
 
-% Choose number of modelled size class intervals
+% Choose number of modelled size class intervals using function
+% chooseSizeClassIntervals.m
 ESDmin = 1; % min/max sizes to retain from the data
 ESDmax = 200;
 nsizes = []; % number of modelled size classes (leave empty to view a range of values)
@@ -59,86 +88,151 @@ chooseSizeClassIntervals(Data.size, ...
     'nsizes', nsizes, 'nsizesMin', nsizesMin, 'nsizesMax', nsizesMax, ...
     'plotSizeClassIntervals', true);
 
-nsizes = 8; % number of modelled size classes (specifying a value makes chooseSizeClassIntervals return different output)
+nsizes = 8; % number of modelled size classes (specifying a value makes chooseSizeClassIntervals.m return different output)
 Data.size = chooseSizeClassIntervals(Data.size, ...
     'ESDmin', ESDmin, 'ESDmax', ESDmax, ...
     'nsizes', nsizes, 'nsizesMin', nsizesMin, 'nsizesMax', nsizesMax, ...
     'plotSizeClassIntervals', true);
 
-% Choose data types to use in cost function
+% Choose data types to use in cost function - I think bio-volume is the
+% best choice for the size data
 Data = selectCostFunctionData(Data, ...
-    {'N','chl_a','PON','POC'}, {'CellConc'});
+    {'N','chl_a','PON','POC'}, {'BioVol'});
 
 close all
 
-% Initialise model parameters. Values are selected in defaultParameters.m
-% The modelled cell size ranges are chosen to correspond with the size 
-% class intervals selected in prepareFittingData.m
+viewData = true; % display the fitting-data struct?
+switch viewData
+    case true
+        display(Data); fprintf('\n\n')        
+        disp('scalar data: Data.scalar')
+        display(Data.scalar); fprintf('\n\n')
+        disp('size-spectra (vector) data: Data.size')
+        display(Data.size); fprintf('\n\n')
+        disp('size-spectra (vector) data grouped into bins: Data.size.dataBinned')
+        display(Data.size.dataBinned)
+end
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+% Initialise model parameters.
+% Values can be modified in defaultParameters.m, which is called from
+% within initialiseParameters.m.
+% Modelled cell size ranges are automatically chosen to correspond with the
+% size class intervals already selected using the fitting data.
 [FixedParams, Params] = initialiseParameters(F, Data);
-Params0 = Params; % store the default values in the workspace
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% NOTE:
+% Parameters may be initialised by loading saved values, e.g.,
+% [FixedParams, Params] = initialiseParameters(F, Data, ...
+%     'load', 'results/parametersInitialValues_singlePredClass_2018_2');
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Params0 = Params; % store the default values as separate workspace object
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% NOTE:
 % Parameter values should not be changed by directly modifying Params
 % because the size-dependent vector parameters will not update. Instead, 
-% parameter values can be changed using name-value pair arguments in 
-% updateParameters.m, eg,
-% Params = updateParameters(Params, FixedParams, 'pmax_a', 30, 'pmax_b', -0.55, 'Gmax', 3);
+% parameter values should be changed using name-value pair arguments in 
+% updateParameters.m, e.g.,
+% Params = updateParameters(Params, FixedParams, ... 
+%     'pmax_a', 30, 'pmax_b', -0.55, 'k_G', 3);
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-% Interpolate forcing data over modelled depth layers
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+% Interpolate forcing data over modelled depth layers, and combine multiple
+% years of forcing data into a single structure using prepareForcing.m.
+% A few extra useful metrics are also calculated here.
 Forc = prepareForcing(F,FixedParams);
-clear F
+clear F % to save memory
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+% The 4 main structs (Forc, FixedParams, Params, Data) should now be stored
+% in the workspace.
+% The rest of this set-up code section selects which data to use, 
+% standardises data, filters out unrequired data, and derives a few useful
+% metrics.
 
 % Remove fitting-data samples from below the maximum modelled depth
 Data = omitDeepSamples(Data, FixedParams);
 
-% Choose years to model from the available data, return filtered data
-[Data, Forc, FixedParams] = selectYears(Data, Forc, FixedParams);
+% Select which year(s) to model and filter out unused data.
+% Function selectYears.m automatically chooses which year(s) to use based
+% upon which years are most replete with data.
+useSingleYear = true; % run model over a single year? If false, then 
+                      % multiple years of forcing data MAY be used
+                      % depending on fitting-data availability
+useSingleSizeSpectra = true; % there are 2 size spectra for 2018, use only
+                             % the Polarstern samples if true
+[Data, Forc, FixedParams] = selectYears(Data, Forc, FixedParams, ... 
+    'singleYear', useSingleYear, 'singleSpectra', useSingleSizeSpectra);
 
-% Choose set of forcing data trajectories near to sampling sites. 
-maxDist = 25; % choose trajectories from within maxDist km radius of sampling sites
-numTraj = 10; % number of trajectories per sample event (duplicates may be 
-              % required for some events, depending on maxDist)
-[Forc, eventTraj] = chooseTrajectories(Forc, Data.scalar, maxDist, numTraj);
+
+% There are lots of forcing data particle trajectories -- far too many to
+% include within a parameter optimisation procedure, so these need to be
+% filtered.
+% For each in-situ sample event (specified in Data.scalar), choose a set of
+% particle trajectories that pass nearby.
+maxDist = 25; % Choose trajectories from within maxDist km radius of
+              % sampling sites.
+numTraj = 10; % Number of trajectories per sample event (duplicates may be 
+              % required for some events, depending on maxDist).
+[Forc_, eventTraj] = chooseTrajectories(Forc, Data.scalar, maxDist, numTraj);
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% NOTE:
+% The choice of maxDist is important. If maxDist is very large then the 
+% trajectories ascribed to each sampling event will correspond poorly to
+% the history of the water at the events, so small values are better.
+% However, if maxDist is small then this can limit the number of
+% trajectories available to use for each sampling event, and may entirely
+% exclude some sampling events from the analyses if no trajectories are
+% within the maxDist radius. We want to set maxDist small, but not too
+% small...
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+% Observe any warnings produced by chooseTrajectories.m and use the table
+% 'eventTraj' to help evaluate choice of maxDist and numTraj: if happy then
+% set Forc = Forc_, otherwise reselect maxDist and numTraj and repeat
+% chooseTrajectories.m
+Forc = Forc_; clear Forc_
 
 % Omit data from any sampling events not matched with a set of trajectories
 [Data, eventTraj] = omitUnmatchedEvents(Data, eventTraj, Forc);
 
-% Find time of latest sample along each trajectory so we can reduce 
-% integration lengths during parameter optimisation
+% For each trajectory, find the time of the latest sampling event.
+% Integrations along trajectories can then be stopped at these events to
+% reduce model run-times during parameter optimisation.
 Forc = latestSampleTime(Forc, Data);
 
 % Group sampling events by origin of particles: Arctic or Atlantic.
+% Each individual trajectory is either of Atlantic or Arctic origin
+% (stored in Forc.waterMass).
+% Each sampling event is associated with a selection of trajectories, so
+% may be considered as Atlantic, Arctic, or a mixture (stored in 
+% Data.scalar.waterMass).
 [Forc, Data.scalar] = particleOrigin(Forc, Data.scalar, ...
     'trajectoryPlot', true, 'dendrogram', true); pause(0.25)
 
 % Standardise the fitting data using linear mixed models to adjust for
 % variability due to depth and sampling event.
-Data = standardiseFittingData(Data, 'plotScaledPON', true, 'plotScaledPOC', true, ...
-    'plotScaledchl_a', true, 'plotScaledN', true, 'plotScaledN_at_size', true, ...
-    'plotAllData', true);
-% These linear mixed models do a good job standaridsing the data. However,
-% as they do not actually represent the real processes generating depth-
-% and event-related discrepancies in measured values, there are a couple of
-% outlying points that will cause statistical issues within the cost
-% function. There are only 3 of these outliers that I'm going to remove
-% (those points beyond 3 standard deviations of the mean, see plots of N
-% and Chl). Remove these outliers then standardise again...
-% This could be improved (perhaps fewer outliers) by altering the linear
-% mixed models to account for changing curvature of measured variables
-% near the surface water, as the log transform cannot capture that shape.
-ind = Data.scalar.inCostFunction & ... 
-    (Data.scalar.scaled_Value > 3 | Data.scalar.scaled_Value < -3); % index the outliers
-fields = fieldnames(Data.scalar);
-for i = 1:length(fields)
-    if size(Data.scalar.(fields{i}),1) == Data.scalar.nSamples
-        Data.scalar.(fields{i}) = Data.scalar.(fields{i})(~ind);
-    end
-    if i == length(fields)
-        Data.scalar.nSamples = Data.scalar.nSamples - sum(ind);
-    end
-end
+Data = standardiseFittingData(Data, ...
+    'plotScalarData', true, 'plotSizeData', true, 'plotAllData', true);
 
-Data = standardiseFittingData(Data, 'plotScaledPON', false, 'plotScaledPOC', false, ...
-    'plotScaledchl_a', false, 'plotScaledN', false, 'plotScaledN_at_size', false, ...
-    'plotAllData', false);
+close all
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+% THIS LAST PART OF THE DATA SET-UP IS NO-LONGER USED, BUT KEEP THE CODE...
+% WHO KNOWS, IT MIGHT BE USEFUL...
 
 % The cost function has an option to fit the model to polynomial
 % representations of the data...
@@ -148,87 +242,107 @@ Data = standardiseFittingData(Data, 'plotScaledPON', false, 'plotScaledPOC', fal
 Data.scalar.maxDegree = 3; % Polynomial degree = 3 should be OK if the
                            % standardised data have a monomodal distribution
 % Data.size.maxDegree = 2; % Quadratic for the sorted size data seems reasonable, anything more looks like overfitting
-Data.size.maxDegree = 2; % Linear for the scaled then sorted size data looks OK
+Data.size.maxDegree = 1; % Linear for the scaled then sorted size data looks OK
+
 Data = smoothData_polynomials(Data, Data.scalar.maxDegree, Data.size.maxDegree, ...
     'plotPoly_PON', true, 'plotPoly_POC', true, 'plotPoly_N', true, ...
-    'plotPoly_chl_a', true, 'plotPolySize_CellConc', true, 'plotPolySize_NConc', true);
-
+    'plotPoly_chl_a', true, 'plotPolySize_CellConc', true, ... 
+    'plotPolySize_BioVol', true, 'plotPolySize_NConc', true);
 
 close all
 
+%##########################################################################
+%##########################################################################
 
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-% State variable initial condition
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%% Integrate
 
+% Initialise state variables.
 % Store state variables in array v0: 1st dimension = variable
 %                                    2nd dimension = location (trajectory)
-% 
+v0 = initialiseVariables(FixedParams, Params, Forc);
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% NOTE:
 % Order of variables = inorganic nutrients [depth]
 %                      phytoplankton       [size, depth, nutrient]
 %                      zooplankton         [depth]
 %                      organic matter      [type, depth, nutrient]
-%
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-v0 = initialiseVariables(FixedParams, Params, Forc); % v0 stores initial input vectors
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+% % Use single precision -- get back to this... it's more involved...
+% Forc = structDouble2Single(Forc);
+% Params = structDouble2Single(Params);
+% FixedParams = structDouble2Single(FixedParams);
+% v0 = single(v0);
 
-%% Integrate
+% Parallelise integrations over trajectories
+poolObj = gcp('nocreate');
+if isempty(poolObj)
+    poolObj = parpool('SpmdEnabled', false);
+    numcores = poolObj.NumWorkers;
+end
 
-poolObj = gcp; % integrations are parallelised over trajectories
-numcores = poolObj.NumWorkers;
+% Choose ODE solver.
+integratorChoices = {'ode45', 'ode23', 'ode113', ...
+    'ode15s', 'ode23s'};
+odeIntegrator = integratorChoices{2};
 
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% NOTE:
+% ode23 seems to be the most robust. ode45 occasionally produces NaNs.
+% Maybe ode45 is less robust due to stiffness in the model equations. It
+% seems that the equations are stiff for some parameter values, as the
+% solver can slow down significantly... this is annoying, it would be
+% useful to be able to dynamically switch between stiff and non-stiff
+% solvers during the integrations (such switching functionality is
+% available in the DEsolve package in R...)
+% The stiff-solvers (ode15s, ode23s) are not working (at least partly)
+% because they cannot use the non-negative constraint...
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+% Set solver options.
 % Integrator is called separately for each time step -- defined by forcing 
-% data (daily) intervals
+% data (daily) intervals.
 odeMaxTime = FixedParams.dt_max; % max timestep (days)
-odeInitTime = 0.5 * odeMaxTime; % initial integration timestep (solver will automatically reduce this if required)
+odeInitTime = 0.5 * odeMaxTime; % initial integration timestep (solver will
+                                % automatically reduce this if required)
 
-% Choose solver
-integratorChoices = {'ode45', 'ode23', 'ode113'};
-odeIntegrator = integratorChoices{2}; % ode23 seems to be the most robust. ode45 occasionally produced NaNs... maybe ode45 is less robust due to stiffness in the model equations...
+% odeOptions=odeset('AbsTol', 1e-6, 'RelTol', 1e-4,...
+%     'InitialStep', odeInitTime, 'MaxStep', odeMaxTime, ...
+%     'NonNegative', ones(FixedParams.nEquations,1));
 
-% Set solver options: positive definite, tolerances, initial & max time steps
-odeOptions=odeset('AbsTol',1e-6,'RelTol',1e-4,...
-  'InitialStep',odeInitTime,'MaxStep',odeMaxTime, ...
-  'NonNegative', ones(FixedParams.nEquations,1));
+odeOptions=odeset('AbsTol', 1e-6, 'RelTol', 1e-4,...
+    'InitialStep', odeInitTime, 'MaxStep', odeMaxTime);
 
 % Run the model
 tic
 [out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, odeIntegrator, odeOptions);
 runtime = toc;
-disp([num2str(runtime) ' seconds to integrate ' num2str(Forc.nTraj) ' trajectories'])
-runtime = runtime / Forc.nTraj * numcores; % average integration time of single trajectory on single processor
+disp([num2str(runtime) ' seconds to integrate ' num2str(Forc.nTraj) ' trajectories']); fprintf('\n')
+runtime = runtime / Forc.nTraj * numcores;
+disp([num2str(runtime) ' seconds = average integration time of single trajectory on single processor']); fprintf('\n')
 
-% out
-% auxVars
+display(out)
+display(auxVars)
 
-
+%##########################################################################
+%##########################################################################
 
 %% Parameter tuning
 
-clear out auxVars OUT AUXVARS AUXVARS_2d
-
-poolObj = gcp; % start parallel pool
-numcores = poolObj.NumWorkers;
-
-integratorChoices = {'ode45', 'ode23', 'ode113'};
-odeIntegrator = integratorChoices{2}; % select ODE integrator
-
-optimiserChoices = {'ga','muga'};
-optimiser = optimiserChoices{1}; % select optimising algorithm (so far only ga is available)
-optimise = str2func(optimiser);
-
-costFunctionChoices = {'LSS','polyLikelihood','polyLikelihood2'};
-costFunctionType = costFunctionChoices{3}; % select cost function
-FixedParams.costFunction = costFunctionType;
-
-% Choose tuning parameters from Params.scalars and Params.sizeDependent.
+% Select which parameters to optimise.
+% Choose from the lists: Params.scalars & Params.sizeDependent.
 parnames = {'wPOM', 'wp_a', 'wp_b', 'rDON', 'rPON', 'rPOC', 'beta2', ... 
-    'beta3', 'aP', 'Gmax', 'k_G', 'pmax_a', 'pmax_b', 'Qmin_QC_a', ... 
-    'Qmin_QC_b', 'Qmax_delQ_a', 'Qmax_delQ_b', 'Vmax_QC_a', 'Vmax_QC_b', ... 
-    'aN_QC_a', 'aN_QC_b'};
+    'beta3', 'aP', 'Gmax_a', 'Gmax_b', 'k_G', 'pmax_a', 'pmax_b', ... 
+    'Qmin_QC_a', 'Qmin_QC_b', 'Qmax_delQ_a', 'Qmax_delQ_b', ... 
+    'Vmax_QC_a', 'Vmax_QC_b', 'aN_QC_a', 'aN_QC_b'};
 npars = length(parnames);
-par0 = nan(1,npars); lb = nan(1,npars); ub = nan(1,npars);
+par0 = nan(1,npars); % initial (default) values of tuning parameters
+lb = nan(1,npars); % lower and upper bounds on tuning parameters
+ub = nan(1,npars);
 for i = 1:npars
     par0(i) = Params.(parnames{i});
     lb(i) = Params.bounds.(parnames{i})(1);
@@ -238,51 +352,132 @@ FixedParams.tunePars = parnames;
 FixedParams.tunePars_lb = lb;
 FixedParams.tunePars_ub = ub;
 
-Forc.integrateFullTrajectory = false;
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+% Select optimising algorithm (so far only ga is available)
+optimiserChoices = {'ga','muga'};
+optimiser = optimiserChoices{1};
+optimise = str2func(optimiser);
+
+% Select cost function.
+% There's a few options for the cost function. Not yet sure which is the
+% best... from this list choose either option 3 or 4
+costFunctionChoices = { ...
+    'LSS', ...
+    'RMS', ...
+    'syntheticLikelihood_ScalarNormal_SizeSpectraLogNormal_logisticNormal', ...
+    'syntheticLikelihood_ScalarNormal_SizeSpectraLogNormalDirichlet', ...
+    'syntheticLikelihood_ScalarNormalShape_SizeSpectraLogNormalDirichlet' ...
+    };
+costFunctionType = costFunctionChoices{3}; % select cost function
+FixedParams.costFunction = costFunctionType;
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 % Test the cost function
+
+% Parallelise integrations over trajectories
+if isempty(gcp('nocreate'))
+    poolObj = parpool('SpmdEnabled', false);
+    numcores = poolObj.NumWorkers;
+end
+
+% Halt integrations at each trajectory's final sampling events to save time
+Forc.integrateFullTrajectory = false;
+
+% Integrate and calculate cost...
+clear out auxVars
 tic
 [cost, costComponents, modData, out, auxVars] = costFunction(par0, ...
     FixedParams, Params, Forc, Data, v0, odeIntegrator, odeOptions, ... 
     'selectFunction', costFunctionType);
 runtime = toc;
-disp([num2str(runtime) ' seconds to integrate ' num2str(Forc.nTraj) ' trajectories'])
-runtime = runtime / Forc.nTraj * numcores; % average integration time of single trajectory on single processor
-disp(costComponents)
+disp([num2str(runtime) ' seconds to integrate ' num2str(Forc.nTraj) ' trajectories']); fprintf('\n')
+runtime = runtime / Forc.nTraj * numcores; 
+disp([num2str(runtime) ' seconds = average integration time of single trajectory on single processor'])
 
+display(costComponents) % cost associated to each data type
+display(cost) % total cost
+display(modData) % modelled equivalents of fitting data
+display(out) % state variable output
+display(auxVars) % other model output
 
-% Tune parameters
-popSize = 100; % number of separate parameter sets in population of optimising algorithm
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+% Optimise parameters using a numerical population-based algorithm
+
+popSize = 100; % number of parameter sets in algorithm population
 niter = 10; % algorithm iterations
 
+% This approxRunTime.m function was supposed to estimate time required to
+% run the optimisation, but it doesn't work because the ODE solver slows
+% down when equations become stiff for some parameter values.
 if exist('runtime', 'var'), approxOptimisationTime = ... 
         approxRunTime(runtime, numcores, Forc.nTraj, popSize, niter+1, 'Display', true); end
 
-gaOptions = gaoptimset('PopInitRange', [lb;ub], 'PopulationSize', popSize, ...
-    'Generations', niter, 'Display', 'iter', ...
-    'OutputFcns', @gaStoreHistory, 'PlotFcns', @gaplotbestf);
+% Optimising algorithm options
+gaOptions = optimoptions('ga', ...
+    'PopulationSize', popSize, ...
+    'Generations', niter, ...
+    'InitialPopulationRange', [lb;ub], ...
+    'InitialPopulationMatrix', par0, ...
+    'Display', 'iter', ...
+    'OutputFcn', @gaStoreHistory, ... % gaStoreHistory.m function dynamically stores output, which is available in workspace even if algorithm is halted prematurely
+    'PlotFcn', @gaplotbestf);
 
 % Call optimiser
 clear cost costComponents modData out auxVars optPars fval
 tic; disp('.. started at'); disp(datetime('now'))
-[optPar, fval, exitflag, output, population, scores] = optimise(@(x) costFunction( ...
-    x, FixedParams, Params, Forc, Data, v0, odeIntegrator, odeOptions, ...
-    'selectFunction', costFunctionType), npars, [], [], [], [], lb, ub, [], gaOptions);
-optimisationTime = toc / 60 / 60; disp('.. finished at'); disp(datetime('now'))
+[optPar, fval, exitflag, output, population, scores] = optimise(@(x) ... 
+    costFunction(x, FixedParams, Params, Forc, Data, v0, odeIntegrator, ...
+    odeOptions, 'selectFunction', costFunctionType), ... 
+    npars, [], [], [], [], lb, ub, [], gaOptions);
+optimisationTime = toc / 60 / 60; disp('.. finished at'); disp(datetime('now')); fprintf('\n')
+disp(['Optimisation time: ' num2str(floor(optimisationTime)) ' hrs, ' ...
+    num2str(floor(mod(60*optimisationTime,60))) ' mins'])
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+% Examine and store results.
+
+% If algorithm was terminated before reaching 'niter' iterations then only
+% 'gapopulationhistory' and 'gacosthistory' are returned via gaStoreHistory.m
+stoppedEarly = ~exist('fval', 'var');
 
 % Store results in gaOutput
-stoppedEarly = ~exist('fval', 'var'); % if algorithm is terminated early then only gapopulationhistory and gacosthistory are returned
-gaOutput = storeGAoutput(gapopulationhistory, gacosthistory, gaOptions, ... 
-    FixedParams, 'stoppedEarly', stoppedEarly);
+switch stoppedEarly
+    case false
+        gaOutput = storeGAoutput(gapopulationhistory, gacosthistory, gaOptions, ...
+            FixedParams, 'stoppedEarly', stoppedEarly);
+    case true
+        [gaOutput, optPar] = storeGAoutput(gapopulationhistory, gacosthistory, gaOptions, ...
+            FixedParams, 'stoppedEarly', stoppedEarly);
+end
 
-% Save/load output
-tag = '_planktonSinking_reweighted2';
+viewResults = false;
+switch viewResults
+    case true
+        display(gaOutput)
+        if ~stoppedEarly
+            bestFit = table(FixedParams.tunePars', FixedParams.tunePars_lb', ...
+                optPar', FixedParams.tunePars_ub');
+            bestFit.Properties.VariableNames = {'par','lower','opt','upper'};
+            display(bestFit); fprintf('\n')
+            disp(['Cost of best fit = ' num2str(fval)]); fprintf('\n')
+            disp(['Optimisation exit flag = ' num2str(exitflag)]); fprintf('\n')
+            display(output); fprintf('\n')
+            display(population); fprintf('\n')
+            display(scores)
+        else
+            display(gaOutput.optPar_summary); fprintf('\n')
+            disp(['Cost of best fit = ' num2str(min(gaOutput.scoreHistory(:)))]); fprintf('\n')
+        end
+end
+
+% Save output
+tag = '_fitAllNutrientsAndBioVol_modifiedGmax_2018data';
 fileName = ['results/fittedParameters_' FixedParams.costFunction tag];
-
-% % set output directory
-% outDir = fullfile('OUTPUT', bioModel, 'FORCSTR', runName, expName);
-% outDir = strrep(outDir, 'FORCSTR', sprintf('FRC_%s', forcModel));
-
 
 saveParams = true;
 switch saveParams
@@ -290,174 +485,569 @@ switch saveParams
         saveOptimisationRun(fileName, gaOutput, Data, Forc, FixedParams, Params, v0);
 end
 
-loadParams = true;
-switch loadParams
+% Should these parameter values be saved to use as initial values for
+% future runs?
+updateStoredInitials = false;
+switch updateStoredInitials
     case true
-        [~, gaOutput, parnames, optPar, lb, ub, Data, Forc, FixedParams, ... 
-            Params, v0] = loadOptimisationRun(fileName);
+        optPar = gaOutput.optPar;
+        optPars_table = table(FixedParams.tunePars', optPar');
+        optPars_table.Properties.VariableNames = {'Param','Value'};
+        % take care choosing file name -- don't overwrite good values!
+        saveObj = matfile('results/parametersInitialValues_singlePredClass_2018_2');
+        saveObj.Properties.Writable = true;
+        saveObj.pars = optPars_table;
 end
 
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % We may continue optimising parameters stored in gaOutput by initialising
 % the algorithm with a stored population.
+
+tag = '_fitAllNutrientsAndBioVol_modifiedGmax_2018data';
+fileName = ['results/fittedParameters_' FixedParams.costFunction tag];
+
+% Load stored results
+[~, gaOutput, ~, ~, lb, ub, Data, Forc, FixedParams, Params, v0] = ... 
+    loadOptimisationRun(fileName);
+
+
+% Use stored result to initialise new optimisation run
 populationOld = gaOutput.populationHistory(:,:,end);
 scoresOld = gaOutput.scoreHistory(:,end);
 gaOptions = gaOutput.gaOptions;
-niter = 4;
 
-gaOptions = gaoptimset(gaOptions, 'Generations', niter, ... 
-    'InitialPopulation', populationOld, 'InitialScores', scoresOld);
+niter = 10;
 
+gaOptions.MaxGenerations = niter;
+gaOptions.InitialPopulationMatrix = populationOld;
+gaOptions.InitialScoresMatrix = scoresOld;
+
+clear optPars fval modData out auxVars
 tic; disp('.. started at'); disp(datetime('now'))
-clear optPars fval
-[optPar, fval, exitflag, output, population, scores] = optimise(@(x) costFunction( ...
-    x, FixedParams, Params, Forc, Data, v0, odeIntegrator, odeOptions, ... 
-    'selectFunction', costFunctionType), npars, [], [], [], [], lb, ub, [], gaOptions);
-optimisationTime = toc / 60 / 60; disp('.. finished at'); disp(datetime('now'))
+[optPar, fval, exitflag, output, population, scores] = optimise(@(x) ...
+    costFunction(x, FixedParams, Params, Forc, Data, v0, odeIntegrator, ... 
+    odeOptions, 'selectFunction', costFunctionType), ... 
+    npars, [], [], [], [], lb, ub, [], gaOptions);
+optimisationTime = toc / 60 / 60; disp('.. finished at');
+disp(datetime('now')); fprintf('\n')
+disp(['Optimisation time: ' num2str(floor(optimisationTime)) ' hrs, ' ...
+    num2str(floor(mod(60*optimisationTime,60))) ' mins'])
 
-% Store results in gaOutput
+% As above, examine and save output...
 stoppedEarly = ~exist('fval', 'var');
-gaOutput = storeGAoutput(gapopulationhistory, gacosthistory, gaOptions, ... 
-    FixedParams, 'stoppedEarly', stoppedEarly);
+switch stoppedEarly
+    case false
+        gaOutput = storeGAoutput(gapopulationhistory, gacosthistory, gaOptions, ...
+            FixedParams, 'stoppedEarly', stoppedEarly);
+    case true
+        [gaOutput, optPar] = storeGAoutput(gapopulationhistory, gacosthistory, gaOptions, ...
+            FixedParams, 'stoppedEarly', stoppedEarly);
+end
 
+viewResults = false;
+switch viewResults
+    case true
+        display(gaOutput)
+        if ~stoppedEarly
+            bestFit = table(FixedParams.tunePars', FixedParams.tunePars_lb', ...
+                optPar', FixedParams.tunePars_ub');
+            bestFit.Properties.VariableNames = {'par','lower','opt','upper'};
+            display(bestFit); fprintf('\n')
+            disp(['Cost of best fit = ' num2str(fval)]); fprintf('\n')
+            disp(['Optimisation exit flag = ' num2str(exitflag)]); fprintf('\n')
+            display(output); fprintf('\n')
+            display(population); fprintf('\n')
+            display(scores)
+        else
+            display(gaOutput.optPar_summary); fprintf('\n')
+            disp(['Cost of best fit = ' num2str(min(gaOutput.scoreHistory(:)))]); fprintf('\n')
+        end
+end
 
-% Save/load output
-tag = '_1';
-fileName = ['results/fittedParameters_' FixedParams.costFunction tag];
-
+% Save output
 saveParams = true;
 switch saveParams
     case true
         saveOptimisationRun(fileName, gaOutput, Data, Forc, FixedParams, Params, v0);
 end
 
-loadParams = true;
-switch loadParams
-    case true
-        [~, gaOutput, parnames, optPar, lb, ub, Data, Forc, FixedParams, ... 
-            Params, v0] = loadOptimisationRun(fileName);
-end
+%##########################################################################
+%##########################################################################
 
+%% Plots
 
+% Code folding for switches is not enabled by default, so type 'preferences'
+% into command window then go to MATLAB -> Editor/Debugger -> Code Folding
+% to enable folding on switches. This is useful but not necessary...
 
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% Directory for saved plots
+folder = 'results/plots/';
 
-% Generate output using fitted parameters
+% Load fitted parameters, and associated data and fixed parameters...
+tag = '_testForGitHubUpload';
+fileName = ['results/fittedParameters_' FixedParams.costFunction tag];
+% tag = '_fitAllNutrientsAndBioVol_modifiedGmax_2018data';
+% fileName = ['results/fittedParameters_' FixedParams.costFunction tag];
+
+[~, gaOutput, parnames, optPar, lb, ub, Data, Forc, FixedParams, Params, v0] = ... 
+    loadOptimisationRun(fileName);
+
+% Generate model output using fitted parameters
 Params = updateParameters(Params, FixedParams, optPar);
-
+costFunctionType = FixedParams.costFunction;
 Forc.integrateFullTrajectory = true;
 
-clear cost costComponents modData out auxVars
-[cost,costComponents,modData,out,auxVars] = costFunction(optPar, ...
+[cost, costComponents, modData, out, auxVars] = costFunction(optPar, ...
     FixedParams, Params, Forc, Data, v0, odeIntegrator, odeOptions, ... 
     'selectFunction', costFunctionType);
 
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-%% Plots
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% NOTE:
+% All of these plotting functions require further work to make them more
+% generally applicable for any model outputs...
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 %~~~~~~~~~~~~~~~~~~
 % Model fit to data
 %~~~~~~~~~~~~~~~~~~
 
-close all
-
 save = false;
-% save = true;
-folder = 'results/plots/';
 
 % Summary plots displaying model fit to data
-pltChl = outputPlot('outputVsData_summaryPlots', 'chl_a', Data, modData, FixedParams); pause(0.5)
-pltN = outputPlot('outputVsData_summaryPlots', 'N', Data, modData, FixedParams); pause(0.5)
-pltPON = outputPlot('outputVsData_summaryPlots', 'PON', Data, modData, FixedParams); pause(0.5)
-pltPOC = outputPlot('outputVsData_summaryPlots', 'POC', Data, modData, FixedParams); pause(0.5)
-pltNconc = outputPlot('outputVsData_summaryPlots', 'NConc', Data, modData, FixedParams); pause(0.5)
-pltCellconc = outputPlot('outputVsData_summaryPlots', 'CellConc', Data, modData, FixedParams); pause(0.5)
+logPlot = true; % for scalar data choose logPlot = true or false
+pltChl = plot_fitToData('chl_a', Data, modData, logPlot); pause(0.25)
+pltPON = plot_fitToData('PON', Data, modData, logPlot); pause(0.25)
+pltPOC = plot_fitToData('POC', Data, modData, logPlot); pause(0.25)
+logPlot = false;
+pltN = plot_fitToData('N', Data, modData, logPlot); pause(0.25)
+
+logPlot = 'loglog'; % for size spectra data choose logPlot = 'loglog' or 'semilogx'
+pltCellConc = plot_fitToData('CellConc', Data, modData, logPlot); pause(0.25)
+pltBioVol = plot_fitToData('BioVol', Data, modData, logPlot); pause(0.25)
+pltNConc = plot_fitToData('NConc', Data, modData, logPlot); pause(0.25)
 
 switch save, case true
+    % scalar data
+    if exist('pltChl', 'var') && isvalid(pltChl)
         filename = 'fitToData_chl.png';
         print(pltChl, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('pltN', 'var') && isvalid(pltN)
         filename = 'fitToData_DIN.png';
         print(pltN, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('pltPON', 'var') && isvalid(pltPON)
         filename = 'fitToData_PON.png';
         print(pltPON, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('pltPOC', 'var') && isvalid(pltPOC)
         filename = 'fitToData_POC.png';
         print(pltPOC, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    
+    % size data
+    if exist('pltCellConc', 'var') && isvalid(pltCellConc)
+        filename = 'fitToData_CellConcSpectra.png';
+        print(pltCellConc, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('pltBioVol', 'var') && isvalid(pltBioVol)
+        filename = 'fitToData_BioVolSpectra.png';
+        print(pltBioVol, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('pltNConc', 'var') && isvalid(pltNConc)
         filename = 'fitToData_NConcSpectra.png';
-        print(pltNconc, fullfile(folder, filename), '-r300', '-dpng');
+        print(pltNConc, fullfile(folder, filename), '-r300', '-dpng');
+    end
 end
 
-%~~~~~~~~~~~~~~~~~~~~~~~~~
-% Plot single trajectories
-%~~~~~~~~~~~~~~~~~~~~~~~~~
 
-% Save plots?
+%~~~~~~~~~~~~~~~~~~
+% Fitted parameters
+%~~~~~~~~~~~~~~~~~~
+
 save = false;
-% save = true;
-folder = 'results/plots/';
 
-close all
-
-% Choose trajectory
-% k = 1;
-% Or, first, filter by sampling event 
-ie = 20; % sampling event
-kk = find(Data.scalar.EventTraj(ie,:)); % all trajectories for selected event
-k = kk(1);
-
-% Depth-time contour plots
-pltForc = outputPlot('contour_DepthTime','forcing',k,out,FixedParams,Forc,auxVars,'linear');
-pltIN = outputPlot('contour_DepthTime','inorganicNutrient',k,out,FixedParams,Forc,auxVars,'linear');
-pltOM = outputPlot('contour_DepthTime','DOM_POM',k,out,FixedParams,Forc,auxVars,'linear');
-pltPN = outputPlot('contour_DepthTime','phytoplankton_N',k,out,FixedParams,Forc,auxVars,'linear');
-pltChl = outputPlot('contour_DepthTime','phytoplankton_Chl',k,out,FixedParams,Forc,auxVars,'linear');
-pltPC = outputPlot('contour_DepthTime','phytoplankton_C',k,out,FixedParams,Forc,auxVars,'linear');
-pltPNC = outputPlot('contour_DepthTime','phytoplankton_N_C',k,out,FixedParams,Forc,auxVars,'linear');
-pltPChlN = outputPlot('contour_DepthTime','phytoplankton_Chl_N',k,out,FixedParams,Forc,auxVars,'linear');
-pltZ = outputPlot('contour_DepthTime','zooplankton',k,out,FixedParams,Forc,auxVars,'linear');
+% Display fitted parameters in relation to their bounding values (in the
+% table, columns widths shoukd be adjustable).
+plt = plot_fittedParameters(gaOutput.optPar_summary);
 
 switch save, case true
-        filename = 'forcing_data.png';
-        print(pltForc, fullfile(folder, filename), '-r300', '-dpng');
-        filename = 'DIN.png';
-        print(pltIN, fullfile(folder, filename), '-r300', '-dpng');
-        filename = 'OM.png';
-        print(pltOM, fullfile(folder, filename), '-r300', '-dpng');
-        filename = 'phytoplankton_N.png';
-        print(pltPN, fullfile(folder, filename), '-r300', '-dpng');
-        filename = 'phytoplankton_Chl.png';
-        print(pltChl, fullfile(folder, filename), '-r300', '-dpng');
-        filename = 'phytoplankton_C.png';
-        print(pltPC, fullfile(folder, filename), '-r300', '-dpng');
-        filename = 'phytoplankton_N_C_ratio.png';
-        print(pltPNC, fullfile(folder, filename), '-r300', '-dpng');
-        filename = 'phytoplankton_Chl_N_ratio.png';
-        print(pltPChlN, fullfile(folder, filename), '-r300', '-dpng');
-        filename = 'zooplankton.png';
-        print(pltZ, fullfile(folder, filename), '-r300', '-dpng');
+    if exist('plt', 'var') && isvalid(plt)
+        filename = 'fittedParameters.png';
+        print(plt, fullfile(folder, filename), '-r300', '-dpng');
+    end
 end
 
 
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% Contour plots -- single trajectories, or grouped by sample event
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+save = false;
+
+% Choose one or more trajectories -- if multiple are selected then the plot
+% will average over them.
+sampleEvent = 18;
+% All trajectories used for sampleEvent
+traj = find(Data.scalar.EventTraj(sampleEvent,:));
+% If waterMass is either Atlantic OR Arctic then it may make sense to plot
+% average over all trajectories, although there could be unwanted smoothing
+% effects...
+% Otherwise, if waterMass is a mixture of origins, then group trajectories
+% by origin and make separate plots
+waterMass = Data.scalar.waterMass{sampleEvent};
+
+switch waterMass
+    case {'Atlantic', 'Arctic'}
+        plt_Forc = plot_contour_DepthTime('forcing', ... 
+            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', waterMass);
+        plt_DIN = plot_contour_DepthTime('DIN', ... 
+            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', waterMass);
+        plt_OM = plot_contour_DepthTime('DOM_POM', ... 
+            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', waterMass);
+        plt_P_N = plot_contour_DepthTime('phytoplankton_N', ...
+            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', waterMass);
+        plt_P_Chl = plot_contour_DepthTime('phytoplankton_Chl', ... 
+            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', waterMass);
+        plt_P_C = plot_contour_DepthTime('phytoplankton_C', ... 
+            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', waterMass);
+        plt_P_N_C = plot_contour_DepthTime('phytoplankton_N_C', ...
+            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', waterMass);
+        plt_P_Chl_N = plot_contour_DepthTime('phytoplankton_Chl_N', ... 
+            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', waterMass);
+        plt_Z = plot_contour_DepthTime('zooplankton', ... 
+            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', waterMass);
+    case 'Arctic/Atlantic'
+        if strcmp(waterMass, 'Arctic/Atlantic')
+            trajAtlantic = traj(strcmp(Forc.waterMass(traj), 'Atlantic'));
+            trajArctic = traj(strcmp(Forc.waterMass(traj), 'Arctic'));
+        end
+        plt_Forc_Atl = plot_contour_DepthTime('forcing', ... 
+            trajAtlantic, out, auxVars, FixedParams, Forc, 'linear', ... 
+            'Event', sampleEvent, 'waterOrigin', 'Atlantic');
+        plt_Forc_Arc = plot_contour_DepthTime('forcing', ...
+            trajArctic, out, auxVars, FixedParams, Forc, 'linear', ... 
+            'Event', sampleEvent, 'waterOrigin', 'Arctic');
+        plt_DIN_Atl = plot_contour_DepthTime('DIN', ... 
+            trajAtlantic, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', 'Atlantic');
+        plt_DIN_Arc = plot_contour_DepthTime('DIN', ... 
+            trajArctic, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', 'Arctic');
+        plt_OM_Atl = plot_contour_DepthTime('DOM_POM', ... 
+            trajAtlantic, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', 'Atlantic');
+        plt_OM_Arc = plot_contour_DepthTime('DOM_POM', ... 
+            trajArctic, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', 'Arctic');
+        plt_P_N_Atl = plot_contour_DepthTime('phytoplankton_N', ... 
+            trajAtlantic, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', 'Atlantic');
+        plt_P_N_Arc = plot_contour_DepthTime('phytoplankton_N', ...
+            trajArctic, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', 'Arctic');
+        plt_P_Chl_Atl = plot_contour_DepthTime('phytoplankton_Chl', ... 
+            trajAtlantic, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', 'Atlantic');
+        plt_P_Chl_Arc = plot_contour_DepthTime('phytoplankton_Chl', ...
+            trajArctic, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', 'Arctic');
+        plt_P_C_Atl = plot_contour_DepthTime('phytoplankton_C', ... 
+            trajAtlantic, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', 'Atlantic');
+        plt_P_C_Arc = plot_contour_DepthTime('phytoplankton_C', ... 
+            trajArctic, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', 'Arctic');
+        plt_P_N_C_Atl = plot_contour_DepthTime('phytoplankton_N_C', ... 
+            trajAtlantic, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', 'Atlantic');
+        plt_P_N_C_Arc = plot_contour_DepthTime('phytoplankton_N_C', ...
+            trajArctic, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', 'Arctic');
+        plt_P_Chl_N_Atl = plot_contour_DepthTime('phytoplankton_Chl_N', ...
+            trajAtlantic, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', 'Atlantic');
+        plt_P_Chl_N_Arc = plot_contour_DepthTime('phytoplankton_Chl_N', ...
+            trajArctic, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', 'Arctic');
+        plt_Z_Atl = plot_contour_DepthTime('zooplankton', ...
+            trajAtlantic, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', 'Atlantic');
+        plt_Z_Arc = plot_contour_DepthTime('zooplankton', ...
+            trajArctic, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', 'Arctic');
+end
+
+switch save, case true
+    
+    switch waterMass
+        
+        case {'Atlantic', 'Arctic'}
+        
+            if exist('plt_Forc', 'var') && isvalid(plt)
+                filename = ['forcing_data_sampleEvent' num2str(sampleEvent) '.png'];
+                print(plt_Forc, fullfile(folder, filename), '-r300', '-dpng');
+            end            
+            if exist('plt_DIN', 'var') && isvalid(plt)
+                filename = ['DIN_sampleEvent' num2str(sampleEvent) '.png'];
+                print(plt_DIN, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            if exist('plt_OM', 'var') && isvalid(plt)
+                filename = ['OM_sampleEvent' num2str(sampleEvent) '.png'];
+                print(plt_OM, fullfile(folder, filename), '-r300', '-dpng');
+            end            
+            if exist('plt_P_N', 'var') && isvalid(plt)
+                filename = ['phytoplankton_N_sampleEvent' num2str(sampleEvent) '.png'];
+                print(plt_P_N, fullfile(folder, filename), '-r300', '-dpng');
+            end            
+            if exist('plt_P_Chl', 'var') && isvalid(plt)
+                filename = ['phytoplankton_Chl_sampleEvent' num2str(sampleEvent) '.png'];
+                print(plt_P_Chl, fullfile(folder, filename), '-r300', '-dpng');
+            end            
+            if exist('plt_P_C', 'var') && isvalid(plt)
+                filename = ['phytoplankton_C_sampleEvent' num2str(sampleEvent) '.png'];
+                print(plt_P_C, fullfile(folder, filename), '-r300', '-dpng');
+            end            
+            if exist('plt_P_N_C', 'var') && isvalid(plt)
+                filename = ['phytoplankton_N_C_sampleEvent' num2str(sampleEvent) '.png'];
+                print(plt_P_N_C, fullfile(folder, filename), '-r300', '-dpng');
+            end            
+            if exist('plt_P_Chl_N', 'var') && isvalid(plt)
+                filename = ['phytoplankton_Chl_N_sampleEvent' num2str(sampleEvent) '.png'];
+                print(plt_P_Chl_N, fullfile(folder, filename), '-r300', '-dpng');
+            end            
+            if exist('plt_Z', 'var') && isvalid(plt)
+                filename = ['zooplankton_sampleEvent' num2str(sampleEvent) '.png'];
+                print(plt_Z, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            
+        case  'Arctic/Atlantic'
+            
+            if exist('plt_Forc_Atl', 'var') && isvalid(plt)
+                filename = ['forcing_data_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
+                print(plt_Forc_Atl, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            if exist('plt_Forc_Arc', 'var') && isvalid(plt)
+                filename = ['forcing_data_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
+                print(plt_Forc_Arc, fullfile(folder, filename), '-r300', '-dpng');
+            end
+
+            if exist('plt_DIN_Atl', 'var') && isvalid(plt)
+                filename = ['DIN_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
+                print(plt_DIN_Atl, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            if exist('plt_DIN_Arc', 'var') && isvalid(plt)
+                filename = ['DIN_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
+                print(plt_DIN_Arc, fullfile(folder, filename), '-r300', '-dpng');
+            end
+
+            if exist('plt_OM_Arc', 'var') && isvalid(plt)
+                filename = ['OM_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
+                print(plt_OM_Arc, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            if exist('plt_OM_Atl', 'var') && isvalid(plt)
+                filename = ['OM_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
+                print(plt_OM_Atl, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            
+            if exist('plt_P_N_Atl', 'var') && isvalid(plt)
+                filename = ['phytoplankton_N_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
+                print(plt_P_N_Atl, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            if exist('plt_P_N_Arc', 'var') && isvalid(plt)
+                filename = ['phytoplankton_N_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
+                print(plt_P_N_Arc, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            
+            if exist('plt_P_Chl_Atl', 'var') && isvalid(plt)
+                filename = ['phytoplankton_Chl_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
+                print(plt_P_Chl_Atl, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            if exist('plt_P_Chl_Arc', 'var') && isvalid(plt)
+                filename = ['phytoplankton_Chl_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
+                print(plt_P_Chl_Arc, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            
+            if exist('plt_P_C_Atl', 'var') && isvalid(plt)
+                filename = ['phytoplankton_C_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
+                print(plt_P_C_Atl, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            if exist('plt_P_C_Arc', 'var') && isvalid(plt)
+                filename = ['phytoplankton_C_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
+                print(plt_P_C_Arc, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            
+            if exist('plt_P_N_C_Atl', 'var') && isvalid(plt)
+                filename = ['phytoplankton_N_C_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
+                print(plt_P_N_C_Atl, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            if exist('plt_P_N_C_Arc', 'var') && isvalid(plt)
+                filename = ['phytoplankton_N_C_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
+                print(plt_P_N_C_Arc, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            
+            if exist('plt_P_Chl_N_Atl', 'var') && isvalid(plt)
+                filename = ['phytoplankton_Chl_N_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
+                print(plt_P_Chl_N_Atl, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            if exist('plt_P_Chl_N_Arc', 'var') && isvalid(plt)
+                filename = ['phytoplankton_Chl_N_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
+                print(plt_P_Chl_N_Arc, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            
+            if exist('plt_Z_Atl', 'var') && isvalid(plt)
+                filename = ['zooplankton_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
+                print(plt_Z_Atl, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            if exist('plt_Z_Arc', 'var') && isvalid(plt)
+                filename = ['zooplankton_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
+                print(plt_Z_Arc, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            
+    end
+end
+    
 
 %~~~~~~~~~~~~~~~
 % Time evolution
 %~~~~~~~~~~~~~~~
 
-close all
+% These polygon plots should be extended to show water masses of Atlantic
+% and of Arctic orgin because some sampling events ue trajectories
+% originating from both oceans... red for Atlantic blue for Arctic
 
 % Choose event
-ie = 11;
-if ~ismember(ie, 1:Data.scalar.nEvents), warning(['Choose event number within range (1, ' num2str(Data.scalar.nEvents) ')']); end
+sampleEvent = 1;
+if ~ismember(sampleEvent, 1:Data.scalar.nEvents), warning(['Choose event number within range (1, ' num2str(Data.scalar.nEvents) ')']); end
 % trajectory indices
-kk = find(Data.scalar.EventTraj(ie,:));
+traj = find(Data.scalar.EventTraj(sampleEvent,:));
 
-outputPlot('trajectoryPolygon_TimeSeries','forcing',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
-outputPlot('trajectoryPolygon_TimeSeries','DIN',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
-outputPlot('trajectoryPolygon_TimeSeries','DOM_POM',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
-outputPlot('trajectoryPolygon_TimeSeries','phytoplankton_C',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
-outputPlot('trajectoryPolygon_TimeSeries','phytoplanktonStacked',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
-outputPlot('trajectoryPolygon_TimeSeries','phytoZooPlanktonStacked',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
-outputPlot('barplot_TimeSeries','phytoZooPlankton',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
+highlightColour = [1 0 1];
+plotOptions = {'forcing', 'DIN', 'organicN', 'organicC', 'phytoplankton_C', ...
+    'phytoplanktonStacked', 'phytoZooPlanktonStacked'};
+
+for varIndex = 1:length(plotOptions)
+    
+    plotVariables = plotOptions{varIndex};
+    
+    switch plotVariables
+        
+        case 'forcing'
+            % Forcing data
+            plt_forcing = figure;
+            plt_forcing.Units = 'inches';
+            plt_forcing.Position = [0 0 12 12];
+            
+            % temperature
+            subplot(3,1,1)
+            plot_timeSeries_trajectoryPolygon('temperature', ...
+                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                'depth', 'mean', 'highlightColour', highlightColour, 'plotNew', false);
+            % diffusivity
+            subplot(3,1,2)
+            plot_timeSeries_trajectoryPolygon('diffusivity', ...
+                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                'depth', 'mean', 'highlightColour', highlightColour, 'plotNew', false);
+            % PAR
+            subplot(3,1,3)
+            plot_timeSeries_trajectoryPolygon('PAR', ...
+                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                'depth', 'surface', 'highlightColour', highlightColour, 'plotNew', false);
+            
+        case 'DIN'
+            % DIN
+            plt_DIN = figure;            
+            plt_DIN.Units = 'inches';
+            plt_DIN.Position = [0 0 12 8];
+            
+            subplot(2,1,1)
+            plot_timeSeries_trajectoryPolygon('DIN', ...
+                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                'depth', 'surface', 'highlightColour', highlightColour, 'plotNew', false);
+            subplot(2,1,2)
+            plot_timeSeries_trajectoryPolygon('DIN', ...
+                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                'depth', 'mean', 'highlightColour', highlightColour, 'plotNew', false);
+            
+        case 'organicN'
+            plt_ON = figure;
+            plt_ON.Units = 'inches';
+            plt_ON.Position = [0 0 24 8];
+            
+            subplot(2,2,1)
+            plot_timeSeries_trajectoryPolygon('DON', ...
+                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                'depth', 'surface', 'highlightColour', highlightColour, 'plotNew', false);
+            subplot(2,2,2)
+            plot_timeSeries_trajectoryPolygon('PON', ...
+                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                'depth', 'surface', 'highlightColour', highlightColour, 'plotNew', false);
+            subplot(2,2,3)
+            plot_timeSeries_trajectoryPolygon('DON', ...
+                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                'depth', 'mean', 'highlightColour', highlightColour, 'plotNew', false);
+            subplot(2,2,4)
+            plot_timeSeries_trajectoryPolygon('PON', ...
+                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                'depth', 'mean', 'highlightColour', highlightColour, 'plotNew', false);
+            
+        case 'organicC'
+            plt_OC = figure;
+            plt_OC.Units = 'inches';
+            plt_OC.Position = [0 0 24 8];
+
+            subplot(2,2,1)
+            plot_timeSeries_trajectoryPolygon('DOC', ...
+                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                'depth', 'surface', 'highlightColour', highlightColour, 'plotNew', false);
+            subplot(2,2,2)
+            plot_timeSeries_trajectoryPolygon('POC', ...
+                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                'depth', 'surface', 'highlightColour', highlightColour, 'plotNew', false);
+            subplot(2,2,3)
+            plot_timeSeries_trajectoryPolygon('DOC', ...
+                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                'depth', 'mean', 'highlightColour', highlightColour, 'plotNew', false);
+            subplot(2,2,4)
+            plot_timeSeries_trajectoryPolygon('POC', ...
+                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                'depth', 'mean', 'highlightColour', highlightColour, 'plotNew', false);
+            
+        case 'phytoplankton_C'
+            plt_P_C = plot_timeSeries_trajectoryPolygon('phytoplankton_C', ...
+                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                'depth', 'max', 'highlightColour', highlightColour, 'fixedYaxis', false);
+            plt_P_C_fixedScale = plot_timeSeries_trajectoryPolygon('phytoplankton_C', ...
+                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                'depth', 'max', 'highlightColour', highlightColour, 'fixedYaxis', true);
+            
+        case 'phytoplanktonStacked'
+            plt_P_C_stacked = plot_timeSeries_trajectoryPolygon('phytoplanktonStacked', ...
+                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data);
+
+        case 'phytoZooPlanktonStacked'
+            plt_P_C_stacked = plot_timeSeries_trajectoryPolygon('phytoZooPlanktonStacked', ...
+                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data);
+
+    end
+    
+end
+
+plot_timeSeries_barplot('phytoZooPlankton',sampleEvent,traj,out,FixedParams,Forc,Data)
 
 
 
@@ -465,6 +1055,12 @@ outputPlot('barplot_TimeSeries','phytoZooPlankton',ie,kk,out,FixedParams,Forc,au
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % Plot groups of trajectories corresponding to each event
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+% These plots need improved... better to run model over ALL available
+% trajectories (not just those used for optimisation), then display output
+% given that greater spatial coverage, and optionally show sampling events
+% Also, move the plot functions to their own separate script to get rid of
+% the outputPlot.m that aggregates them all...
 
 close all
 
@@ -481,4 +1077,59 @@ outputPlot('trajectoryLine_LatLong','DOM_POM',ie,kk,out,FixedParams,Forc,auxVars
 outputPlot('trajectoryLine_LatLong','phytoplankton_N',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 outputPlot('trajectoryLine_LatLong','zooplankton',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+% %### in progress...
+% 
+% ie = 1; % sampling event
+% kk = find(Data.scalar.EventTraj(ie,:)); % all trajectories for selected event
+% k = kk(7); % single trajectory
+% 
+% % x = out.N(:,:,:,:);
+% x = out.N(:,:,:,k);
+% 
+% xmin = squeeze(min(x));
+% xmax = squeeze(max(x));
+% % tt = yearday(Forc.t(:,:));
+% tt = yearday(Forc.t(:,k));
+% n = size(tt, 1);
+% 
+% lat = Forc.y(:,k); % latitude
+% % lat = Forc.y(:,:); % latitude
+% % plot colour changing with latitude along line..?
+% 
+% xmin = reshape(xmin, [1 n]);
+% xmax = reshape(xmax, [1 n]);
+% tt = reshape(tt, [1 n]);
+% lat = reshape(lat, [1 n]);
+% z = zeros(size(xmin));
+% 
+% figure
+% surface([tt;tt], [xmin;xmin], [z;z], [lat;lat], ...
+%     'facecol', 'no', 'edgecol', 'interp', 'linew', 2)
+% hold on
+% surface([tt;tt], [xmax;xmax], [z;z], [lat;lat], ...
+%     'facecol', 'no', 'edgecol', 'interp', 'linew', 2)
+% hold off
+% cb = colorbar();
+% deg = char(176);
+% cb.Label.String = ['latitude (' deg 'N)'];
+% xlabel('day of year')
+% ylabel(['DIN (mmol N m^{-3})'])
+% title('max and min DIN over time')
+% 
+% 
+% colormap(plasma)
+% 
+% % ###
+% % Aggregate trajectories originating from Atlantic and Arctic waters then
+% % make summmary plots displaying typical (across-trajectories) results...
+% 
+% pltN = TimeEvolution_ColByLat_GroupTrajectories(out, Forc, FixedParams, 'DIN', 'minmax');
+% 
+% pltOM_N = TimeEvolution_ColByLat_GroupTrajectories(out, Forc, FixedParams, 'OM_N', 'max');
+% pltOM_C = TimeEvolution_ColByLat_GroupTrajectories(out, Forc, FixedParams, 'OM_C', 'max');
+% 
+% now do the zooplanton... save phyto till last...
+% 
 
