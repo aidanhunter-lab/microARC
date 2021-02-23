@@ -122,12 +122,22 @@ end
 % Modelled cell size ranges are automatically chosen to correspond with the
 % size class intervals already selected using the fitting data.
 [FixedParams, Params] = initialiseParameters(F, Data);
+display(FixedParams)
+display(Params)
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % NOTE:
-% Parameters may be initialised by loading saved values, e.g.,
+% Parameters may be initialised (probably at better values) by loading
+% saved values that resulted from optimisation, e.g.,
+
+% [FixedParams, Params] = initialiseParameters(F, Data, ...
+%     'load', 'results/parametersInitialValues_singlePredClass_2018');
 % [FixedParams, Params] = initialiseParameters(F, Data, ...
 %     'load', 'results/parametersInitialValues_singlePredClass_2018_2');
+
+[FixedParams, Params] = initialiseParameters(F, Data, ...
+    'load', ['results/parametersInitialValues_' bioModel]);
+
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Params0 = Params; % store the default values as separate workspace object
@@ -494,7 +504,8 @@ switch updateStoredInitials
         optPars_table = table(FixedParams.tunePars', optPar');
         optPars_table.Properties.VariableNames = {'Param','Value'};
         % take care choosing file name -- don't overwrite good values!
-        saveObj = matfile('results/parametersInitialValues_singlePredClass_2018_2');
+        saveObj = matfile(['results/parametersInitialValues_' bioModel]);
+%         saveObj = matfile('results/parametersInitialValues_singlePredClass_2018_2');
         saveObj.Properties.Writable = true;
         saveObj.pars = optPars_table;
 end
@@ -573,6 +584,19 @@ switch saveParams
         saveOptimisationRun(fileName, gaOutput, Data, Forc, FixedParams, Params, v0);
 end
 
+updateStoredInitials = false;
+switch updateStoredInitials
+    case true
+        optPar = gaOutput.optPar;
+        optPars_table = table(FixedParams.tunePars', optPar');
+        optPars_table.Properties.VariableNames = {'Param','Value'};
+        % take care choosing file name -- don't overwrite good values!        
+        saveObj = matfile(['results/parametersInitialValues_' bioModel]);
+%         saveObj = matfile('results/parametersInitialValues_singlePredClass_2018_2');
+        saveObj.Properties.Writable = true;
+        saveObj.pars = optPars_table;
+end
+
 %##########################################################################
 %##########################################################################
 
@@ -581,15 +605,14 @@ end
 % Code folding for switches is not enabled by default, so type 'preferences'
 % into command window then go to MATLAB -> Editor/Debugger -> Code Folding
 % to enable folding on switches. This is useful but not necessary...
+preferences('Editor/Debugger')
 
 % Directory for saved plots
 folder = 'results/plots/';
 
 % Load fitted parameters, and associated data and fixed parameters...
-tag = '_testForGitHubUpload';
+tag = '_fitAllNutrientsAndBioVol_modifiedGmax_2018data';
 fileName = ['results/fittedParameters_' FixedParams.costFunction tag];
-% tag = '_fitAllNutrientsAndBioVol_modifiedGmax_2018data';
-% fileName = ['results/fittedParameters_' FixedParams.costFunction tag];
 
 [~, gaOutput, parnames, optPar, lb, ub, Data, Forc, FixedParams, Params, v0] = ... 
     loadOptimisationRun(fileName);
@@ -616,7 +639,7 @@ Forc.integrateFullTrajectory = true;
 % Model fit to data
 %~~~~~~~~~~~~~~~~~~
 
-save = false;
+save = true;
 
 % Summary plots displaying model fit to data
 logPlot = true; % for scalar data choose logPlot = true or false
@@ -684,6 +707,8 @@ switch save, case true
 end
 
 
+close all
+
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % Contour plots -- single trajectories, or grouped by sample event
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -692,7 +717,7 @@ save = false;
 
 % Choose one or more trajectories -- if multiple are selected then the plot
 % will average over them.
-sampleEvent = 18;
+sampleEvent = 1;
 % All trajectories used for sampleEvent
 traj = find(Data.scalar.EventTraj(sampleEvent,:));
 % If waterMass is either Atlantic OR Arctic then it may make sense to plot
@@ -798,122 +823,122 @@ switch save, case true
         
         case {'Atlantic', 'Arctic'}
         
-            if exist('plt_Forc', 'var') && isvalid(plt)
+            if exist('plt_Forc', 'var') && isvalid(plt_Forc)
                 filename = ['forcing_data_sampleEvent' num2str(sampleEvent) '.png'];
                 print(plt_Forc, fullfile(folder, filename), '-r300', '-dpng');
             end            
-            if exist('plt_DIN', 'var') && isvalid(plt)
+            if exist('plt_DIN', 'var') && isvalid(plt_DIN)
                 filename = ['DIN_sampleEvent' num2str(sampleEvent) '.png'];
                 print(plt_DIN, fullfile(folder, filename), '-r300', '-dpng');
             end
-            if exist('plt_OM', 'var') && isvalid(plt)
+            if exist('plt_OM', 'var') && isvalid(plt_OM)
                 filename = ['OM_sampleEvent' num2str(sampleEvent) '.png'];
                 print(plt_OM, fullfile(folder, filename), '-r300', '-dpng');
             end            
-            if exist('plt_P_N', 'var') && isvalid(plt)
+            if exist('plt_P_N', 'var') && isvalid(plt_P_N)
                 filename = ['phytoplankton_N_sampleEvent' num2str(sampleEvent) '.png'];
                 print(plt_P_N, fullfile(folder, filename), '-r300', '-dpng');
             end            
-            if exist('plt_P_Chl', 'var') && isvalid(plt)
+            if exist('plt_P_Chl', 'var') && isvalid(plt_P_Chl)
                 filename = ['phytoplankton_Chl_sampleEvent' num2str(sampleEvent) '.png'];
                 print(plt_P_Chl, fullfile(folder, filename), '-r300', '-dpng');
             end            
-            if exist('plt_P_C', 'var') && isvalid(plt)
+            if exist('plt_P_C', 'var') && isvalid(plt_P_C)
                 filename = ['phytoplankton_C_sampleEvent' num2str(sampleEvent) '.png'];
                 print(plt_P_C, fullfile(folder, filename), '-r300', '-dpng');
             end            
-            if exist('plt_P_N_C', 'var') && isvalid(plt)
+            if exist('plt_P_N_C', 'var') && isvalid(plt_P_N_C)
                 filename = ['phytoplankton_N_C_sampleEvent' num2str(sampleEvent) '.png'];
                 print(plt_P_N_C, fullfile(folder, filename), '-r300', '-dpng');
             end            
-            if exist('plt_P_Chl_N', 'var') && isvalid(plt)
+            if exist('plt_P_Chl_N', 'var') && isvalid(plt_P_Chl)
                 filename = ['phytoplankton_Chl_N_sampleEvent' num2str(sampleEvent) '.png'];
                 print(plt_P_Chl_N, fullfile(folder, filename), '-r300', '-dpng');
             end            
-            if exist('plt_Z', 'var') && isvalid(plt)
+            if exist('plt_Z', 'var') && isvalid(plt_Z)
                 filename = ['zooplankton_sampleEvent' num2str(sampleEvent) '.png'];
                 print(plt_Z, fullfile(folder, filename), '-r300', '-dpng');
             end
             
         case  'Arctic/Atlantic'
             
-            if exist('plt_Forc_Atl', 'var') && isvalid(plt)
+            if exist('plt_Forc_Atl', 'var') && isvalid(plt_Forc_Atl)
                 filename = ['forcing_data_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
                 print(plt_Forc_Atl, fullfile(folder, filename), '-r300', '-dpng');
             end
-            if exist('plt_Forc_Arc', 'var') && isvalid(plt)
+            if exist('plt_Forc_Arc', 'var') && isvalid(plt_Forc_Arc)
                 filename = ['forcing_data_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
                 print(plt_Forc_Arc, fullfile(folder, filename), '-r300', '-dpng');
             end
 
-            if exist('plt_DIN_Atl', 'var') && isvalid(plt)
+            if exist('plt_DIN_Atl', 'var') && isvalid(plt_DIN_Atl)
                 filename = ['DIN_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
                 print(plt_DIN_Atl, fullfile(folder, filename), '-r300', '-dpng');
             end
-            if exist('plt_DIN_Arc', 'var') && isvalid(plt)
+            if exist('plt_DIN_Arc', 'var') && isvalid(plt_DIN_Arc)
                 filename = ['DIN_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
                 print(plt_DIN_Arc, fullfile(folder, filename), '-r300', '-dpng');
             end
 
-            if exist('plt_OM_Arc', 'var') && isvalid(plt)
-                filename = ['OM_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
-                print(plt_OM_Arc, fullfile(folder, filename), '-r300', '-dpng');
-            end
-            if exist('plt_OM_Atl', 'var') && isvalid(plt)
+            if exist('plt_OM_Atl', 'var') && isvalid(plt_OM_Atl)
                 filename = ['OM_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
                 print(plt_OM_Atl, fullfile(folder, filename), '-r300', '-dpng');
             end
+            if exist('plt_OM_Arc', 'var') && isvalid(plt_OM_Arc)
+                filename = ['OM_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
+                print(plt_OM_Arc, fullfile(folder, filename), '-r300', '-dpng');
+            end
             
-            if exist('plt_P_N_Atl', 'var') && isvalid(plt)
+            if exist('plt_P_N_Atl', 'var') && isvalid(plt_P_N_Atl)
                 filename = ['phytoplankton_N_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
                 print(plt_P_N_Atl, fullfile(folder, filename), '-r300', '-dpng');
             end
-            if exist('plt_P_N_Arc', 'var') && isvalid(plt)
+            if exist('plt_P_N_Arc', 'var') && isvalid(plt_P_N_Arc)
                 filename = ['phytoplankton_N_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
                 print(plt_P_N_Arc, fullfile(folder, filename), '-r300', '-dpng');
             end
             
-            if exist('plt_P_Chl_Atl', 'var') && isvalid(plt)
+            if exist('plt_P_Chl_Atl', 'var') && isvalid(plt_P_Chl_Atl)
                 filename = ['phytoplankton_Chl_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
                 print(plt_P_Chl_Atl, fullfile(folder, filename), '-r300', '-dpng');
             end
-            if exist('plt_P_Chl_Arc', 'var') && isvalid(plt)
+            if exist('plt_P_Chl_Arc', 'var') && isvalid(plt_P_Chl_Arc)
                 filename = ['phytoplankton_Chl_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
                 print(plt_P_Chl_Arc, fullfile(folder, filename), '-r300', '-dpng');
             end
             
-            if exist('plt_P_C_Atl', 'var') && isvalid(plt)
+            if exist('plt_P_C_Atl', 'var') && isvalid(plt_P_C_Atl)
                 filename = ['phytoplankton_C_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
                 print(plt_P_C_Atl, fullfile(folder, filename), '-r300', '-dpng');
             end
-            if exist('plt_P_C_Arc', 'var') && isvalid(plt)
+            if exist('plt_P_C_Arc', 'var') && isvalid(plt_P_C_Arc)
                 filename = ['phytoplankton_C_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
                 print(plt_P_C_Arc, fullfile(folder, filename), '-r300', '-dpng');
             end
             
-            if exist('plt_P_N_C_Atl', 'var') && isvalid(plt)
+            if exist('plt_P_N_C_Atl', 'var') && isvalid(plt_P_N_C_Atl)
                 filename = ['phytoplankton_N_C_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
                 print(plt_P_N_C_Atl, fullfile(folder, filename), '-r300', '-dpng');
             end
-            if exist('plt_P_N_C_Arc', 'var') && isvalid(plt)
+            if exist('plt_P_N_C_Arc', 'var') && isvalid(plt_P_N_C_Arc)
                 filename = ['phytoplankton_N_C_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
                 print(plt_P_N_C_Arc, fullfile(folder, filename), '-r300', '-dpng');
             end
             
-            if exist('plt_P_Chl_N_Atl', 'var') && isvalid(plt)
+            if exist('plt_P_Chl_N_Atl', 'var') && isvalid(plt_P_Chl_N_Atl)
                 filename = ['phytoplankton_Chl_N_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
                 print(plt_P_Chl_N_Atl, fullfile(folder, filename), '-r300', '-dpng');
             end
-            if exist('plt_P_Chl_N_Arc', 'var') && isvalid(plt)
+            if exist('plt_P_Chl_N_Arc', 'var') && isvalid(plt_P_Chl_N_Arc)
                 filename = ['phytoplankton_Chl_N_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
                 print(plt_P_Chl_N_Arc, fullfile(folder, filename), '-r300', '-dpng');
             end
             
-            if exist('plt_Z_Atl', 'var') && isvalid(plt)
+            if exist('plt_Z_Atl', 'var') && isvalid(plt_Z_Atl)
                 filename = ['zooplankton_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
                 print(plt_Z_Atl, fullfile(folder, filename), '-r300', '-dpng');
             end
-            if exist('plt_Z_Arc', 'var') && isvalid(plt)
+            if exist('plt_Z_Arc', 'var') && isvalid(plt_Z_Arc)
                 filename = ['zooplankton_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
                 print(plt_Z_Arc, fullfile(folder, filename), '-r300', '-dpng');
             end
@@ -922,6 +947,8 @@ switch save, case true
 end
     
 
+close all
+
 %~~~~~~~~~~~~~~~
 % Time evolution
 %~~~~~~~~~~~~~~~
@@ -929,6 +956,8 @@ end
 % These polygon plots should be extended to show water masses of Atlantic
 % and of Arctic orgin because some sampling events ue trajectories
 % originating from both oceans... red for Atlantic blue for Arctic
+
+save = false;
 
 % Choose event
 sampleEvent = 1;
@@ -1047,10 +1076,63 @@ for varIndex = 1:length(plotOptions)
     
 end
 
-plot_timeSeries_barplot('phytoZooPlankton',sampleEvent,traj,out,FixedParams,Forc,Data)
+switch save
+    
+    case true
+        
+        if exist('plt_forcing', 'var') && isvalid(plt_forcing)
+            filename = ['forcing_data_timeSeriesPolygon_sampleEvent' num2str(sampleEvent) '.png'];
+            print(plt_forcing, fullfile(folder, filename), '-r300', '-dpng');
+        end
+        if exist('plt_DIN', 'var') && isvalid(plt_DIN)
+            filename = ['DIN_sampleEvent' num2str(sampleEvent) '.png'];
+            print(plt_DIN, fullfile(folder, filename), '-r300', '-dpng');
+        end
+        if exist('plt_OM', 'var') && isvalid(plt_OM)
+            filename = ['OM_sampleEvent' num2str(sampleEvent) '.png'];
+            print(plt_OM, fullfile(folder, filename), '-r300', '-dpng');
+        end
+        if exist('plt_P_N', 'var') && isvalid(plt_P_N)
+            filename = ['phytoplankton_N_sampleEvent' num2str(sampleEvent) '.png'];
+            print(plt_P_N, fullfile(folder, filename), '-r300', '-dpng');
+        end
+        if exist('plt_P_Chl', 'var') && isvalid(plt_P_Chl)
+            filename = ['phytoplankton_Chl_sampleEvent' num2str(sampleEvent) '.png'];
+            print(plt_P_Chl, fullfile(folder, filename), '-r300', '-dpng');
+        end
+        if exist('plt_P_C', 'var') && isvalid(plt_P_C)
+            filename = ['phytoplankton_C_sampleEvent' num2str(sampleEvent) '.png'];
+            print(plt_P_C, fullfile(folder, filename), '-r300', '-dpng');
+        end
+        if exist('plt_P_N_C', 'var') && isvalid(plt_P_N_C)
+            filename = ['phytoplankton_N_C_sampleEvent' num2str(sampleEvent) '.png'];
+            print(plt_P_N_C, fullfile(folder, filename), '-r300', '-dpng');
+        end
+        if exist('plt_P_Chl_N', 'var') && isvalid(plt_P_Chl_N)
+            filename = ['phytoplankton_Chl_N_sampleEvent' num2str(sampleEvent) '.png'];
+            print(plt_P_Chl_N, fullfile(folder, filename), '-r300', '-dpng');
+        end
+        if exist('plt_Z', 'var') && isvalid(plt_Z)
+            filename = ['zooplankton_sampleEvent' num2str(sampleEvent) '.png'];
+            print(plt_Z, fullfile(folder, filename), '-r300', '-dpng');
+        end
+end
 
 
+plt = plot_timeSeries_barplot('phytoZooPlankton',sampleEvent,traj,out,FixedParams,Forc,Data);
 
+switch save
+
+    case true
+        
+        if exist('plt', 'var') && isvalid(plt)
+            filename = ['barplot_timeSeries_plankton_sampleEvent' num2str(sampleEvent) '.png'];
+            print(plt, fullfile(folder, filename), '-r300', '-dpng');
+        end
+end
+
+
+close all
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % Plot groups of trajectories corresponding to each event
@@ -1061,8 +1143,6 @@ plot_timeSeries_barplot('phytoZooPlankton',sampleEvent,traj,out,FixedParams,Forc
 % given that greater spatial coverage, and optionally show sampling events
 % Also, move the plot functions to their own separate script to get rid of
 % the outputPlot.m that aggregates them all...
-
-close all
 
 % Choose event
 ie = 7;
@@ -1076,6 +1156,9 @@ outputPlot('trajectoryLine_LatLong','inorganicNutrient',ie,kk,out,FixedParams,Fo
 outputPlot('trajectoryLine_LatLong','DOM_POM',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 outputPlot('trajectoryLine_LatLong','phytoplankton_N',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 outputPlot('trajectoryLine_LatLong','zooplankton',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
+
+
+close all
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

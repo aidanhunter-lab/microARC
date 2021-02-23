@@ -1,7 +1,8 @@
 function [m, gaOutput, parnames, optPar, lb, ub, Data, Forc, FixedParams, ...
     Params, v0] = loadOptimisationRun(fileName)
 
-m = matfile(fileName, 'Writable', true);
+m = load(fileName);
+% m = matfile(fileName, 'Writable', true);
 gaOutput = m.gaOutput;
 parnames = gaOutput.parNames;
 optPar = gaOutput.optPar;
