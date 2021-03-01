@@ -1,4 +1,5 @@
-function [dvdt, extraOutput, extraOutput_2d] = ODEs(t, v_in, parameterList, forc, timeStep, returnExtra)
+function [dvdt, extraOutput, extraOutput_2d] = ODEs(t, v_in, ... 
+    parameterList, forc, timeStep, returnExtra)
 
 fixedParams = parameterList.FixedParams;
 params = parameterList.Params;
@@ -210,68 +211,49 @@ dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)];
 
 
 %% AUXILIARY OUTPUTS
-if returnExtra
+
+if (islogical(returnExtra) && returnExtra) || ... 
+        (~islogical(returnExtra) && ~any(strcmp(returnExtra, 'none')))
+    
+    cellDensity = P_C ./ params.Q_C;
+    biovolume = (1e-18 * [fixedParams.PPsize]) .* cellDensity;
     
     %~~~~~~~~~~~
     % 1D (depth)
     %~~~~~~~~~~~
+    extraOutput.PAR = I; % PAR-at-depth depends upon plankton concentrations
+    extraOutput.gammaT = gammaT; % Temperature dependence
+    extraOutput.F = F; % Total prey carbon
     
-    % PAR-at-depth depends upon plankton concentrations
-    extraOutput.PAR = I;
-    % Temperature dependence
-    extraOutput.gammaT = gammaT;
-    % Total prey carbon
-    extraOutput.F = F;
-
     %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     % 2D (depth & cell size, including zooplankton)
     %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    
-%     extraOutput_2d = struct();
-    % phytoplankton cell density [cells / m^3]
-    extraOutput_2d.cellDensity = P_C ./ params.Q_C;
-    % phytoplankton bio-volume [m^3 / m^3]
-    extraOutput_2d.biovolume = (1e-18 * [fixedParams.PPsize]) .* ... 
-        extraOutput_2d.cellDensity;
-    % Nutrient quotas
+    extraOutput_2d.cellDensity = cellDensity;
+    extraOutput_2d.biovolume = biovolume;
     extraOutput_2d.Q_N = Q_N;
     extraOutput_2d.Q_Chl = Q_Chl;
-    % Nutrient limitation
     extraOutput_2d.gammaN = gammaN;
-    % Uptake regulation
-    extraOutput_2d.Qstat = Qstat;    
-    % Nutrient uptake/production rates    
+    extraOutput_2d.Qstat = Qstat;
     extraOutput_2d.V_N = V_N;
     
     if ~zeroLight
         extraOutput_2d.V_Chl = V_Chl;
         extraOutput_2d.V_C = V_C;
-        % Light saturated photosynthetic (carbon production) rate [1/day]
         extraOutput_2d.psat = psat;
-        % Photosynthetic rate [1/day]
         extraOutput_2d.pc = pc;
-        % Nitrogen prodcution fraction allocated to chlorophyll (mg Chl / mmol N)
         extraOutput_2d.rho = rho;
     else
         extraOutput_2d.V_Chl = zeros_size_nz;
         extraOutput_2d.V_C = zeros_size_nz;
-        % Light saturated photosynthetic (carbon production) rate [1/day]
         extraOutput_2d.psat = zeros_size_nz;
-        % Photosynthetic rate [1/day]
         extraOutput_2d.pc = zeros_size_nz;
-        % Nitrogen prodcution fraction allocated to chlorophyll (mg Chl / mmol N)
         extraOutput_2d.rho = zeros_size_nz;
     end
-    % Prey preference
     extraOutput_2d.Phi = Phi;
-    % Grazing rate
     extraOutput_2d.G = G;
-    % Predation losses/gains
     extraOutput_2d.predation_losses_C = predation_losses_C;
     extraOutput_2d.predation_gains_C = predation_gains_C;
-
-    % Include extra row for zooplankton -- unspecified size prohibits
-    % actual values, use NaNs...
+    
     fields = fieldnames(extraOutput_2d);
     for i = 1:length(fields)
         if size(extraOutput_2d.(fields{i}), 1) == nPP_size
@@ -279,16 +261,25 @@ if returnExtra
         end
     end
     
-%     if all(I == 0)
-%         extraOutput_2d.Qeq = repmat(params.Qmax, [1 nz]); % equilibrium nitrogen Qeq=Qmax when I=0
-%     else
-%         Q_ = (QmaxVmax_ .* aN) ./ (aN + params.Vmax_over_Qmin);
-%         extraOutput_2d.Qeq = (Q_ + mu) ./ (mu ./ params.Qmin + Q_ ./ params.Qmax); % equilibrium N quota
-%     end
-%     extraOutput_2d.PP_C = params.Q_C  .* (PP(:,:,fixedParams.N_index) ./ extraOutput_2d.Qeq); % phytoplankton carbon biomass (mmol C / m^3)
+    
+    
+    if ~islogical(returnExtra) && ~any(strcmp(returnExtra,'all'))
+        f1 = fieldnames(extraOutput);
+        f1 = f1(~ismember(f1, returnExtra));
+        f2 = fieldnames(extraOutput_2d);
+        f2 = f2(~ismember(f2, returnExtra));
+        extraOutput = rmfield(extraOutput, f1);
+        extraOutput_2d = rmfield(extraOutput_2d, f2);
+        if isempty(extraOutput), clear extraOutput; end
+        if isempty(extraOutput_2d), clear extraOutput_2d; end
+    end
+    
+    
 end
 
 
+    
+    
 end
 
 

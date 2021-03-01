@@ -41,8 +41,12 @@ Params = updateParameters(Params, FixedParams, pars);
 % Set initial state variable values -- some of which are selected using
 % parameter values
 
+
 % Integrate
-[out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, odeIntegrator, odeOptions);
+returnExtra = {'cellDensity', 'biovolume'}; % extra output needed for the cost function
+[out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, ...
+    odeIntegrator, odeOptions, 'returnExtra', returnExtra);
+
 
 %% Match model outputs to data
 
