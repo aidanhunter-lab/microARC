@@ -83,10 +83,11 @@ ESDmax = 200;
 nsizes = []; % number of modelled size classes (leave empty to view a range of values)
 nsizesMin = 4; % min/max number of modelled size classes
 nsizesMax = 12;
-chooseSizeClassIntervals(Data.size, ...
+sizeData = chooseSizeClassIntervals(Data.size, ...
     'ESDmin', ESDmin, 'ESDmax', ESDmax, ...
     'nsizes', nsizes, 'nsizesMin', nsizesMin, 'nsizesMax', nsizesMax, ...
     'plotSizeClassIntervals', true);
+display(sizeData)
 
 nsizes = 8; % number of modelled size classes (specifying a value makes chooseSizeClassIntervals.m return different output)
 Data.size = chooseSizeClassIntervals(Data.size, ...
@@ -99,6 +100,7 @@ Data.size = chooseSizeClassIntervals(Data.size, ...
 Data = selectCostFunctionData(Data, ...
     {'N','chl_a','PON','POC'}, {'BioVol'});
 
+clear sizeData
 close all
 
 viewData = true; % display the fitting-data struct?
@@ -135,8 +137,9 @@ display(Params)
 % [FixedParams, Params] = initialiseParameters(F, Data, ...
 %     'load', 'results/parametersInitialValues_singlePredClass_2018_2');
 
-[FixedParams, Params] = initialiseParameters(F, Data, ...
-    'load', ['results/parametersInitialValues_' bioModel]);
+
+% [FixedParams, Params] = initialiseParameters(F, Data, ...
+%     'load', ['results/parametersInitialValues_' bioModel]);
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -394,6 +397,8 @@ end
 
 % Halt integrations at each trajectory's final sampling events to save time
 Forc.integrateFullTrajectory = false;
+
+
 
 % Integrate and calculate cost...
 clear out auxVars

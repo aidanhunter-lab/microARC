@@ -1,5 +1,6 @@
 function [namesExtra, nExtra, AUXVARS, AUXVARS_2d] = ... 
-    initialiseExtraVariables(v0, parameterList, Forc)
+    initialiseExtraVariables(v0, parameterList, Forc, returnExtra)
+
 
 nt = parameterList.FixedParams.nt;
 nz = parameterList.FixedParams.nz;
@@ -11,7 +12,13 @@ nTraj = Forc.nTraj;
 forcing.T = Forc.T(:,:,1);
 forcing.K = Forc.K(:,:,1);
 forcing.PARsurf = Forc.PARsurf(:,:,1);
-[~, extraOutput, extraOutput_2d] = ODEs(0, v0(:,1), parameterList, forcing, 2, true);
+
+
+
+% [~, extraOutput, extraOutput_2d] = ODEs(0, v0(:,1), parameterList, forcing, 2, true);
+% [~, extraOutput, extraOutput_2d] = ODEs(0, v0(:,1), parameterList, forcing, 2, 'returnExtra', returnExtra);
+[~, extraOutput, extraOutput_2d] = ODEs(0, v0(:,1), parameterList, forcing, 2, returnExtra);
+
 namesExtra = fieldnames(extraOutput);
 namesExtra_2d = fieldnames(extraOutput_2d);
 nExtra = [length(namesExtra) length(namesExtra_2d)];
@@ -25,7 +32,7 @@ for i = 2:nTraj  % Loop through remaining trajectories
     forcing.T = Forc.T(:,:,i);
     forcing.K = Forc.K(:,:,i);
     forcing.PARsurf = Forc.PARsurf(:,:,i);
-    [~, extraOutput, extraOutput_2d] = ODEs(0, v0(:,i), parameterList, forcing, 2, true);
+    [~, extraOutput, extraOutput_2d] = ODEs(0, v0(:,i), parameterList, forcing, 2, returnExtra);
     AUXVARS(:,1,i) = struct2array(extraOutput);
     AUXVARS_2d(:,1,i) = struct2array(structfun(@(x)x(:)', ...
         extraOutput_2d, 'UniformOutput', false));

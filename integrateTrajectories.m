@@ -1,5 +1,6 @@
 function [out, auxVars, OUT, AUXVARS, AUXVARS_2d, namesExtra, nExtra] = ... 
-    integrateTrajectories(FixedParams, Params, Forc, v0, odeIntegrator, odeOptions)
+    integrateTrajectories(FixedParams, Params, Forc, v0, odeIntegrator, odeOptions, ...
+    varargin)
 
 nt = FixedParams.nt;
 nz = FixedParams.nz;
@@ -31,9 +32,15 @@ parameterList.Params = Params;
 OUT = nan(nEquations, nt, nTraj); % stores state variable outputs
 OUT(:,1,:) = reshape(v0, [nEquations 1 nTraj]);
 
+
+returnExtra = true; % By default return all auxiliary variables
+if ~isempty(varargin) && any(strcmp(varargin, 'returnExtra'))
+    returnExtra = varargin{find(strcmp(varargin, 'returnExtra'))+1};
+end
 % Create and initialise arrays for extra output if needed
 [namesExtra, nExtra, AUXVARS, AUXVARS_2d] = ... 
-    initialiseExtraVariables(v0, parameterList, Forc);
+    initialiseExtraVariables(v0, parameterList, Forc, returnExtra);
+
 
 if Forc.integrateFullTrajectory
     nt_traj = repmat(nt, [1 nTraj]);
@@ -46,6 +53,7 @@ end
 
 % Loop through trajectories and integrate
 parfor i = 1:nTraj
+    
     % Forcing data
     forcing = struct();
     forcing.T = T(:,:,i);
@@ -81,7 +89,7 @@ parfor i = 1:nTraj
             v_in = OUT(:,j,i);
             % Extract extra outputs
             [~, extraOutput, extraOutput_2d] = ...
-                ODEs(1, v_in, parameterList, forcing, j, true);
+                ODEs(1, v_in, parameterList, forcing, j, returnExtra);
             AUXVARS(:,j,i) = struct2array(extraOutput);
             AUXVARS_2d(:,j,i) = struct2array(structfun(@(x)x(:)', ...
                 extraOutput_2d, 'UniformOutput', false));
@@ -89,6 +97,8 @@ parfor i = 1:nTraj
             break;
         end
     end
+    
+    
 end
 
 
