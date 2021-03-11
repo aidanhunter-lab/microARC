@@ -18,3 +18,7 @@ if any(remove)
 end
 
 dat.scalar = scalarData;
+
+
+sizeData = Data.sizeFull;
+remove = sizeData.Depth > max(abs(FixedParams.z));

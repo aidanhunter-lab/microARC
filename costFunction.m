@@ -11,10 +11,15 @@ function [cost, costComponents, modData, out, auxVars] = ...
 % set as the default
 defaultCostType = 'LSS';
 selectFunction = defaultCostType;
+returnExtra = {'cellDensity', 'biovolume'}; % extra output needed for the cost function
 if ~isempty(varargin)
     i = strcmp(varargin, 'selectFunction');
     if any(i)
         selectFunction = varargin{find(i)+1};
+    end
+    i = strcmp(varargin, 'returnExtra');
+    if any(i)
+        returnExtra = varargin{find(i)+1};
     end
 end
 
@@ -43,7 +48,6 @@ Params = updateParameters(Params, FixedParams, pars);
 
 
 % Integrate
-returnExtra = {'cellDensity', 'biovolume'}; % extra output needed for the cost function
 [out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, ...
     odeIntegrator, odeOptions, 'returnExtra', returnExtra);
 
@@ -108,6 +112,7 @@ end
 
 
 % Size spectra
+
 ind = ismember(Data.scalar.Year, unique(Data.size.Year)); % index relavent sampling events
 ev = unique(Data.scalar.Event(ind));
 et = evTraj(:,ev); % sampling events and associated trajectories
@@ -119,17 +124,30 @@ for i = 1:nevent
     etime(i) = ue(1);
 %     etime(i) = unique(Data.scalar.Yearday(Data.scalar.Event == ev(i)));
 end
-depths_obs = [unique(Data.size.DepthMin) unique(Data.size.DepthMax)]; % sample depth range
+depths_obs = [min(Data.size.DepthMin) max(Data.size.DepthMax)]; % sample depth range
 depth_ind = -FixedParams.zw(2:end) > depths_obs(1,1) & ...
     -FixedParams.zw(1:end-1) < depths_obs(1,2); % depth layers corresponding to samples
 
 VarsSize = Data.size.obsInCostFunction;
 allVarsSize = unique(Data.size.dataBinned.Variable);
 
+n = size(Data.size.dataBinned.Year, 1);
+modData.size.Variable = cell(n,1);
+modData.size.trophicLevel = cell(n,1);
+modData.size.Value = nan(n,nsamples);
+modData.size.Value_allEvents = nan(n,nevent,nsamples);
+modData.size.scaled_Value = nan(n,1,nsamples);
+modData.size.scaled_Value_allEvents = nan(n,nevent,nsamples);
+
+
 for i = 1:length(allVarsSize)
     vs = allVarsSize{i};
-    ind = strcmp(Data.size.dataBinned.Variable, vs);
-    modData.size.Variable(ind,:) = Data.size.dataBinned.Variable(ind);
+    ind0 = strcmp(Data.size.dataBinned.Variable, vs);
+    modData.size.Variable(ind0,:) = Data.size.dataBinned.Variable(ind0);
+    modData.size.trophicLevel(ind0,:) = Data.size.dataBinned.trophicLevel(ind0);
+    
+    ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'autotroph');
+    
     for j = 1:nsamples
         itraj = et(j,:); % trajectories associated with sampling event j
         [~, J] = max(sum(out.P(:,depth_ind,FixedParams.PP_Chl_index,etime,itraj))); % use modelled values from chl-max depth layer to compare to data
@@ -337,15 +355,17 @@ switch selectFunction
         
         for i = 1:length(VarsSize)
             varLabel = VarsSize{i};
-            yobs = Data.size.dataBinned.Value(strcmp(Data.size.dataBinned.Variable, varLabel));
-            ymod = modData.size.Value_allEvents(strcmp(modData.size.Variable, varLabel),:,:); % modelled values for each separate sampling event
-            ymodMean = modData.size.Value(strcmp(modData.size.Variable, varLabel),:); % modelled values averaged over sampling events
+            ind0 = strcmp(Data.size.dataBinned.Variable, varLabel);
+            ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'autotroph');
+            yobs = Data.size.dataBinned.Value(ind);
+            ymod = modData.size.Value_allEvents(ind,:,:); % modelled values for each separate sampling event
+            ymodMean = modData.size.Value(ind,:); % modelled values averaged over sampling events
             % dimension of ymod is [size, sampling event, replicate (trajectory choice), sample number (year or cruise)]
             nsize = size(ymod, 1); % number of sizes
             ne = size(ymod, 2); % number of sampling events
             m = size(ymod, 3); % number of replicates (trajectory choices)
             n = size(ymod, 4); % number of samples/years/cruises etc
-
+            
             % decompose spectra into total and relative abundance (a single number and a simplex)
             yobsTot = sum(yobs); % totals
             ymodTot = sum(ymod);

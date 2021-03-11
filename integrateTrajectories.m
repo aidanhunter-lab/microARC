@@ -50,6 +50,7 @@ else
    nt_traj = nt_traj';
 end
 
+clear Forc
 
 % Loop through trajectories and integrate
 parfor i = 1:nTraj
@@ -144,3 +145,4 @@ if sum(nExtra) > 0
     end
 end
 
+end

@@ -278,6 +278,10 @@ dat_OM = [dat_OM; dat];
 
 %% Size spectra
 
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% size spectra aggregated over sampling events
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 % load data
 sizeSpectraObsFile = 'S1-S4_spectra_Nbiomass.csv';
 dat_size = readtable(fullfile(obsDir, sizeSpectraObsFile), 'Format', 'auto');
@@ -322,19 +326,68 @@ end
 dat_size.NperCell = mean(dat_size{:,strcat('NperCell_', NsizeEqs)}, 2);
 dat_size.Ndensity = mean(dat_size{:,strcat('Ndensity_', NsizeEqs)}, 2);
 
-% Remove unnecessary variables and rows from data
-scenarios = unique(dat_size.scenario)'; % data collected from different cruises/years
-N = length(scenarios);
-TrophicLevel = 'autotroph'; % At present we're only modelling size spectra of autotrophs
-% keepRows = strcmp(dat_size.trophicLevel, TrophicLevel) & ... 
-%     dat_size.ESD >= ESDmin & dat_size.ESD <= ESDmax;
-keepRows = strcmp(dat_size.trophicLevel, TrophicLevel);
-dat_size = dat_size(keepRows,:);
-keepVars = [{'scenario', 'season', 'regime', 'ESD', 'cellVolume', ...
+% Remove unnecessary variables
+% scenarios = unique(dat_size.scenario)'; % data collected from different cruises/years
+keepVars = [{'scenario', 'season', 'regime', 'trophicLevel', 'ESD', 'cellVolume', ...
     'cellDensity', 'cellDensitySD', 'BioVolDensity'}, strcat('Ndensity_', NsizeEqs), 'Ndensity'];
 dat_size = dat_size(:,keepVars);
 
-cols = [[1 0 0]; [0 1 0]; [0 0 1]; [1 0 1]]; % plotting colours for different scenarios
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% size spectra data measured separately for each event
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+% load data
+sizeSpectraObsFile = 'sample_spectra_ah.csv';
+dat_size_all = readtable(fullfile(obsDir, sizeSpectraObsFile), 'Format', 'auto');
+
+% Convert units of original data into units used in model (keep all
+% elemental concentrations in mmol)
+dat_size_all.cellDensity = 1e3 * dat_size_all.cellDensity; % cells/L -> cells/m^3
+dat_size_all.BioVolDensity = 1e-18 * dat_size_all.cellVol .* dat_size_all.cellDensity; % m^3 / m^3
+
+% Reformat labels
+dat_size_all.Properties.VariableNames({'PangaeaEventLabel','depth','lat','long','date'}) = ...
+    {'Label','Depth','Latitude','Longitude','Date'};
+dat_size_all.Label = strrep(dat_size_all.Label, '_', '/');
+
+% include leading zeros
+x = split(dat_size_all.Label, '/');
+x2 = x(:,2);
+x_ = split(x2, '-');
+x_1 = x_(:,1);
+x_2 = x_(:,2);
+for i = 1:length(x_1)
+    n1 = length(x_1{i});
+    n2 = length(x_2{i});
+    if n1 == 1, x_1{i} = ['00' x_1{i}]; end
+    if n1 == 2, x_1{i} = ['0' x_1{i}]; end
+    if n2 == 1, x_2{i} = ['0' x_2{i}]; end
+end
+x_ = join([x_1, x_2], '-');
+dat_size_all.Label = join([x(:,1), x_], '/');
+
+% include extra timing columns
+x = split(dat_size_all.Date, ' ');
+dat_size_all.Date = x(:,1);
+dat_size_all.t = datenum(dat_size_all.Date);
+[dat_size_all.Year,~] = datevec(dat_size_all.t);
+dat_size_all.Yearday = yearday(dat_size_all.t);
+
+
+cruises = unique(dat_size_all.cruise, 'stable'); % data collected from different cruises/years
+% N = length(cruises);
+nutrition = unique(dat_size_all.nutrition, 'stable');
+
+
+% keepVars = [{'scenario', 'season', 'regime', 'ESD', 'cellVolume', ...
+%     'cellDensity', 'cellDensitySD', 'BioVolDensity'}, strcat('Ndensity_', NsizeEqs), 'Ndensity'];
+% dat_size_all = dat_size_all(:,keepVars);
+
+% cols = [[1 0 0]; [0 1 0]; [0 0 1]; ...
+%     [1 0 1]; [1 1 0]; [0 1 1]]; 
+% cols = cols(1:N,:); % plotting colours for different cruises
+
 
 v = reshape(varargin, [2 0.5*length(varargin)]);
 
@@ -344,54 +397,157 @@ plotNconcSpectra = ~isempty(v) && any(contains(v(1,:),'plotNconcSpectra')) && v{
 plotCellConcSpectra = ~isempty(v) && any(contains(v(1,:),'plotCellConcSpectra')) && v{2,strcmp(v(1,:), 'plotCellConcSpectra')};
 plotBioVolSpectra = ~isempty(v) && any(contains(v(1,:),'plotBioVolSpectra')) && v{2,strcmp(v(1,:), 'plotBioVolSpectra')};
 
-makePlots = table(plotNconcSpectra, plotCellConcSpectra, plotBioVolSpectra);
-makePlots.Properties.VariableNames = {'Ndensity', 'cellDensity', 'BioVolDensity'};
+% makePlots = table(plotNconcSpectra, plotCellConcSpectra, plotBioVolSpectra);
+% makePlots.Properties.VariableNames = {'Ndensity', 'cellDensity', 'BioVolDensity'};
 
-if any(makePlots{1,:})
-    figure
-    nc = sum(makePlots{1,:});
-    for i = 1:nc
-        pv = makePlots.Properties.VariableNames{:,i};
-        subplot(1,nc,i)
-        ii = strcmp(dat_size.scenario, scenarios(1));
-        loglog(dat_size.ESD(ii), dat_size.(pv)(ii), 'Color', cols(1,:))
-        hold on
-        for ij = 2:N
-            ii = strcmp(dat_size.scenario, scenarios(ij));
-            loglog(dat_size.ESD(ii), dat_size.(pv)(ii), 'Color', cols(ij,:))
-        end
-        gc = gca;
-        switch pv
-            case 'Ndensity'
-                gc.YLim(1) = 1e-6;
-                ylab = 'Nitrogen density';
-                yunit = 'mmol N m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
-            case 'cellDensity'
-                gc.YLim(1) = 1e1;
-                ylab = 'cell conc. density';
-%                 yunit = 'cells m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$';
-                yunit = 'cells m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
-            case 'BioVolDensity'
-                gc.YLim(1) = 1e-3 * 1e-6;
-                ylab = 'bio vol density';
-                yunit = 'm$^3\,$m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
-        end
-        gc.YLim(2) = 2 * max(dat_size.(pv));
-        xlabel('ESD (\mum)')
-        ylabel([ylab ' (' yunit ')'], 'Interpreter', 'latex')
-        if i == 1
-            for ii = N:-1:1
-                j = N-ii+1;
-                base = 5; space = 5;
-                yt = space^(j-1) * base * gc.YLim(1);
-                text(gc.XLim(1) * (1 + 0.3 * 10), yt, scenarios{ii});
-                line([gc.XLim(1) * (1 + 0.1 * 10) gc.XLim(1) * (1 + 0.2 * 10)], [yt yt], 'Color', cols(ii,:))
+makePlots = table();
+if plotNconcSpectra, makePlots.Ndensity = true; end
+if plotCellConcSpectra, makePlots.cellDensity = true; end
+if plotBioVolSpectra, makePlots.BioVolDensity = true; end
+
+cluster = unique(dat_size_all.cluster);
+cols = [[0 0 1]; [1 0 0]]; % Colour plot lines by water temperature
+alpha = 0.35;
+
+if ~isempty(makePlots)
+    np = sum(makePlots{1,:}); % number of plots
+    nc = length(cruises); % number of columns
+    nr = length(nutrition); % number of rows
+    for ip = 1:np
+        figure
+        pv = makePlots.Properties.VariableNames{:,ip};
+        xplt = sort(unique(dat_size_all.ESD));
+        for ir = 1:nr
+            for ic = 1:nc
+                subplot(nr, nc, (ir-1)*nc + ic)
+                j = strcmp(dat_size_all.cruise, cruises{ic}) & ... 
+                    strcmp(dat_size_all.nutrition, nutrition{ir});
+                d = dat_size_all(j,:);
+                ne = unique(d.Sample, 'stable');
+                Ne = length(ne);
+                yplt = nan(length(xplt),Ne);
+                waterTemp = cell(Ne,1);
+                Colour = nan(Ne, 3);
+                for ie = 1:Ne
+                    jj = d.Sample == ne(ie);
+                    waterTemp(ie) = unique(d.cluster(jj));                    
+                    Colour(ie,:) = cols(strcmp(waterTemp{ie}, cluster),:);
+                    yplt(:,ie) = d.(pv)(jj);                    
+                    loglog(xplt, yplt(:,ie), 'Color', [Colour(ie,:) alpha])
+                    if ie == 1, hold on; end
+                    if ie == ne, hold off; end
+                end
+                gc = gca;
+                switch pv
+                    case 'Ndensity'
+                        gc.YLim(1) = 1e-6;
+                        ylab = 'Nitrogen density';
+                        yunit = 'mmol N m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
+                        Title = 'Nitrogen conc. density spectra: all sampling events';
+                    case 'cellDensity'
+                        gc.YLim(1) = 1e1;
+                        ylab = 'cell conc. density';
+                        %                 yunit = 'cells m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$';
+                        yunit = 'cells m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
+                        Title = 'Cell conc. density spectra: all sampling events';
+                    case 'BioVolDensity'
+                        gc.YLim(1) = 1e-3 * 1e-6;
+                        ylab = 'bio vol density';
+                        yunit = 'm$^3\,$m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
+                        Title = 'Bio-volume density spectra: all sampling events';
+                end
+                gc.YLim(2) = 2 * max(dat_size_all.(pv));
+                xlabel('ESD (\mum)')
+                if ic == 1
+                    ylabel({nutrition{ir}, [ylab ' (' yunit ')']}  , 'Interpreter', 'latex')
+                end
+                
+                if ir == 1
+                    title([cruises{ic}, ' (', num2str(unique(dat_size_all.Year(strcmp(dat_size_all.cruise, cruises{ic})))), ')'])
+                end
             end
         end
-        hold off
+        sgtitle(Title)
     end
-    sgtitle('Size spectra data')
+    
+    % plot the averages over warm/cold regimes
+    
+    Colour = nan(length(cluster), 3);
+    Colour(strcmp(cluster, 'warm'),:) = [1 0 0];
+    Colour(strcmp(cluster, 'cold'),:) = [0 0 1];
+    
+    for ip = 1:np
+        figure
+        pv = makePlots.Properties.VariableNames{:,ip};
+        xplt = sort(unique(dat_size_all.ESD));
+        for ir = 1:nr
+            for ic = 1:nc
+                subplot(nr, nc, (ir-1)*nc + ic)
+                j = strcmp(dat_size_all.cruise, cruises{ic}) & ...
+                    strcmp(dat_size_all.nutrition, nutrition{ir});
+                d = dat_size_all(j,:);
+                ne = unique(d.Sample, 'stable');
+                Ne = length(ne);
+                yplt = nan(length(xplt),Ne);
+                waterTemp = cell(Ne,1);
+                
+                for ie = 1:Ne
+                    jj = d.Sample == ne(ie);
+                    waterTemp(ie) = unique(d.cluster(jj));
+                    yplt(:,ie) = d.(pv)(jj);
+                end
+                yplt_mean = nan(size(yplt,1), length(cluster));
+                for im = 1:length(cluster)
+                    ind = strcmp(waterTemp, cluster{im});
+                    yplt_mean(:,im) = mean(yplt(:,ind),2);
+                end
+
+                h = loglog(xplt, yplt_mean);                
+                set(h, {'color'}, num2cell(Colour, 2))
+
+                gc = gca;
+                switch pv
+                    case 'Ndensity'
+                        gc.YLim(1) = 1e-6;
+                        ylab = 'Nitrogen density';
+                        yunit = 'mmol N m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
+                        Title = 'Nitrogen conc. density spectra: warm/cold regime averages';
+                    case 'cellDensity'
+                        gc.YLim(1) = 1e1;
+                        ylab = 'cell conc. density';
+                        %                 yunit = 'cells m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$';
+                        yunit = 'cells m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
+                        Title = 'Cell conc. density spectra:  warm/cold regime averages';
+                    case 'BioVolDensity'
+                        gc.YLim(1) = 1e-3 * 1e-6;
+                        ylab = 'bio vol density';
+                        yunit = 'm$^3\,$m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
+                        Title = 'Bio-volume density spectra:  warm/cold regime averages';
+                end
+                gc.YLim(2) = 2 * max(dat_size_all.(pv));
+                xlabel('ESD (\mum)')
+                if ic == 1
+                    ylabel({nutrition{ir}, [ylab ' (' yunit ')']}  , 'Interpreter', 'latex')
+                end
+                
+                if ir == 1
+                    title([cruises{ic}, ' (', num2str(unique(dat_size_all.Year(strcmp(dat_size_all.cruise, cruises{ic})))), ')'])
+                end
+                
+                if ir == 1 && ic ==1
+                    lgd = legend(cluster, 'Location', 'northeast');
+                    title(lgd, 'Regime')
+                end
+
+                
+            end
+        end
+        sgtitle(Title)
+    end
+    
+    
 end
+
 %~~~
 
 
@@ -400,41 +556,6 @@ end
 
 % Merge data sets: group all the 'scalar' data into single table and store
 % the size data separately.
-
-% Match dates & depths to scenarios in size data
-scenarioInfo.S1.dateFirst = datetime(2016,6,23);
-scenarioInfo.S1.dateLast = datetime(2016,7,16);
-scenarioInfo.S2.dateFirst = datetime(2017,7,23);
-scenarioInfo.S2.dateLast = datetime(2017,8,19);
-scenarioInfo.S3.dateFirst = datetime(2018,7,10);
-scenarioInfo.S3.dateLast = datetime(2018,8,3);
-scenarioInfo.S4.dateFirst = datetime(2018,9,16);
-scenarioInfo.S4.dateLast = datetime(2018,10,12);
-scenarioInfo.S1.depth = [10 30];
-scenarioInfo.S2.depth = [10 40];
-scenarioInfo.S3.depth = [5 43];
-scenarioInfo.S4.depth = [5 34];
-
-dat_size.Year = nan(height(dat_size), 1);
-% dat_size.Yearday = nan(height(dat_size), 1);
-dat_size.DepthMin = nan(height(dat_size), 1);
-dat_size.DepthMax = nan(height(dat_size), 1);
-fields = fieldnames(scenarioInfo);
-for i = 1:length(fields)
-    ind = strcmp(dat_size.scenario,fields{i});
-    indn = sum(ind);
-    [yr, ~] = datevec(scenarioInfo.(fields{i}).dateFirst);
-    yrDayFirst = yearday(datenum(scenarioInfo.(fields{i}).dateFirst));
-    yrDayLast = yearday(datenum(scenarioInfo.(fields{i}).dateLast));
-    dat_size.Year(ind) = repmat(yr, [indn 1]);
-    dat_size.YeardayFirst(ind) = repmat(yrDayFirst, [indn 1]);    
-    dat_size.YeardayLast(ind) = repmat(yrDayLast, [indn 1]);    
-    dat_size.DepthMin(ind) = scenarioInfo.(fields{i}).depth(1);
-    dat_size.DepthMax(ind) = scenarioInfo.(fields{i}).depth(2);    
-end
-
-dat_size = movevars(dat_size, {'Year', 'YeardayFirst', 'YeardayLast'}, 'Before', 'season');
-dat_size = movevars(dat_size, {'DepthMin', 'DepthMax'}, 'After', 'regime');
 
 % Merge nutrient data (inorganic & organic)
 dat = [dat_nut; dat_OM];
@@ -505,10 +626,98 @@ scalarData.Variable = cellstr(scalarData.Variable);
 scalarData.nSamples = size(scalarData.Value,1);
 scalarData.nEvents = length(unique(scalarData.Event));
 
+
+
+% Organise the aggregated size data
+
+% Match dates & depths to scenarios in size data
+scenarioInfo.S1.dateFirst = datetime(2016,6,23);
+scenarioInfo.S1.dateLast = datetime(2016,7,16);
+scenarioInfo.S2.dateFirst = datetime(2017,7,23);
+scenarioInfo.S2.dateLast = datetime(2017,8,19);
+scenarioInfo.S3.dateFirst = datetime(2018,7,10);
+scenarioInfo.S3.dateLast = datetime(2018,8,3);
+scenarioInfo.S4.dateFirst = datetime(2018,9,16);
+scenarioInfo.S4.dateLast = datetime(2018,10,12);
+scenarioInfo.S1.depth = [10 30];
+scenarioInfo.S2.depth = [10 40];
+scenarioInfo.S3.depth = [5 43];
+scenarioInfo.S4.depth = [5 34];
+
+dat_size.Year = nan(height(dat_size), 1);
+% dat_size.Yearday = nan(height(dat_size), 1);
+dat_size.DepthMin = nan(height(dat_size), 1);
+dat_size.DepthMax = nan(height(dat_size), 1);
+fields = fieldnames(scenarioInfo);
+for i = 1:length(fields)
+    ind = strcmp(dat_size.scenario,fields{i});
+    indn = sum(ind);
+    [yr, ~] = datevec(scenarioInfo.(fields{i}).dateFirst);
+    yrDayFirst = yearday(datenum(scenarioInfo.(fields{i}).dateFirst));
+    yrDayLast = yearday(datenum(scenarioInfo.(fields{i}).dateLast));
+    dat_size.Year(ind) = repmat(yr, [indn 1]);
+    dat_size.YeardayFirst(ind) = repmat(yrDayFirst, [indn 1]);    
+    dat_size.YeardayLast(ind) = repmat(yrDayLast, [indn 1]);    
+    dat_size.DepthMin(ind) = scenarioInfo.(fields{i}).depth(1);
+    dat_size.DepthMax(ind) = scenarioInfo.(fields{i}).depth(2);    
+end
+
+dat_size = movevars(dat_size, {'Year', 'YeardayFirst', 'YeardayLast'}, 'Before', 'season');
+dat_size = movevars(dat_size, {'DepthMin', 'DepthMax'}, 'After', 'regime');
+
 sizeData = table2struct(dat_size, 'ToScalar', true);
+
+
+
+% Organise the full size data table
+dat_size_all.Properties.VariableNames{'Sample'} = 'SampleOrig';
+% Separate cruise, station, and sample from label
+x = split(dat_size_all.Label, '/');
+x_ = split(x(:,2), '-');
+dat_size_all.Cruise = x(:,1);
+dat_size_all.Station = x_(:,1);
+dat_size_all.Sample = x_(:,2);
+dat_size_all = movevars(dat_size_all, {'Cruise','Station','Sample'}, 'After', 'Label');
+dat_size_all = movevars(dat_size_all, {'HGStation'}, 'Before', 'Station');
+dat_size_all.cruise = [];
+dat_size_all.SampleOrig = [];
+
+% Reformat dates
+dat_size_all.Date = datestr(dat_size_all.Date, 'yyyy-mm-dd');
+dat_size_all = movevars(dat_size_all, {'t','Date','Year','Yearday'}, 'After', 'Sample');
+dat_size_all.SamplingDate = [];
+
+dat_size_all = movevars(dat_size_all, {'Latitude','Longitude'}, 'After', 'Yearday');
+dat_size_all.Properties.VariableNames({'cluster','nutrition','cellVol'}) = ...
+    {'regime','trophicLevel','cellVolume'};
+
+% Index each unique sampling event... indices should be consistent with the
+% scalar data
+Label_scalar = unique(dat.Label, 'stable');
+
+% Discard size data with Label not present in the scalar data.
+% This is all MSM77 records and 4 stations from PS107.
+ind = ismember(dat_size_all.Label, Label_scalar);
+dat_size_all = dat_size_all(ind,:);
+
+dat_size_all.order = (1:height(dat_size_all))';
+
+tt = unique(table(dat.Label, dat.Event), 'stable');
+tt.Properties.VariableNames = {'Label','Event'};
+
+dat_size_all = innerjoin(dat_size_all, tt);
+[~,I] = sort(dat_size_all.order);
+dat_size_all = dat_size_all(I,:);
+
+dat_size_all = movevars(dat_size_all, 'Event', 'After', 'Sample');
+dat_size_all.order = [];
+
+
+sizeDataAll = table2struct(dat_size_all, 'ToScalar', true);
 
 Data.scalar = scalarData;
 Data.size = sizeData;
+Data.sizeFull = sizeDataAll;
 
 
 

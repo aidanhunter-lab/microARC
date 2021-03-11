@@ -73,8 +73,7 @@ end
 % Load/prepare in-situ fitting data.
 % prepareFittingData.m must be tailored to specific data sets.
 Data = prepareFittingData(obsDir, ...
-    'plotNconcSpectra', true, 'plotCellConcSpectra', true, ...
-    'plotBioVolSpectra', true);
+    'plotCellConcSpectra', true, 'plotBioVolSpectra', true);
 
 % Choose number of modelled size class intervals using function
 % chooseSizeClassIntervals.m
@@ -83,20 +82,22 @@ ESDmax = 200;
 nsizes = []; % number of modelled size classes (leave empty to view a range of values)
 nsizesMin = 4; % min/max number of modelled size classes
 nsizesMax = 12;
-sizeData = chooseSizeClassIntervals(Data.size, ...
+sizeData = chooseSizeClassIntervals(Data.size, 'datFull', Data.sizeFull, ...
     'ESDmin', ESDmin, 'ESDmax', ESDmax, ...
     'nsizes', nsizes, 'nsizesMin', nsizesMin, 'nsizesMax', nsizesMax, ...
     'plotSizeClassIntervals', true);
 display(sizeData)
 
 nsizes = 8; % number of modelled size classes (specifying a value makes chooseSizeClassIntervals.m return different output)
-Data.size = chooseSizeClassIntervals(Data.size, ...
+[Data.size, Data.sizeFull] = chooseSizeClassIntervals(Data.size, 'datFull', Data.sizeFull, ... 
     'ESDmin', ESDmin, 'ESDmax', ESDmax, ...
     'nsizes', nsizes, 'nsizesMin', nsizesMin, 'nsizesMax', nsizesMax, ...
     'plotSizeClassIntervals', true);
 
 % Choose data types to use in cost function - I think bio-volume is the
 % best choice for the size data
+% Data = selectCostFunctionData(Data, ...
+%     {'N','chl_a','PON','POC'}, {'BioVol'});
 Data = selectCostFunctionData(Data, ...
     {'N','chl_a','PON','POC'}, {'BioVol'});
 
@@ -109,10 +110,12 @@ switch viewData
         display(Data); fprintf('\n\n')        
         disp('scalar data: Data.scalar')
         display(Data.scalar); fprintf('\n\n')
-        disp('size-spectra (vector) data: Data.size')
+        disp('size-spectra (vector) data aggregated over sample events: Data.size')
         display(Data.size); fprintf('\n\n')
-        disp('size-spectra (vector) data grouped into bins: Data.size.dataBinned')
-        display(Data.size.dataBinned)
+        disp('size-spectra data for separate sample events: Data.sizeFull')
+        display(Data.sizeFull); fprintf('\n\n')
+        disp('size-spectra data grouped into bins: Data.sizeFull.dataBinned')
+        display(Data.sizeFull.dataBinned)
 end
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -187,7 +190,6 @@ useSingleSizeSpectra = true; % there are 2 size spectra for 2018, use only
 [Data, Forc, FixedParams] = selectYears(Data, Forc, FixedParams, ... 
     'singleYear', useSingleYear, 'singleSpectra', useSingleSizeSpectra);
 
-
 % There are lots of forcing data particle trajectories -- far too many to
 % include within a parameter optimisation procedure, so these need to be
 % filtered.
@@ -241,28 +243,9 @@ Data = standardiseFittingData(Data, ...
 
 close all
 
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% THIS LAST PART OF THE DATA SET-UP IS NO-LONGER USED, BUT KEEP THE CODE...
-% WHO KNOWS, IT MIGHT BE USEFUL...
-
-% The cost function has an option to fit the model to polynomial
-% representations of the data...
-% Smooth the data using polynomials to represent data shape. Fitting to the
-% data shape instead of each data point should reduce effect of noise
-% in the data and make the cost function more robust
-Data.scalar.maxDegree = 3; % Polynomial degree = 3 should be OK if the
-                           % standardised data have a monomodal distribution
-% Data.size.maxDegree = 2; % Quadratic for the sorted size data seems reasonable, anything more looks like overfitting
-Data.size.maxDegree = 1; % Linear for the scaled then sorted size data looks OK
-
-Data = smoothData_polynomials(Data, Data.scalar.maxDegree, Data.size.maxDegree, ...
-    'plotPoly_PON', true, 'plotPoly_POC', true, 'plotPoly_N', true, ...
-    'plotPoly_chl_a', true, 'plotPolySize_CellConc', true, ... 
-    'plotPolySize_BioVol', true, 'plotPolySize_NConc', true);
-
-close all
+% Include extra fields indexing sorted order of data -- convenience for
+% plotting
+Data.scalar = sortOrderData(Data.scalar);
 
 %##########################################################################
 %##########################################################################
@@ -349,7 +332,7 @@ display(auxVars)
 % Select which parameters to optimise.
 % Choose from the lists: Params.scalars & Params.sizeDependent.
 parnames = {'wPOM', 'wp_a', 'wp_b', 'rDON', 'rPON', 'rPOC', 'beta2', ... 
-    'beta3', 'aP', 'Gmax_a', 'Gmax_b', 'k_G', 'pmax_a', 'pmax_b', ... 
+    'beta3', 'aP', 'Gmax', 'k_G_a', 'k_G_b', 'pmax_a', 'pmax_b', ... 
     'Qmin_QC_a', 'Qmin_QC_b', 'Qmax_delQ_a', 'Qmax_delQ_b', ... 
     'Vmax_QC_a', 'Vmax_QC_b', 'aN_QC_a', 'aN_QC_b'};
 npars = length(parnames);
@@ -398,8 +381,6 @@ end
 % Halt integrations at each trajectory's final sampling events to save time
 Forc.integrateFullTrajectory = false;
 
-
-
 % Integrate and calculate cost...
 clear out auxVars
 tic
@@ -411,11 +392,11 @@ disp([num2str(runtime) ' seconds to integrate ' num2str(Forc.nTraj) ' trajectori
 runtime = runtime / Forc.nTraj * numcores; 
 disp([num2str(runtime) ' seconds = average integration time of single trajectory on single processor'])
 
-display(costComponents) % cost associated to each data type
-display(cost) % total cost
 display(modData) % modelled equivalents of fitting data
 display(out) % state variable output
 display(auxVars) % other model output
+display(costComponents) % cost associated to each data type
+display(cost) % total cost
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -470,7 +451,7 @@ switch stoppedEarly
             FixedParams, 'stoppedEarly', stoppedEarly);
 end
 
-viewResults = false;
+viewResults = true;
 switch viewResults
     case true
         display(gaOutput)
@@ -491,7 +472,7 @@ switch viewResults
 end
 
 % Save output
-tag = '_fitAllNutrientsAndBioVol_modifiedGmax_2018data';
+tag = '_fitAllNutrientsAndBioVol_modifiedkG_2018data';
 fileName = ['results/fittedParameters_' FixedParams.costFunction tag];
 
 saveParams = true;
@@ -521,7 +502,7 @@ end
 % We may continue optimising parameters stored in gaOutput by initialising
 % the algorithm with a stored population.
 
-tag = '_fitAllNutrientsAndBioVol_modifiedGmax_2018data';
+tag = '_fitAllNutrientsAndBioVol_modifiedkG_2018data';
 fileName = ['results/fittedParameters_' FixedParams.costFunction tag];
 
 % Load stored results
@@ -622,6 +603,11 @@ fileName = ['results/fittedParameters_' FixedParams.costFunction tag];
 [~, gaOutput, parnames, optPar, lb, ub, Data, Forc, FixedParams, Params, v0] = ... 
     loadOptimisationRun(fileName);
 
+
+% Params = updateParameters(Params, FixedParams, ...
+%     'Gmax', 5, 'k_G_a', 0.5, 'k_G_b', 0.18);
+% optPar = cellfun(@(x) Params.(x), FixedParams.tunePars);
+
 % Generate model output using fitted parameters
 Params = updateParameters(Params, FixedParams, optPar);
 costFunctionType = FixedParams.costFunction;
@@ -629,7 +615,7 @@ Forc.integrateFullTrajectory = true;
 
 [cost, costComponents, modData, out, auxVars] = costFunction(optPar, ...
     FixedParams, Params, Forc, Data, v0, odeIntegrator, odeOptions, ... 
-    'selectFunction', costFunctionType);
+    'selectFunction', costFunctionType, 'returnExtra', 'all');
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -722,7 +708,7 @@ save = false;
 
 % Choose one or more trajectories -- if multiple are selected then the plot
 % will average over them.
-sampleEvent = 1;
+sampleEvent = 10;
 % All trajectories used for sampleEvent
 traj = find(Data.scalar.EventTraj(sampleEvent,:));
 % If waterMass is either Atlantic OR Arctic then it may make sense to plot
@@ -965,7 +951,7 @@ close all
 save = false;
 
 % Choose event
-sampleEvent = 1;
+sampleEvent = 22;
 if ~ismember(sampleEvent, 1:Data.scalar.nEvents), warning(['Choose event number within range (1, ' num2str(Data.scalar.nEvents) ')']); end
 % trajectory indices
 traj = find(Data.scalar.EventTraj(sampleEvent,:));
