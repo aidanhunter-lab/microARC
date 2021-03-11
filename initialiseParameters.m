@@ -145,8 +145,11 @@ if isempty(Params.pmax)
     Params.pmax = powerFunction(Params.pmax_a, Params.pmax_b, Vol);
 end
 
-if isempty(Params.Gmax)
-    Params.Gmax = powerFunction(Params.Gmax_a, Params.Gmax_b, Vol);
+% if isempty(Params.Gmax)
+%     Params.Gmax = powerFunction(Params.Gmax_a, Params.Gmax_b, Vol);
+% end
+if isempty(Params.k_G)
+    Params.k_G = powerFunction(Params.k_G_a, Params.k_G_b, Vol);
 end
 
 if isempty(Params.wp)

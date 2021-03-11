@@ -1,7 +1,15 @@
-function dat = chooseSizeClassIntervals(sizeData, varargin)
+function [dat, datFull] = chooseSizeClassIntervals(sizeData, varargin)
 
 dat = struct2table(sizeData);
 dat.rowIndex = (1:height(dat))';
+
+datFull = [];
+if ~isempty(varargin) && any(strcmp(varargin, 'datFull'))
+    datFull = varargin{find(strcmp(varargin, 'datFull'))+1};
+    datFull = struct2table(datFull);
+    datFull.rowIndex = (1:height(datFull))';    
+end
+
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -28,6 +36,12 @@ lESDmax = log10(ESDmax);
 inRange = ESDmin <= dat.ESD & dat.ESD <= ESDmax;
 dat = dat(inRange,:);
 
+if ~isempty(datFull)
+    inRange = ESDmin <= datFull.ESD & datFull.ESD <= ESDmax;
+    datFull = datFull(inRange,:);
+end
+
+
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 %% Create size class intervals
@@ -52,6 +66,9 @@ switch Case
         % Number of size class intervals to return has not been specified, so
         % return numerous data sets, each corresponding to a different choice
         % of size partitioning.
+        % Use the aggregated phytoplankton data
+        dat = dat(strcmp(dat.trophicLevel, 'autotroph'),:);
+        
         nsizesMin = 2; % hard code default values of min/max number of size class intervals
         nsizesMax = 25;
         % Has the range of intervals been passed as an argument?
@@ -66,6 +83,8 @@ switch Case
             end
         end
         
+        
+        
         scenarios = unique(dat.scenario);
         nscenarios = length(scenarios);
         cols = [[1 0 0]; [0 1 0]; [0 0 1]; [1 0 1]]; % plotting colours for different scenarios
@@ -75,16 +94,13 @@ switch Case
         dat2.Properties.VariableNames = {'index','ESD'};
         dat2.log10ESD = log10(dat2.ESD);
         
-%         wTot = lESDmax - lESDmin; % log10-scale width of full size domain
-%         dx = mean(diff(dat2.log10ESD)); % measurements were evenly spaced a distance dx apart on log10 scale
-        
         nInt = nsizesMin:nsizesMax; % filter data using different numbers, nInt, of size class intervals
         
         % Assign all measurements to size class intervals
         for i = 1:length(nInt)
             dat3 = dat2;
             nsizes = nInt(i); % number of size class intervals
-%             w = wTot / nsizes; % log10-scale width of each interval
+            %             w = wTot / nsizes; % log10-scale width of each interval
             b = linspace(lESDmin, lESDmax, nsizes+1); % interval edge positions
             lm = 0.5 * (b(1:end-1) + b(2:end)); % interval midpoints
             m = 10 .^ lm; % midpoint on natural scale
@@ -168,16 +184,16 @@ switch Case
         % plot the intervals
         makePlot = true; % by default makePlot is true when the number of intervals nsizes was unspecified
         if ~isempty(varargin)
-           vplot = strcmp(varargin, 'plotSizeClassIntervals');
-           if any(vplot)
-               makePlot = varargin{find(vplot)+1};
-           end
+            vplot = strcmp(varargin, 'plotSizeClassIntervals');
+            if any(vplot)
+                makePlot = varargin{find(vplot)+1};
+            end
         end
         if makePlot
             plotVars = {'cellDensity', 'BioVolDensity', 'Ndensity'};
             N = length(nInt); % number of subplots (one for each number of intervals)
             maxSubplots = 20; % max subplots per figure
-            nfig = ceil(N / maxSubplots); % number of figures            
+            nfig = ceil(N / maxSubplots); % number of figures
             if nfig > 1
                 nc = ceil(sqrt(maxSubplots)); % number of columns
                 nr = maxSubplots / nc; % number of rows
@@ -246,23 +262,22 @@ switch Case
     case '2'
         % Number of size class intervals to return has been specified as
         % function argument
+        
+        % Arrange the aggregated size spectra data
+        
         scenarios = unique(dat.scenario);
         nscenarios = length(scenarios);
-        cols = [[1 0 0]; [0 1 0]; [0 0 1]; [1 0 1]]; % plotting colours for different scenarios
+        trophicLevels = unique(dat.trophicLevel);
+        ntrophicLevels = length(trophicLevels);
+%         cols = [[1 0 0]; [0 1 0]; [0 0 1]; [1 0 1]]; % plotting colours for different scenarios
         allESD = unique(dat.ESD);
         nESD = length(allESD);
         dat2 = table((1:nESD)', allESD); % store all unique sizes in separate table
         dat2.Properties.VariableNames = {'index','ESD'};
         dat2.log10ESD = log10(dat2.ESD);
         
-        wTot = lESDmax - lESDmin; % log10-scale width of full size domain
-        dx = mean(diff(dat2.log10ESD)); % measurements were evenly spaced a distance dx apart on log10 scale
-        
-%         nInt = nsizes; % filter data using different numbers, nInt, of size class intervals
-        
         % Assign all measurements to size class intervals
         dat3 = dat2;
-        w = wTot / nsizes; % log10-scale width of each interval
         b = linspace(lESDmin, lESDmax, nsizes+1); % interval edge positions
         lm = 0.5 * (b(1:end-1) + b(2:end)); % interval midpoints
         m = 10 .^ lm; % midpoint on natural scale
@@ -278,40 +293,44 @@ switch Case
         dat3 = dat3(o,:); % recover original row order
         dat3.rowIndex = [];
         dat = dat3;
-            
+        
         % Integrate size spectra across each size class interval
+        
         dat.CellConc = nan(height(dat), 1); % integrate cell densities to find total cell number within each size class
         dat.BioVol = nan(height(dat), 1); % integrate biovolume densities to find total bio-volume within each size class
         dat.NConc = nan(height(dat), 1); % integrate nitrogen densities to find nitrogen concentration within each size class
         for j = 1:nscenarios
-            ind0 = strcmp(dat.scenario, scenarios(j));
-            for k = 1:nsizes
-                ind = ind0 & dat.sizeClass == k;
-                n = sum(ind);
-                x = log10(dat.ESD(ind));
-                xd = diff(x);
-                % cell density (cells m^-3)
-                y = dat.cellDensity(ind);
-                ys = y(1:end-1) + y(2:end);
-                CellConc = sum(0.5 * xd .* ys);
-                dat.CellConc(ind) = repmat(CellConc, [n, 1]);
-                % biovolume (m^3 m^-3)
-                y = dat.BioVolDensity(ind);
-                ys = y(1:end-1) + y(2:end);
-                BioVol = sum(0.5 * xd .* ys);
-                dat.BioVol(ind) = repmat(BioVol, [n, 1]);
-                % nitrogen concentration (mmol N m^-3)
-                y = dat.Ndensity(ind);
-                ys = y(1:end-1) + y(2:end);
-                NConc = sum(0.5 * xd .* ys);
-                dat.NConc(ind) = repmat(NConc, [n, 1]);
+            indj = strcmp(dat.scenario, scenarios(j));
+            for jj = 1:ntrophicLevels
+                indjj = indj & strcmp(dat.trophicLevel, trophicLevels(jj));
+                for k = 1:nsizes
+                    ind = indjj & dat.sizeClass == k;
+                    n = sum(ind);
+                    x = log10(dat.ESD(ind));
+                    xd = diff(x);
+                    % cell density (cells m^-3)
+                    y = dat.cellDensity(ind);
+                    ys = y(1:end-1) + y(2:end);
+                    CellConc = sum(0.5 * xd .* ys);
+                    dat.CellConc(ind) = repmat(CellConc, [n, 1]);
+                    % biovolume (m^3 m^-3)
+                    y = dat.BioVolDensity(ind);
+                    ys = y(1:end-1) + y(2:end);
+                    BioVol = sum(0.5 * xd .* ys);
+                    dat.BioVol(ind) = repmat(BioVol, [n, 1]);
+                    % nitrogen concentration (mmol N m^-3)
+                    y = dat.Ndensity(ind);
+                    ys = y(1:end-1) + y(2:end);
+                    NConc = sum(0.5 * xd .* ys);
+                    dat.NConc(ind) = repmat(NConc, [n, 1]);
+                end
             end
         end
         
         % Include reduced size spectra data set containing only the binned values
         dat_binned = unique(dat(:,{'scenario', 'Year', 'YeardayFirst', ...
-            'YeardayLast', 'season', 'regime', 'DepthMin', 'DepthMax', 'size', ...
-            'sizeClass', 'CellConc', 'BioVol', 'NConc'}));
+            'YeardayLast', 'season', 'regime', 'DepthMin', 'DepthMax', 'trophicLevel', ...
+            'size', 'sizeClass', 'CellConc', 'BioVol', 'NConc'}));
         
         % convert from short to long format
         dat_binned = stack(dat_binned, {'CellConc','BioVol','NConc'}, ...
@@ -321,25 +340,17 @@ switch Case
         % store as structs
         dat = table2struct(dat, 'ToScalar', true);
         dat.nSamples = length(dat.Year);
-
+        
         dat_binned = table2struct(dat_binned, 'ToScalar', true);
         dat.dataBinned = dat_binned;
-        
-        %         % Include fields specifying which of these data are used in the cost
-        %         % function
-        %         sizeData.obsInCostFunction = {'NConc'};
-        %         sizeData.dataBinned.inCostFunction = ismember(sizeData.dataBinned.Variable, ...
-        %             sizeData.obsInCostFunction);
-        
-        
         
         % plot the intervals
         makePlot = true; % makePlot is true by default
         if ~isempty(varargin)
-           vplot = strcmp(varargin, 'plotSizeClassIntervals');
-           if any(vplot)
-               makePlot = varargin{find(vplot)+1};
-           end
+            vplot = strcmp(varargin, 'plotSizeClassIntervals');
+            if any(vplot)
+                makePlot = varargin{find(vplot)+1};
+            end
         end
         if makePlot
             % Multipanel plot. Top row: cell concentration
@@ -352,40 +363,34 @@ switch Case
             nc = nscenarios; % number of columns
             b = linspace(lESDmin, lESDmax, nsizes+1); % interval boundaries
             db = diff(b);
+            Cols = [0 1 0; 1 0 0];
             
             for i = 1:nr
                 pv0 = plotVars0{i};
                 for j = 1:nc
                     k = (i-1) * nc + j;
                     subplot(nr, nc, k);
-                    ind0 = strcmp(dat.scenario, scenarios{j}); % indexes continuous spectra
                     
-                    ind = strcmp(dat.dataBinned.scenario, scenarios{j}) & ...
-                        strcmp(dat.dataBinned.Variable, plotVars{i}); % indexes binned (integrated) spectra
-                    
-                    loglog(dat.ESD(ind0), dat.(plotVars0{i})(ind0), '--', 'Color', cols(j,:)) % plot continuous spectra (densities)
-                    
-                    hold on
-                    
-                    y = dat.(plotVars{i})(ind0) ./ db(dat.sizeClass(ind0)); % divide by interval width to get densities from absolute values
-                    loglog(dat.ESD(ind0), y, 'Color', cols(j,:)) % plot binned spectra (densities)
+                    for jj = 1:ntrophicLevels
+                        ind0 = strcmp(dat.scenario, scenarios{j}) & ...
+                            strcmp(dat.trophicLevel, trophicLevels{jj}); % indexes continuous spectra
+                        loglog(dat.ESD(ind0), dat.(plotVars0{i})(ind0), '--', 'Color', Cols(jj,:)) % plot continuous spectra (densities)
+                        if jj == 1
+                            hold on
+                        end
+%                         if jj == ntrophicLevels
+%                             legend(trophicLevels);
+%                         end
+                    end                    
+                    for jj = 1:ntrophicLevels
+                        ind0 = strcmp(dat.scenario, scenarios{j}) & ...
+                            strcmp(dat.trophicLevel, trophicLevels{jj}); % indexes continuous spectra
+                        y = dat.(plotVars{i})(ind0) ./ db(dat.sizeClass(ind0)); % divide by interval width to get densities from absolute values
+                        loglog(dat.ESD(ind0), y, 'Color', Cols(jj,:)) % plot binned spectra (densities)
+                    end
                     
                     gc = gca;
                     
-%                     switch pv0
-%                         case 'cellDensity'
-%                             gc.YLim(1) = 1e1;
-%                             ylab = 'cell concentration';
-%                             yunit = 'cells$\;$m$^{-3}$';
-%                         case 'BioVolDensity'
-%                             gc.YLim(1) = 1e-9;
-%                             ylab = 'bio-volume';
-%                             yunit = 'm$^3\;$m$^{-3}$';
-%                         case 'Ndensity'
-%                             gc.YLim(1) = 1e-6;
-%                             ylab = 'nitrogen concentration';
-%                             yunit = 'mmol$\,$N m$^{-3}$';
-%                     end
                     switch pv0
                         case 'cellDensity'
                             gc.YLim(1) = 1e1;
@@ -409,16 +414,6 @@ switch Case
                     if i == nr, xlabel('ESD (\mum)'); end
                     if j == 1
                         ylabel({ylab, ['(' yunit ')']}, 'Interpreter', 'latex');
-                        
-%                         if strcmp(plotVars{i}, 'CellConc')
-%                             ylabel('cell conc. density (cells m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
-%                         end
-%                         if strcmp(plotVars{i}, 'BioVol')
-%                             ylabel('bio vol density ($m^3\,m^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
-%                         end
-%                         if strcmp(plotVars{i}, 'NConc')
-%                             ylabel('Nitrogen density (mmol N m$^{-3}\,\log_{10}(\frac{ESD}{1\mu m})^{-1}$)', 'Interpreter', 'latex')
-%                         end
                     end
                     if i == 1
                         yr = unique(dat.Year(ind0));
@@ -432,105 +427,89 @@ switch Case
             sgtitle({'Measured size spectra',['partitioned into ' num2str(nsizes) ' evenly spaced intervals']})
         end
         
+        %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        
+        % Arrange the full size spectra data
+        
+        cruises = unique(datFull.Cruise);
+        ncruises = length(cruises);
+        trophicLevels = unique(datFull.trophicLevel);
+        ntrophicLevels = length(trophicLevels);
+        allESD = unique(datFull.ESD);
+        nESD = length(allESD);
+        dat2 = table((1:nESD)', allESD); % store all unique sizes in separate table
+        dat2.Properties.VariableNames = {'index','ESD'};
+        dat2.log10ESD = log10(dat2.ESD);
+        
+        % Assign all measurements to size class intervals
+        dat3 = dat2;
+        b = linspace(lESDmin, lESDmax, nsizes+1); % interval edge positions
+        lm = 0.5 * (b(1:end-1) + b(2:end)); % interval midpoints
+        m = 10 .^ lm; % midpoint on natural scale
+        rm = round(m * 4) / 4; % round to 0.25
+        for j = nsizes:-1:1
+            ind = dat3.log10ESD <= b(j+1);
+            dat3.sizeClass(ind) = j; % assign size classes
+            dat3.size(ind) = rm(j); % and mean sizes
+        end
+        dat3(:,{'index','log10ESD'}) = [];
+        dat3 = innerjoin(datFull, dat3); % merge tables
+        [~,o] = sort(dat3.rowIndex);
+        dat3 = dat3(o,:); % recover original row order
+        dat3.rowIndex = [];
+        datFull = dat3;
+        
+        % Integrate size spectra across each size class interval
+        
+        datFull.CellConc = nan(height(datFull), 1); % integrate cell densities to find total cell number within each size class
+        datFull.BioVol = nan(height(datFull), 1); % integrate biovolume densities to find total bio-volume within each size class
+        
+        Events = unique(datFull.Event);
+        for j = 1:length(Events)
+            indj = datFull.Event == Events(j);
+            for jj = 1:ntrophicLevels
+                indjj = indj & strcmp(datFull.trophicLevel, trophicLevels{jj});
+                Depths = unique(datFull.Depth(indjj));
+                nDepths = length(Depths);
+                for jd = 1:nDepths
+                    indjd = indjj & datFull.Depth == Depths(jd);
+                    for k = 1:nsizes
+                        ind = indjd & datFull.sizeClass == k;
+                        n = sum(ind);
+                        x = log10(datFull.ESD(ind));
+                        xd = diff(x);
+                        % cell density (cells m^-3)
+                        y = datFull.cellDensity(ind);
+                        ys = y(1:end-1) + y(2:end);
+                        CellConc = sum(0.5 * xd .* ys);
+                        datFull.CellConc(ind) = repmat(CellConc, [n, 1]);
+                        % biovolume (m^3 m^-3)
+                        y = datFull.BioVolDensity(ind);
+                        ys = y(1:end-1) + y(2:end);
+                        BioVol = sum(0.5 * xd .* ys);
+                        datFull.BioVol(ind) = repmat(BioVol, [n, 1]);
+                    end
+                end
+            end
+        end
+        
+        
+        % Include reduced size spectra data set containing only the binned values
+        dat_binned = unique(datFull(:,{'Label', 'Cruise', 'Year', 'Yearday', 'Event', ...
+            'regime', 'Depth', 'trophicLevel', ...
+            'size', 'sizeClass', 'CellConc', 'BioVol'}), 'stable');
+        
+        % convert from short to long format
+        dat_binned = stack(dat_binned, {'CellConc','BioVol'}, ...
+            'IndexVariableName','Variable','NewDataVariableName','Value');
+        dat_binned.Variable = cellstr(dat_binned.Variable);
+        
+        % store as structs
+        datFull = table2struct(datFull, 'ToScalar', true);
+%         datFull.nSamples = length(datFull.Year);
+        
+        dat_binned = table2struct(dat_binned, 'ToScalar', true);
+        datFull.dataBinned = dat_binned;
+
+        
 end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-% % For each possible number of size class intervals, loop through all
-% % possible configurations storing a measure of misfit to data, then store
-% % the best fitting approximations. AIC could be used to choose between
-% % different numbers of size class intervals...
-% % Hmm, this may be overcomplicating things. If widths of the first and last
-% % intervals are different from the rest, and midpoints are to be equally
-% % spaced, then the true midpoints of the first and last intervals will
-% % differ from what the model uses! JUST SET SIMPLE EQUALLY SPACED INTERVALS
-% % ALL OF EQUALL WIDTH, THEN CHOOSE NUMBER OF INTERVALS.
-% 
-% 
-% % I SHOULD SIMPLYFY THIS FURTHER!!! DO NOT AUTOMATICALLY CHOOSE THE NUMBER
-% % OF SIZE INTERVALS. INSTEAD JUST PASS THE INFORMATION IN AS ARGUMENTS...
-% % I'LL NEED: MIN AND MAX SIZES TO INCLUDE FROM DATA, AND NUMBER OF MODELLED
-% % SIZE CLASSES. IF NUMBER OF MODELLED SIZE CLASSES IS NOT SPECIFIED THEN
-% % RETURN A LIST OF DATA SETS, WHERE EACH LIST ELEMENT IS THE DATA PARTITION
-% % BY A DIFFERENT NUMBER OF INTERVALS...
-% 
-% 
-% dx = mean(diff(log10(dat_size2.ESD))); % distance between points in (log scale) size spectra
-% lESDmin = log10(ESDmin);
-% lESDmax = log10(ESDmax);
-% 
-% logSize = log10(dat_size2.ESD);
-% logVal = log10(dat_size2.(bvar));
-% 
-% AIC = nan(nbinMax-nbinMin+1,1); % use AIC metric to choose number of size class intervals
-% 
-% for i = nbinMin:nbinMax % loop over number of size class intervals
-%     figure
-%     plot(logSize, logVal, 'LineWidth', 2)
-%     gc = gca;
-%     gc.XLim = [lESDmin, lESDmax];
-%     hold on
-%     
-%     w = (lESDmax - lESDmin) / i; % interval width
-%     b0 = linspace(lESDmin, lESDmax, i+1); % boundaries
-%     m0 = 0.5 * (b0(1:end-1) + b0(2:end)); % midpoints
-%     
-%     for j = 1:length(b0)
-%         line([b0(j), b0(j)], gc.YLim);
-%     end
-%     
-%     d = dat_size2;
-%     d.sizeClass = nan(height(d),1);
-%     for j = i:-1:1
-%         d.sizeClass(logSize <= b0(j+1)) = j;
-%     end
-%     
-%     meanVals = nan(1,i);
-%     for j = 1:i
-%        meanVals(j) = mean(logVal(d.sizeClass == j));
-%     end
-%     
-%     % add piece-wise approx to plot
-%     for j = 1:i
-%         line([b0(j) b0(j+1)], [meanVals(j) meanVals(j)], 'Color', [1 0 0])
-%     end
-%     
-%     % calculate goodness-of-fit metric    
-%     logLik = nan(1,i);
-%     for j = 1:i
-%         err = logVal(d.sizeClass == j) - meanVals(j);
-%         err_s = std(err);
-%         logLik(j) = (1 ./ (floor(w/dx))-1) .* sum(-0.5*log(2*pi) - log(err_s) -0.5 .* (err ./ err_s) .^ 2);
-%     end
-%     AIC(i-nbinMin+1) = 2*i - 2*sum(logLik);
-%     
-%     
-% end
-% 
-% 
-% 
-% 
-% 
-% 
-% 
-% 
-% 
-% 

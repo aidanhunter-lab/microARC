@@ -162,6 +162,8 @@ if ~isempty(varargin)
     end
 end
 
+% data aggregated over events
+
 keep = ismember(Data.size.Year, datYear{strcmp(prefOrd, 'size')});
 fields = fieldnames(Data.size);
 for i = 1:length(fields)
@@ -195,10 +197,53 @@ Data.size.dataBinned = structfun(@(x) x(keep), Data.size.dataBinned, ...
     'UniformOutput', false);
 
 
+% full data separated over events
+keep = ismember(Data.sizeFull.Year, datYear{strcmp(prefOrd, 'size')});
+fields = fieldnames(Data.sizeFull);
+nSamples = size(Data.sizeFull.Year,1);
+for i = 1:length(fields)
+    if size(Data.sizeFull.(fields{i}), 1) == nSamples
+       Data.sizeFull.(fields{i})(~keep,:) = []; 
+    end
+end
+Data.sizeFull.nSamples = size(Data.sizeFull.ESD,1);
+
+if useSingleSizeSpectra
+    uscenario = unique(Data.sizeFull.Cruise);
+    if length(uscenario) > 1
+        keep = strcmp(Data.sizeFull.scenario, uscenario{1}); % this could be better coded, but it works given the data we have!
+        for i = 1:length(fields)
+            if size(Data.sizeFull.(fields{i}), 1) == Data.sizeFull.nSamples
+                Data.sizeFull.(fields{i})(~keep) = [];
+            end
+        end
+    end
+end
+Data.sizeFull.nSamples = size(Data.sizeFull.ESD,1);
+
+keep = ismember(Data.sizeFull.dataBinned.Year, datYear{strcmp(prefOrd, 'size')});
+if useSingleSizeSpectra
+    uscenario = unique(Data.sizeFull.dataBinned.Cruise(keep));
+    if length(uscenario) > 1
+        keep = keep & strcmp(Data.sizeFull.dataBinned.Cruise, uscenario{1});
+    end
+end
+Data.sizeFull.dataBinned = structfun(@(x) x(keep), Data.sizeFull.dataBinned, ...
+    'UniformOutput', false);
+
+
 % Relabel the event numbers
 eventLabs = table((1:Data.scalar.nEvents)', unique(Data.scalar.Event));
 eventLabs.Properties.VariableNames = {'newEvent', 'Event'};
 tmp = table(Data.scalar.Event); tmp.Properties.VariableNames = {'Event'};
 tmp = join(tmp, eventLabs);
 Data.scalar.Event = tmp.newEvent;
+
+
+tmp = table(Data.sizeFull.Event); tmp.Properties.VariableNames = {'Event'};
+tmp = join(tmp, eventLabs);
+Data.sizeFull.Event = tmp.newEvent;
+
+
+
 

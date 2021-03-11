@@ -22,7 +22,6 @@ if Data.scalar.nEvents > nevents
     end
 end
 
-
 % Match sampling events to trajectories
 Data.scalar.EventTraj = zeros(nevents, Forc.nTraj);
 for i = 1:nevents
@@ -66,3 +65,48 @@ for i = 2:size(Data.scalar.evTraj, 2) % this loop is not robust code, but should
     Data.scalar.evTraj(:,i) = xi;
     eventTraj.trajIndex(eventTraj.event == i) = xi;
 end
+
+
+
+% Size data
+discard = ~ismember(Data.sizeFull.Label, Data.scalar.Label);
+if any(discard)
+    fields = fieldnames(Data.sizeFull);
+    for i = 1:length(fields)
+        if size(Data.sizeFull.(fields{i}), 1) == length(discard)
+            Data.sizeFull.(fields{i}) = Data.sizeFull.(fields{i})(~discard);
+        end
+    end
+    Data.sizeFull.nSamples = length(Data.sizeFull.Label);
+end
+
+tt = unique(table(Data.scalar.Label, Data.scalar.Event));
+tt.Properties.VariableNames = {'Label','Event'};
+
+sizeData = Data.sizeFull;
+sizeData = rmfield(sizeData, {'dataBinned','obsInCostFunction','nSamples'});
+sizeData = struct2table(sizeData);
+
+sizeData.Event = [];
+sizeData = innerjoin(sizeData, tt);
+
+sizeData = movevars(sizeData, 'Event', 'After', 'Sample');
+
+sizeData = table2struct(sizeData, 'ToScalar', true);
+
+sizeData.dataBinned = Data.sizeFull.dataBinned;
+sizeData.obsInCostFunction = Data.sizeFull.obsInCostFunction;
+sizeData.nSamples = Data.sizeFull.nSamples;
+
+Data.sizeFull = sizeData;
+
+
+sizeData = struct2table(Data.sizeFull.dataBinned);
+
+sizeData.Event = [];
+sizeData = innerjoin(sizeData, tt);
+sizeData = movevars(sizeData, 'Event', 'After', 'Yearday');
+sizeData = table2struct(sizeData, 'ToScalar', true);
+
+Data.sizeFull.dataBinned = sizeData;
+

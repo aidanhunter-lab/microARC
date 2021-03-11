@@ -10,6 +10,7 @@ obsInCostFunction_size = Data.size.obsInCostFunction;
 dat = Data.scalar;
 % sizeDat = Data.size;
 sizeDatBinned = Data.size.dataBinned;
+sizeDatFullBinned = Data.sizeFull.dataBinned;
 
 dat.waterMass = dat.waterMass(dat.Event);
 fields = fieldnames(dat);
@@ -243,11 +244,14 @@ Data.scalar.scaled_Value(~Data.scalar.inCostFunction) = nan;
 % There are no covariates available in these data, so standardise by
 % substracting the mean and dividing by the standard deviation across size
 % classes, after log-transforming (cell and N concentrations) or
-% logit-transforming (bio-volume)
+% logit-transforming (bio-volume)... there's probably not much point in
+% standardising these size spectra
+
+% aggregated size spectra -- no sampling event covariate
 
 vars = unique(sizeDatBinned.Variable, 'stable'); % size spectra measurement types (cell concentration, bio-volume, or nitrogen concentration)
-usc = unique(sizeDatBinned.scenario);
-nsc = length(usc); % number of size spectra samples
+scenarios = unique(sizeDatBinned.scenario);
+groups = unique(sizeDatBinned.trophicLevel);
 
 for i = 1:length(vars)
     varLabel = vars{i};
@@ -258,24 +262,79 @@ for i = 1:length(vars)
         case 'BioVol'
             Data.size.(['scaleFun_' varLabel]) = @(mu,sig,x) (log(x ./ (1-x)) - mu) ./ sig;
     end
-    for j = 1:nsc
-        indj = indi & strcmp(sizeDatBinned.scenario, usc{j});
-        y = sizeDatBinned.Value(indj);
-        switch varLabel
-            case {'CellConc', 'NConc'}
-                yl = log(y);
-            case 'BioVol'
-                yl = log(y ./ (1-y));
+    for j = 1:length(scenarios)
+        indj = indi & strcmp(sizeDatBinned.scenario, scenarios{j});
+        for k = 1:length(groups)
+            indk = indj & strcmp(sizeDatBinned.trophicLevel, groups{k});
+
+            y = sizeDatBinned.Value(indk);
+            switch varLabel
+                case {'CellConc', 'NConc'}
+                    yl = log(y);
+                case 'BioVol'
+                    yl = log(y ./ (1-y));
+            end
+            mu = mean(yl);
+            sig = std(yl);
+            sizeDatBinned.scale_mu(indk,:) = mu;
+            sizeDatBinned.scale_sig(indk,:) = sig;
+            sizeDatBinned.scaled_Value(indk,:) = Data.size.(['scaleFun_' varLabel])(mu, sig, y);
         end
-        mu = mean(yl);
-        sig = std(yl);
-        sizeDatBinned.scale_mu(indj,:) = mu;
-        sizeDatBinned.scale_sig(indj,:) = sig;
-        sizeDatBinned.scaled_Value(indj,:) = Data.size.(['scaleFun_' varLabel])(mu, sig, y);
-    end
+    end    
 end
 
 Data.size.dataBinned = sizeDatBinned;
+
+
+% full size spectra -- here we have a sampling event covariate, and some
+% events have measures over multiple depths... but just repeat the process
+% used for the aggregated data.
+
+vars = unique(sizeDatFullBinned.Variable, 'stable'); % size spectra measurement types (cell concentration, bio-volume, or nitrogen concentration)
+cruises = unique(sizeDatFullBinned.Cruise);
+events = unique(sizeDatFullBinned.Event);
+groups = unique(sizeDatFullBinned.trophicLevel);
+
+
+for i = 1:length(vars)
+    varLabel = vars{i};
+    indi = strcmp(sizeDatFullBinned.Variable, vars{i});    
+    switch varLabel
+        case {'CellConc', 'NConc'}
+            Data.sizeFull.(['scaleFun_' varLabel]) = @(mu,sig,x) (log(x)-mu) ./ sig;
+        case 'BioVol'
+            Data.sizeFull.(['scaleFun_' varLabel]) = @(mu,sig,x) (log(x ./ (1-x)) - mu) ./ sig;
+    end
+    for j = 1:length(cruises)
+        indj = indi & strcmp(sizeDatFullBinned.Cruise, cruises{j});
+        for k = 1:length(groups)
+            indk = indj & strcmp(sizeDatFullBinned.trophicLevel, groups{k});            
+            for je = 1:length(events)
+                inde = indk & sizeDatFullBinned.Event == events(je);
+                depths = unique(sizeDatFullBinned.Depth(inde));                
+                for jd = 1:length(depths)                    
+                    indd = inde & sizeDatFullBinned.Depth == depths(jd);                    
+                    y = sizeDatFullBinned.Value(indd);
+                    switch varLabel
+                        case {'CellConc', 'NConc'}
+                            yl = log(y);
+                        case 'BioVol'
+                            yl = log(y ./ (1-y));
+                    end
+                    mu = mean(yl);
+                    sig = std(yl);
+                    sizeDatFullBinned.scale_mu(indd,:) = mu;
+                    sizeDatFullBinned.scale_sig(indd,:) = sig;
+                    sizeDatFullBinned.scaled_Value(indd,:) = Data.sizeFull.(['scaleFun_' varLabel])(mu, sig, y);
+                end
+            end
+        end
+    end    
+end
+
+Data.sizeFull.dataBinned = sizeDatFullBinned;
+
+
 
 
 %% Plots of standardised data
@@ -441,22 +500,37 @@ if ~isempty(v) && any(strcmp(v(1,:), 'plotSizeData'))
             ys = d.scaled_Value; % scaled data
             x = d.size;
             
+            trophicLevels = unique(d.trophicLevel);
+            ntrophicLevels = length(trophicLevels);
+            nsizes = length(unique(d.sizeClass));
+            y = reshape(y, [nsizes, ntrophicLevels]);
+            ys = reshape(ys, [nsizes, ntrophicLevels]);
+            x = reshape(x, [nsizes, ntrophicLevels]);
+            
+            Cols = [0 1 0; 1 0 0];
+            
             % Compare raw data to standardised data
             figure
             subplot(1,2,1)
-            loglog(x, y, 'ko-')
+            
+            lplt = loglog(x, y, 'o-');
+            
+            set(lplt, {'color'}, num2cell(Cols, 2))
+            
+            legend(trophicLevels)
+
             hold on
             
             ca = gca; xl = ca.XLim; yl = ca.YLim;
             
-            mu = mean(log10(y));
-            s = std(log10(y));
-            lb = 10 .^ (mu-s);
-            ub = 10 .^ (mu+s);
-            
-            line(xl, 10 .^ [mu mu], 'Color', [0 0 0], 'LineStyle', '--')
-            line(xl, [lb lb], 'Color', [0 0 0], 'LineStyle', ':')
-            line(xl, [ub ub], 'Color', [0 0 0], 'LineStyle', ':')
+%             mu = mean(log10(y));
+%             s = std(log10(y));
+%             lb = 10 .^ (mu-s);
+%             ub = 10 .^ (mu+s);
+%             
+%             line(xl, 10 .^ [mu mu], 'Color', [0 0 0], 'LineStyle', '--')
+%             line(xl, [lb lb], 'Color', [0 0 0], 'LineStyle', ':')
+%             line(xl, [ub ub], 'Color', [0 0 0], 'LineStyle', ':')
             
             
             xlabel('ESD (\mum)');
@@ -475,19 +549,21 @@ if ~isempty(v) && any(strcmp(v(1,:), 'plotSizeData'))
             
             
             subplot(1,2,2)
-            semilogx(x, ys, 'ko-')
+            lplt = semilogx(x, ys, 'o-');
+            set(lplt, {'color'}, num2cell(Cols, 2))
+
             hold on
             
             ca = gca; xl = ca.XLim; yl = ca.YLim;
             
-            mu = mean(ys);
-            s = std(ys);
-            lb = mu-s;
-            ub = mu+s;
-            
-            line(xl, [mu mu], 'Color', [0 0 0], 'LineStyle', '--')
-            line(xl, [lb lb], 'Color', [0 0 0], 'LineStyle', ':')
-            line(xl, [ub ub], 'Color', [0 0 0], 'LineStyle', ':')
+%             mu = mean(ys);
+%             s = std(ys);
+%             lb = mu-s;
+%             ub = mu+s;
+%             
+%             line(xl, [mu mu], 'Color', [0 0 0], 'LineStyle', '--')
+%             line(xl, [lb lb], 'Color', [0 0 0], 'LineStyle', ':')
+%             line(xl, [ub ub], 'Color', [0 0 0], 'LineStyle', ':')
             
             
             xlabel('ESD (\mum)');

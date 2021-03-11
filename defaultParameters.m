@@ -107,8 +107,8 @@ Params.scalars = {
     'aP'
     'theta'
     'xi'
-%     'Gmax'
-    'k_G'
+    'Gmax'
+%     'k_G'
     'Lambda'
     'lambda_max'
     'wDOM'
@@ -131,8 +131,8 @@ Params.sizeDependent = {
     'aN_QC_b'
     'pmax_a'
     'pmax_b'
-    'Gmax_a'
-    'Gmax_b'
+    'k_G_a'
+    'k_G_b'
     'wp_a'
     'wp_b'
     'beta1'
@@ -178,10 +178,23 @@ Params.pmax_a = 50;
 Params.pmax_b = -0.15;
 Params.pmax = [];
 
-% maximum grazing rate
-Params.Gmax_a = 25;
-Params.Gmax_b = -3;
-Params.Gmax = [];
+% % maximum grazing rate
+% Params.Gmax_a = 25;
+% Params.Gmax_b = -3;
+% Params.Gmax = [];
+
+% half-saturation prey concentration (mmol N / m^3) for grazing uptake
+Params.k_G_a = 0.5;
+Params.k_G_b = 0.18;
+Params.k_G = [];
+
+% k_G_a = 0.25;
+% k_G_b = 0.4;
+% k_G = k_G_a .* FixedParams.PPsize .^ k_G_b;
+% Gmax = 22;
+% PC = linspace(0, 20, 500);
+% U = Gmax .* PC ./ (PC + k_G);
+% plot(PC, U)
 
 
 % sinking plankton
@@ -203,8 +216,8 @@ Params.Tref = 20;           % reference temperature (degrees C)
 Params.A = 0.05;            % temperature dependence (unitless)
 Params.h = 10;              % curvature on quota uptake limitation
 Params.m = 0.05;            % linear plankton mortality (1/day)
-Params.k_G = 1;             % half-saturation prey concentration (mmol N / m^3) for grazing uptake
-% Params.Gmax = 22;           % maximum grazing rate
+% Params.k_G = 1;             % half-saturation prey concentration (mmol N / m^3) for grazing uptake
+Params.Gmax = 5;            % maximum grazing rate
 Params.Lambda = -1;         % prey refuge parameter (unitless)
 Params.lambda_max = 0.7;    % maximum prey assimilation efficiency
 
@@ -234,8 +247,8 @@ Bounds.aP         = [0, 0.5];
 % Bounds.aP         = [0.001, 0.5];
 Bounds.theta      = [3, 5];
 Bounds.xi         = [1.5, 5];
-% Bounds.Gmax       = [1, 30];
-Bounds.k_G        = [0.01, 5];
+Bounds.Gmax       = [0, 50];
+% Bounds.k_G        = [0.01, 5];
 Bounds.Lambda     = [-1.5, -0.5];
 Bounds.lambda_max = [0.5, 0.9];
 Bounds.wDOM       = [0, 0];
@@ -286,8 +299,10 @@ Bounds.pmax_a = [5, 100];
 % Bounds.pmax_b = [-0.7, -0.09];
 Bounds.pmax_b = [-0.7, 0];
 
-Bounds.Gmax_a = [0, 100];
-Bounds.Gmax_b = [-3, 0];
+% Bounds.Gmax_a = [0, 100];
+% Bounds.Gmax_b = [-3, 0];
+Bounds.k_G_a = [0, 10];
+Bounds.k_G_b = [0, 1];
 
 Bounds.beta1 = [0.5, 1];
 Bounds.beta2 = [0, 0.9];

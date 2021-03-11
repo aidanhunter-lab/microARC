@@ -32,3 +32,7 @@ end
 
 Data.size.obsInCostFunction = obsSize;
 Data.size.dataBinned.inCostFunction = ismember(Data.size.dataBinned.Variable, obsSize);
+
+Data.sizeFull.obsInCostFunction = obsSize;
+Data.sizeFull.dataBinned.inCostFunction = ismember(Data.sizeFull.dataBinned.Variable, obsSize);
+
