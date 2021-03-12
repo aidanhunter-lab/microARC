@@ -7,7 +7,7 @@ v0 = nan(FixedParams.nEquations, Forc.nTraj); % state variable initial values
 NO3ic = squeeze(Forc.NO3ic(:,1,:));
 v0(FixedParams.IN_index,:) = NO3ic;
 
-% Phytoplankton - dimension = [size, depth, nutrient, trajectory]
+% Plankton - dimension = [size, depth, nutrient, trajectory]
 % Split the SINMOD (PS & PL) plankton N estimates evenly across length classes
 smallCell_N = squeeze(Forc.PSic(:,1,:));
 largeCell_N = squeeze(Forc.PLic(:,1,:));
@@ -24,45 +24,44 @@ Crat = 0.75;
 Q_N = Params.Qmin_QC + Crat .* Params.delQ_QC;
 P.C = P.N ./ Q_N;
 
-% % Initialise carbon by assuming a C:N ratio of 163:22 (Martiny et al. Sci. Data 1, 140048 (2014))
-% CNrat = 163/22;
-% P.C = CNrat * P.N;
-
 % Set initial chlorophyll as chlFrac the maximum ratio with N
 chlN_max = Params.theta; % maximum Chl:N ratio (mg Chl / mmol N)
 chlFrac = 0.75;
+% P.Chl = chlFrac * chlN_max .* P.N(FixedParams.phytoplankton,:,:);
 P.Chl = chlFrac * chlN_max .* P.N;
 
-% combine C, N & Chl
-P0 = nan(FixedParams.nPP_size, FixedParams.nz, FixedParams.nPP_nut, Forc.nTraj);
+% autotrophs
+PP = structfun(@(z) z(FixedParams.phytoplankton,:,:), P, 'UniformOutput', false);
+vPP = nan(FixedParams.nPP_size, FixedParams.nz, FixedParams.nPP_nut, Forc.nTraj);
 for i = 1:FixedParams.nPP_nut
-    P0(:,:,i,:) = reshape(P.(FixedParams.PP_nut{i}), ...
+    vPP(:,:,i,:) = reshape(PP.(FixedParams.PP_nut{i}), ...
         [FixedParams.nPP_size FixedParams.nz 1 Forc.nTraj]);
-%     P0(:,:,i,:) = reshape(eval(['P_' FixedParams.PP_nut{i}]), ... 
-%         [FixedParams.nPP_size FixedParams.nz 1 Forc.nTraj]);
 end
 
-v0(FixedParams.PP_index,:) = reshape(P0, [FixedParams.nPP * FixedParams.nz Forc.nTraj]);
+v0(FixedParams.PP_index,:) = reshape(vPP, [FixedParams.nPP * FixedParams.nz Forc.nTraj]);
 
+% heterotrophs
+ZP = structfun(@(z) z(FixedParams.zooplankton,:,:), P, 'UniformOutput', false);
+vZP = nan(FixedParams.nZP_size, FixedParams.nz, FixedParams.nZP_nut, Forc.nTraj);
+for i = 1:FixedParams.nZP_nut
+    vZP(:,:,i,:) = reshape(ZP.(FixedParams.ZP_nut{i}), ...
+        [FixedParams.nZP_size FixedParams.nz 1 Forc.nTraj]);
+end
 
-% Zooplankton - dimension = [depth, trajectory]
-% Zooplankton are not assigned any particular size class, so just
-% initialise their total carbon content as some fraction of the total
-% phytoplankton carbon content
-Z_P_frac = 0.25;
-tot_PC = squeeze(sum(P.C));
-v0(FixedParams.ZP_index,:) = Z_P_frac * tot_PC;
+v0(FixedParams.ZP_index,:) = reshape(vZP, [FixedParams.nZP * FixedParams.nz Forc.nTraj]);
+
 
 % Organic matter - dimension = [type, depth, nutrient, trajectory]
 OM = nan(FixedParams.nOM_type, FixedParams.nz, FixedParams.nOM_nut, Forc.nTraj);
 tot_PN = squeeze(sum(P.N));
+tot_PC = squeeze(sum(P.C));
 
 OM_frac = 0.05;
 DOM_frac = 0.5;
-DOC = DOM_frac * OM_frac .* (v0(FixedParams.ZP_index,:) + tot_PC);
-POC = (1-DOM_frac) * OM_frac .* (v0(FixedParams.ZP_index,:) + tot_PC);
-DON = DOM_frac * OM_frac .* (Z_P_frac * tot_PN + tot_PN);
-PON = (1-DOM_frac) * OM_frac .* (Z_P_frac * tot_PN + tot_PN);
+DOC = DOM_frac * OM_frac .* tot_PC;
+POC = (1-DOM_frac) * OM_frac .* tot_PC;
+DON = DOM_frac * OM_frac .* tot_PN;
+PON = (1-DOM_frac) * OM_frac .* tot_PN;
 OM(FixedParams.DOM_index,:,FixedParams.OM_C_index,:) = DOC;
 OM(FixedParams.DOM_index,:,FixedParams.OM_N_index,:) = DON;
 OM(FixedParams.POM_index,:,FixedParams.OM_C_index,:) = POC;

@@ -62,6 +62,11 @@ end
 if isempty(FixedParams.nPP_nut)
     FixedParams.nPP_nut = length(FixedParams.PP_nut);              % number of nutrient types
 end
+if isempty(FixedParams.nZP_nut)
+    FixedParams.nZP_nut = length(FixedParams.ZP_nut);              % number of nutrient types
+end
+
+
 if isempty(FixedParams.PPdia)
     FixedParams.PPdia = 2 .^ (0:FixedParams.nPP_size-1);           % cell diameter
 end
@@ -71,16 +76,21 @@ end
 if isempty(FixedParams.nPP)
     FixedParams.nPP = FixedParams.nPP_size * FixedParams.nPP_nut;  % number of phytoplankton classes
 end
+if isempty(FixedParams.nZP)
+    FixedParams.nZP = FixedParams.nZP_size * FixedParams.nZP_nut;  % number of phytoplankton classes
+end
+
+
 if isempty(FixedParams.diatoms)
-    FixedParams.diatoms = FixedParams.PPdia >= 10;                 % assume large phytoplankton are diatoms - only needed to split SINMOD output over classes during state variable initialisation
+    FixedParams.diatoms = FixedParams.diaAll >= 10;                 % assume large phytoplankton are diatoms - only needed to split SINMOD output over classes during state variable initialisation
 end
 if isempty(FixedParams.phytoplankton)
     FixedParams.phytoplankton = [true(1,FixedParams.nPP_size) ... 
-        false(1,FixedParams.nZP)]';                                % index phytoplankton
+        false(1,FixedParams.nZP_size)]';                                % index phytoplankton
 end
 if isempty(FixedParams.zooplankton)
     FixedParams.zooplankton = [false(1,FixedParams.nPP_size) ... 
-    true(1,FixedParams.nZP)]';                                     % index zooplankton 
+    true(1,FixedParams.nZP_size)]';                                     % index zooplankton 
 end
 
 % Organic matter
@@ -124,7 +134,8 @@ FixedParams.dt_max = 1 /tx;
 %% Variable Parameters
 
 % Size-dependent
-Vol = FixedParams.PPsize;
+Vol = FixedParams.sizeAll;
+% Vol = FixedParams.PPsize;
 if isempty(Params.Q_C)
     Params.Q_C = powerFunction(Params.Q_C_a, Params.Q_C_b, Vol);
 end

@@ -9,6 +9,7 @@ nIN = FixedParams.nIN;
 nPP = FixedParams.nPP;
 nPP_nut = FixedParams.nPP_nut;
 nZP = FixedParams.nZP;
+nZP_nut = FixedParams.nZP_nut;
 nOM = FixedParams.nOM;
 nOM_type = FixedParams.nOM_type;
 nOM_nut = FixedParams.nOM_nut;
@@ -20,7 +21,6 @@ FixedParams.IN_index = IN_index;
 % Phytoplankton
 PP_index = [false(1, nIN * nz)  true(1, nPP * nz) false(1, (nZP + nOM) * nz)]';
 FixedParams.PP_index = PP_index;
-
 if nPP_nut > 1
     % index phytoplankton nutrients
     for i = 1:FixedParams.nPP_nut
@@ -32,6 +32,14 @@ end
 % Zooplankton
 ZP_index = [false(1, (nIN + nPP) * nz) true(1, nZP * nz) false(1, nOM * nz)]';
 FixedParams.ZP_index = ZP_index;
+if nZP_nut > 1
+    % index heterotroph nutrients
+    for i = 1:FixedParams.nZP_nut
+        FixedParams.(['ZP_' FixedParams.ZP_nut{i} '_index']) = ...
+            strcmp(FixedParams.ZP_nut{i}, FixedParams.ZP_nut);
+    end
+end
+
 
 % Organic matter
 OM_index = [false(1, (nIN + nPP + nZP) * nz) true(1, nOM * nz)]';

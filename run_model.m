@@ -261,7 +261,7 @@ v0 = initialiseVariables(FixedParams, Params, Forc);
 % NOTE:
 % Order of variables = inorganic nutrients [depth]
 %                      phytoplankton       [size, depth, nutrient]
-%                      zooplankton         [depth]
+%                      zooplankton         [depth, nutrient]
 %                      organic matter      [type, depth, nutrient]
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

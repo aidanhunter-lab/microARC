@@ -9,10 +9,13 @@ params = parameterList.Params;
 nz = fixedParams.nz;    % number of depth layers
 nPP_size = fixedParams.nPP_size;  % number of phytoplankton size classes
 nPP_nut = fixedParams.nPP_nut;  % number of phytoplankton nutrient classes
+nZP_size = fixedParams.nZP_size;  % number of zooplankton size classes
+nZP_nut = fixedParams.nZP_nut;  % number of zooplankton nutrient classes
 nOM_type = fixedParams.nOM_type;  % number of organic matter types
 nOM_nut = fixedParams.nOM_nut;  % number of organic nutrient classes
 phyto = fixedParams.phytoplankton;
 zoo = fixedParams.zooplankton;
+nsize = nPP_size + nZP_size;
 
 %% INITIAL CONDITIONS
 
@@ -22,8 +25,14 @@ N = v_in(fixedParams.IN_index)';
 % Plankton
 PP = reshape(v_in(fixedParams.PP_index), [nPP_size nz nPP_nut]); % phytoplankton (all nutrients)
 P_C = PP(:,:,fixedParams.PP_C_index);
-Z_C = v_in(fixedParams.ZP_index)'; % zooplankton (carbon)
-B_C = [P_C; Z_C]; % all planktonic carbon
+ZP = reshape(v_in(fixedParams.ZP_index), [nZP_size nz nZP_nut]);
+Z_C = ZP(:,:,fixedParams.ZP_C_index); % zooplankton (carbon)
+
+B = cat(1, PP, ...
+    cat(3, ZP, zeros(1, nz, 1))); % all plankton
+
+B_C = B(:,:,fixedParams.PP_C_index); % all planktonic carbon
+
 
 % Organic matter
 OM =reshape(v_in(fixedParams.OM_index), [nOM_type nz nOM_nut]);
@@ -55,10 +64,9 @@ I = Isurf * exp(-att);
 % Physiology
 %~~~~~~~~~~~
 
-% Phytoplankton N and Chl quotas relative to C
-Q_N = PP(:,:,fixedParams.PP_N_index) ./ P_C;
-Q_Chl = PP(:,:,fixedParams.PP_Chl_index) ./ P_C;
-% Q_Chl_N = PP(:,:,fixedParams.PP_Chl_index) ./ PP(:,:,fixedParams.PP_N_index); % Chl:N ratio
+% N and Chl quotas relative to C
+Q_N = B(:,:,fixedParams.PP_N_index) ./ B_C;
+Q_Chl = B(:,:,fixedParams.PP_Chl_index) ./ B_C;
 
 % Nutrient limitation
 gammaN = max(0, min(1, (Q_N - params.Qmin_QC) ./ params.delQ_QC));
@@ -78,27 +86,31 @@ B_C_mortality = params.m .* B_C; % linear mortality
 % Autotrophy
 %~~~~~~~~~~~
 
-zeros_size_nz = zeros(nPP_size, nz);
+% zeros_size_nz = zeros(nPP_size, nz);
+zeros_size_nz = zeros(nsize, nz);
 
 % Nutrient uptake
 V_N = MichaelisMenton(params.Vmax_QC, params.kN, N) .* gammaT .* Qstat;
+V_N(zoo,:) = 0;
 
 % V_N = params.Vmax_QC ./ (1 + params.Vmax_QC ./ (params.aN_QC .* N)) .* gammaT .* Qstat; % nitrogen uptake rate (mmol N / mmol C / day)
-N_uptake = V_N .* P_C; % mmol N / m^3 / day
+N_uptake = V_N .* B_C; % mmol N / m^3 / day
 N_uptake_losses = sum(N_uptake);
 
 % Photosynthesis
 zeroLight = all(I == 0);
 if zeroLight
     V_Chl = zeros_size_nz;
-    V_C = zeros(nPP_size+1, nz);
+    V_C = zeros_size_nz;
+%     V_C = zeros(nPP_size+1, nz);
 else
     psat = params.pmax .* gammaT .* gammaN; % light saturated photosynthetic rate
     aP_Q_I = (params.aP .* I) .* Q_Chl;
     pc = psat .* (1 - exp(-aP_Q_I ./ psat )); % photosynthetic (carbon production) rate (1 / day)
     rho = params.theta .* pc ./ aP_Q_I;  % proportion of new nitrogen prodcution allocated to chlorophyll (mg Chl / mmol N)
     V_Chl = rho .* V_N; % chlorophyll production rate (mg Chl / mmol C / day)
-    V_C = [max(0, pc - params.xi .* V_N); zeros(1, nz)];
+    V_C = max(0, pc - params.xi .* V_N);
+%     V_C = [max(0, pc - params.xi .* V_N); zeros(1, nz)];
 end
 
 
@@ -111,23 +123,13 @@ F = sum(B_C); % total prey carbon
 BC2 = B_C .^ 2;
 Phi = BC2 ./ sum(BC2); % prey preference
 
-G = (MichaelisMenton(params.Gmax, [params.k_G; params.k_G(end)], F) .* ... 
+G = (MichaelisMenton(params.Gmax, params.k_G, F) .* ... 
     gammaT .* (1-exp(params.Lambda .* F))) .* Phi;  % grazing rate (1 / day)
 
-% G = (MichaelisMenton([params.Gmax; params.Gmax(end)], params.k_G, F) .* ... 
-%     gammaT .* (1-exp(params.Lambda .* F))) .* Phi;  % grazing rate (1 / day)
-
-% G = (MichaelisMenton(params.Gmax, params.k_G, F) .* ... 
-%     gammaT .* (1-exp(params.Lambda .* F))) .* Phi;  % grazing rate (1 / day)
-
-% G = (params.Gmax .* gammaT .* F ./ (params.k_G + F) .* ... 
-%     (1-exp(params.Lambda .* F))) .* Phi; % grazing rate (1 / day)
-
-predation_losses_C = G .* Z_C; % mmol C / m^3 / day
-predation_gains_C = [zeros_size_nz; ... 
+predation_losses_C = G .* B_C; % mmol C / m^3 / day
+predation_gains_C = [zeros(nPP_size, nz); ... 
     params.lambda_max .* sum(predation_losses_C)];
-
-
+    
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % Sources and sinks of organic matter
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -135,36 +137,42 @@ predation_gains_C = [zeros_size_nz; ...
 % OM sources are phyto and zooplankton mortality. Organic nitrogen is
 % modelled but there is no zooplankton N class, so assume that zooplankton
 % N quota is the same as their prey (some data on ths is would be useful...)
-phyto_C_losses = predation_losses_C(phyto,:); % Assume that zooplankton N quota is the same as their prey (some data on ths is would be useful...)
-Q_N_zoo = sum(Q_N .* (phyto_C_losses ./ sum(phyto_C_losses)));
+% phyto_C_losses = predation_losses_C(phyto,:); % Assume that zooplankton N quota is the same as their prey (some data on ths is would be useful...)
+% Q_N_zoo = sum(Q_N .* (phyto_C_losses ./ sum(phyto_C_losses)));
 
 % Messy feeding
-lambda_predLoss = (1 - params.lambda_max) .* predation_losses_C;
-beta_lambda_predLoss = params.beta .* lambda_predLoss;
-OM_mess_C = [sum(beta_lambda_predLoss); ... 
-    sum(lambda_predLoss-beta_lambda_predLoss)]; % OM_mess=[DOM_mess; POM_mess] (mmol C / m^3 / day)
-OM_mess_N = Q_N_zoo .* OM_mess_C;
+lambda_predLoss_C = (1 - params.lambda_max) .* predation_losses_C;
+beta_lambda_predLoss_C = params.beta .* lambda_predLoss_C;
+OM_mess_C = [sum(beta_lambda_predLoss_C); ... 
+    sum(lambda_predLoss_C-beta_lambda_predLoss_C)]; % OM_mess=[DOM_mess; POM_mess] (mmol C / m^3 / day)
+
+lambda_predLoss_N = Q_N .* lambda_predLoss_C;
+beta_lambda_predLoss_N = params.beta .* lambda_predLoss_N;
+OM_mess_N = [sum(beta_lambda_predLoss_N); ... 
+    sum(lambda_predLoss_N-beta_lambda_predLoss_N)]; % OM_mess=[DOM_mess; POM_mess] (mmol N / m^3 / day)
+
+% OM_mess_N = Q_N_zoo .* OM_mess_C;
 
 % Mortality
 beta_m_B = params.beta .* B_C_mortality;
 OM_mort_C = [sum(beta_m_B); sum(B_C_mortality - beta_m_B)]; % OM_mort=[DOM_mort; POM_mort] (mmol C / m^3 / day)
-B_N_mortality = [Q_N; Q_N_zoo] .* B_C_mortality;
+% B_N_mortality = [Q_N; Q_N_zoo] .* B_C_mortality;
+B_N_mortality = Q_N .* B_C_mortality;
 beta_m_B = params.beta .* B_N_mortality;
 OM_mort_N = [sum(beta_m_B); sum(B_N_mortality - beta_m_B)]; % OM_mort=[DOM_mort; POM_mort] (mmol N / m^3 / day)
 
 % Remineralisation
 OM_remin = params.rOM .* OM;
-OM_remin_N = OM_remin(:,:,fixedParams.OM_N_index);
 
 SOM_C = OM_mort_C + OM_mess_C - OM_remin(:,:,fixedParams.OM_C_index); % (mmol C / m^3 / day)
-SOM_N = OM_mort_N + OM_mess_N - OM_remin_N; % (mmol N / m^3 / day)
+SOM_N = OM_mort_N + OM_mess_N - OM_remin(:,:,fixedParams.OM_N_index); % (mmol N / m^3 / day)
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % Sources of inorganic nutrients
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 % Remineralisation
-SN = sum(OM_remin_N); % (mmol N / m^3 / day)
+SN = sum(OM_remin(:,:,fixedParams.OM_N_index)); % (mmol N / m^3 / day)
 
 %~~~~~~~~~~
 % Diffusion
@@ -176,17 +184,19 @@ OM_C_t = OM_C';
 v_diffuse = diffusion_1D([N(:), B_C_t, OM_C_t], K, fixedParams.zwidth, fixedParams.delz);
 
 N_diffuse = v_diffuse(:,1);
-B_C_diffuse = v_diffuse(:,2:nPP_size+2)';
-OM_C_diffuse = v_diffuse(:,end-nOM_nut+1:end)';
+B_C_diffuse = v_diffuse(:,2:nPP_size+nZP_size+1)';
+OM_C_diffuse = v_diffuse(:,end-nOM_type+1:end)';
 
 %~~~~~~~~
 % Sinking
 %~~~~~~~~
 
-v_sink = sinking([B_C_t(:,phyto), OM_C_t], [params.wp, params.wk], fixedParams.zwidth);
+v_sink = sinking([B_C_t, OM_C_t], [params.wp, params.wk], fixedParams.zwidth);
+% v_sink = sinking([B_C_t(:,phyto), OM_C_t], [params.wp, params.wk], fixedParams.zwidth);
 
-B_C_sink = [v_sink(:,1:nPP_size), zeros(nz, 1)]';
-OM_C_sink = v_sink(:,nPP_size+1:end)';
+B_C_sink = v_sink(:,1:nPP_size+nZP_size)';
+% B_C_sink = [v_sink(:,1:nPP_size), zeros(nz, 1)]';
+OM_C_sink = v_sink(:,nPP_size+nZP_size+1:end)';
 
 %~~~~~
 % ODEs
@@ -194,15 +204,17 @@ OM_C_sink = v_sink(:,nPP_size+1:end)';
 
 % Inorganic nutrients
 dNdt = N_diffuse - N_uptake_losses(:) + SN(:);
+
 % Plankton
-fluxC_ = B_C_sink + B_C_diffuse - predation_losses_C - B_C_mortality; % terms applicable to both phyto and zoo - all plankton carbon flux terms (mmol C / m^3 / day) excluding uptake and predation gains
-fluxC = fluxC_ + predation_gains_C; % all plankton carbon flux terms excluding uptake
-fluxC_p = fluxC_(phyto,:);
-fluxN = N_uptake + Q_N .* fluxC_p; % mmol N / m^3 / day
-fluxChl = V_Chl .* P_C + Q_Chl .* fluxC_p; % mg Chl / m^3 / day
+fluxC_ = B_C_sink + B_C_diffuse - predation_losses_C - B_C_mortality; % mmol C / m^3 / day
+fluxC = fluxC_ + predation_gains_C;
+fluxN = N_uptake + Q_N .* fluxC; % mmol N / m^3 / day
+fluxChl = V_Chl .* B_C + Q_Chl .* fluxC_; % mg Chl / m^3 / day
 fluxC = V_C .* B_C + fluxC;
-dPPdt = cat(3, fluxC(phyto,:), fluxN, fluxChl);
-dZPdt = fluxC(zoo,:);
+dPPdt = cat(3, fluxC(phyto,:), fluxN(phyto,:), fluxChl(phyto,:));
+dZPdt = cat(3, fluxC(zoo,:), fluxN(zoo,:));
+
+
 % Organic matter
 fluxC_ = OM_C_diffuse + OM_C_sink;
 fluxN = OM(:,:,fixedParams.OM_N_index) ./ OM_C .* fluxC_ + SOM_N;
@@ -218,8 +230,8 @@ dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)];
 if (islogical(returnExtra) && returnExtra) || ... 
         (~islogical(returnExtra) && ~any(strcmp(returnExtra, 'none')))
     
-    cellDensity = P_C ./ params.Q_C;
-    biovolume = (1e-18 * [fixedParams.PPsize]) .* cellDensity;
+    cellDensity = B_C ./ params.Q_C;
+    biovolume = 1e-18 * fixedParams.sizeAll .* cellDensity;
     
     %~~~~~~~~~~~
     % 1D (depth)
@@ -257,12 +269,12 @@ if (islogical(returnExtra) && returnExtra) || ...
     extraOutput_2d.predation_losses_C = predation_losses_C;
     extraOutput_2d.predation_gains_C = predation_gains_C;
     
-    fields = fieldnames(extraOutput_2d);
-    for i = 1:length(fields)
-        if size(extraOutput_2d.(fields{i}), 1) == nPP_size
-            extraOutput_2d.(fields{i}) = [extraOutput_2d.(fields{i}); nan(1, nz)];
-        end
-    end
+%     fields = fieldnames(extraOutput_2d);
+%     for i = 1:length(fields)
+%         if size(extraOutput_2d.(fields{i}), 1) == nPP_size
+%             extraOutput_2d.(fields{i}) = [extraOutput_2d.(fields{i}); nan(1, nz)];
+%         end
+%     end
     
     
     

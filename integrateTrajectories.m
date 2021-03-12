@@ -7,6 +7,9 @@ nz = FixedParams.nz;
 nPP = FixedParams.nPP;
 nPP_size = FixedParams.nPP_size;
 nPP_nut = FixedParams.nPP_nut;
+nZP = FixedParams.nZP;
+nZP_size = FixedParams.nZP_size;
+nZP_nut = FixedParams.nZP_nut;
 nOM = FixedParams.nOM;
 nOM_type = FixedParams.nOM_type;
 nOM_nut = FixedParams.nOM_nut;
@@ -71,16 +74,16 @@ parfor i = 1:nTraj
                 % Extract state variable types from input vector
                 N = v_in(N_index);
                 P = reshape(v_in(P_index), [nPP_size nz nPP_nut]);
-                Z = v_in(Z_index);
+                Z = reshape(v_in(Z_index), [nZP_size nz nZP_nut]);
                 OM = reshape(v_in(OM_index), [nOM_type nz nOM_nut]);
                 % Infill values
                 nfill = sum(infillDepth(:,j,i));
                 N(infillDepth(:,j,i)) = repmat(N(replicateConc(:,j,i)), [nfill 1]);
                 P(:,infillDepth(:,j,i),:) = repmat(P(:,replicateConc(:,j,i),:), [1 nfill 1]);
-                Z(infillDepth(:,j,i)) = repmat(Z(replicateConc(:,j,i)), [nfill 1]);
+                Z(:,infillDepth(:,j,i),:) = repmat(Z(:,replicateConc(:,j,i),:), [1 nfill 1]);
                 OM(:,infillDepth(:,j,i),:) = repmat(OM(:,replicateConc(:,j,i),:), [1 nfill 1]);
                 % Recombine the input vector
-                v_in = [N; P(:); Z; OM(:)];
+                v_in = [N; P(:); Z(:); OM(:)];
             end
             % Integrate
             sol = odeSolver(@(t, v_in) ODEs(t, v_in, parameterList, forcing, j, false), [0 1], v_in, odeOptions);
@@ -98,8 +101,6 @@ parfor i = 1:nTraj
             break;
         end
     end
-    
-    
 end
 
 
@@ -108,12 +109,15 @@ if any(dry(:))
     % state variables
     N = OUT(N_index,:,:);
     P = reshape(OUT(P_index,:,:), [nPP_size nz nPP_nut nt nTraj]);
-    Z = OUT(Z_index,:,:);    
+    Z = reshape(OUT(Z_index,:,:), [nZP_size nz nZP_nut nt nTraj]);
+%     Z = OUT(Z_index,:,:);    
     OM = reshape(OUT(OM_index,:,:), [nOM_type nz nOM_nut nt nTraj]);
     N(dry) = nan;
     P(repmat(reshape(dry, [1 nz 1 nt nTraj]), [nPP_size 1 nPP_nut 1 1])) = nan;
-    P = reshape(P, [nPP * nz nt nTraj]);
-    Z(dry) = nan;
+    P = reshape(P, [nPP * nz nt nTraj]);    
+    Z(repmat(reshape(dry, [1 nz 1 nt nTraj]), [nZP_size 1 nZP_nut 1 1])) = nan;
+    Z = reshape(Z, [nZP * nz nt nTraj]);
+%     Z(dry) = nan;
     OM(repmat(reshape(dry, [1 nz 1 nt nTraj]), [nOM_type 1 nOM_nut 1 1])) = nan;
     OM = reshape(OM, [nOM * nz nt nTraj]);
     OUT = [N; P; Z; OM];
@@ -133,7 +137,7 @@ AUXVARS_2d = reshape(AUXVARS_2d, [(nPP_size + 1) nz nExtra(2) nt nTraj]);
 % Same for extra outputs...
 out.N = reshape(OUT(N_index,:,:), [1 nz nt nTraj]);
 out.P = reshape(OUT(P_index,:,:), [nPP_size nz nPP_nut nt nTraj]);
-out.Z = reshape(OUT(Z_index,:,:), [1 nz nt nTraj]);
+out.Z = reshape(OUT(Z_index,:,:), [nZP_size nz nZP_nut nt nTraj]);
 out.OM = reshape(OUT(OM_index,:,:), [nOM_type nz nOM_nut nt nTraj]);
 
 if sum(nExtra) > 0

@@ -7,7 +7,8 @@ if ~isempty(varargin)
         newvals = varargin{1};
         parnames = FixedParams.tunePars;
         npars = length(parnames);
-        V_PP = FixedParams.PPsize;
+        Vol = FixedParams.sizeAll;
+%         V_PP = FixedParams.PPsize;
         for i = 1:npars
             pn = parnames{i};
             Params.(pn) = newvals(i); % update scalars
@@ -18,21 +19,21 @@ if ~isempty(varargin)
                 param_a = Params.([Name '_a']);
                 param_b = Params.([Name '_b']);
                 if ~(any(strcmp(Name, {'Qmax_delQ'})) || any(strcmp(Name, {'wp'})))
-                    Params.(Name) = powerFunction(param_a, param_b, V_PP);
+                    Params.(Name) = powerFunction(param_a, param_b, Vol);
                 else
                     if any(strcmp(Name, {'wp'}))
-                        Params.(Name) = powerFunction(param_a, param_b, V_PP, ...
+                        Params.(Name) = powerFunction(param_a, param_b, Vol, ...
                             'UpperBound', FixedParams.maxSinkSpeed_P, 'Transpose', true);
                     end
                     if any(strcmp(Name, {'Qmax_delQ'}))
-                        Params.(Name) = 1 ./ (1 - powerFunction(param_a, param_b, V_PP));
+                        Params.(Name) = 1 ./ (1 - powerFunction(param_a, param_b, Vol));
                     end
                 end
             end
             
             if strcmp(pn, 'beta1') || strcmp(pn, 'beta2') || strcmp(pn, 'beta3')
                 Params.beta = doubleLogisticFunction(Params.beta1, Params.beta2, ...
-                    Params.beta3, log10(V_PP));
+                    Params.beta3, log10(Vol));
                 Params.beta(FixedParams.nPP_size+1) = Params.beta(FixedParams.nPP_size); % assume beta for zooplankton is equivalent to largest phytoplankton size class
             end
             
@@ -71,7 +72,8 @@ if ~isempty(varargin)
         end
         
         % Size-dependent parameters
-        V_PP = FixedParams.PPsize(:);
+        Vol = FixedParams.sizeAll(:);
+%         V_PP = FixedParams.PPsize(:);
         parNames = Params.sizeDependent;
         suf = {'_a', '_b'};
         for i = 1:length(parNames)
@@ -88,20 +90,20 @@ if ~isempty(varargin)
                     param_a = Params.([Name '_a']);
                     param_b = Params.([Name '_b']);
                     if ~(any(strcmp(Name, {'Qmax_delQ'})) || any(strcmp(Name, {'wp'})))
-                        Params.(Name) = powerFunction(param_a, param_b, V_PP);
+                        Params.(Name) = powerFunction(param_a, param_b, Vol);
                     else
                         if any(strcmp(Name, {'wp'}))
-                            Params.(Name) = powerFunction(param_a, param_b, V_PP, ...
+                            Params.(Name) = powerFunction(param_a, param_b, Vol, ...
                                 'UpperBound', FixedParams.maxSinkSpeed_P, 'Transpose', true);
                         end
                         if any(strcmp(Name, {'Qmax_delQ'}))
-                            Params.(Name) = 1 ./ (1 - powerFunction(param_a, param_b, V_PP));
+                            Params.(Name) = 1 ./ (1 - powerFunction(param_a, param_b, Vol));
                         end
                     end
                     
                     if strcmp(name, 'beta1') || strcmp(name, 'beta2') || strcmp(name, 'beta3')
                         Params.beta = doubleLogisticFunction(Params.beta1, Params.beta2, ...
-                            Params.beta3, log10(V_PP)); % flexible 3-parameter double logistic function
+                            Params.beta3, log10(Vol)); % flexible 3-parameter double logistic function
                         Params.beta(FixedParams.nPP_size+1) = Params.beta(FixedParams.nPP_size); % assume beta for zooplankton is equivalent to largest phytoplankton size class
                     end
                 end
