@@ -140,55 +140,81 @@ modData.size.scaled_Value = nan(n,1,nsamples);
 modData.size.scaled_Value_allEvents = nan(n,nevent,nsamples);
 
 
+
 for i = 1:length(allVarsSize)
     vs = allVarsSize{i};
     ind0 = strcmp(Data.size.dataBinned.Variable, vs);
     modData.size.Variable(ind0,:) = Data.size.dataBinned.Variable(ind0);
     modData.size.trophicLevel(ind0,:) = Data.size.dataBinned.trophicLevel(ind0);
-    
-    ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'autotroph');
-    
+        
     for j = 1:nsamples
         itraj = et(j,:); % trajectories associated with sampling event j
         [~, J] = max(sum(out.P(:,depth_ind,FixedParams.PP_Chl_index,etime,itraj))); % use modelled values from chl-max depth layer to compare to data
         J = squeeze(J);
         switch vs
             case 'NConc'
-                ymod = squeeze(out.P(1:1:FixedParams.nPP_size,depth_ind,FixedParams.PP_N_index,etime,itraj));
-                ymod_ = nan(FixedParams.nPP_size, nevent);
+                ymod = squeeze([out.P(:,depth_ind,FixedParams.PP_N_index,etime,itraj); ...
+                    out.Z(:,depth_ind,FixedParams.ZP_N_index,etime,itraj)]);
+                ymod_ = nan(size(ymod,1), nevent);
                 for k = 1:nevent
                     ymod_(:,k) = ymod(:,J(k,k),k,k);
                 end
                 ymod = ymod_;
                 ymodMean = mean(ymod, 2); % average size-spectra over sampling events
             case 'CellConc'
-                ymod = auxVars.cellDensity(1:1:FixedParams.nPP_size,depth_ind,etime,itraj);
-                ymod_ = nan(FixedParams.nPP_size, nevent);
+%                 ymod = auxVars.cellDensity(1:1:FixedParams.nPP_size,depth_ind,etime,itraj);
+                ymod = auxVars.cellDensity(:,depth_ind,etime,itraj);
+                ymod_ = nan(size(ymod,1), nevent);
                 for k = 1:nevent
                     ymod_(:,k) = ymod(:,J(k,k),k,k);
                 end
                 ymod = ymod_;
                 ymodMean = mean(ymod, 2); % average size-spectra over sampling events
             case 'BioVol'
-                ymod = auxVars.biovolume(1:FixedParams.nPP_size,depth_ind,etime,itraj);
-                ymod_ = nan(FixedParams.nPP_size, nevent);
+%                 ymod = auxVars.biovolume(1:FixedParams.nPP_size,depth_ind,etime,itraj);
+                ymod = auxVars.biovolume(:,depth_ind,etime,itraj);
+                ymod_ = nan(size(ymod,1), nevent);
                 for k = 1:nevent
                     ymod_(:,k) = ymod(:,J(k,k),k,k);
                 end
                 ymod = ymod_;
                 ymodMean = mean(ymod, 2); % average size-spectra over sampling events
         end
-        modData.size.Value(ind,j) = ymodMean;
-        modData.size.Value_allEvents(ind,:,j) = ymod;
+        
+        ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'autotroph');
+        
+        modData.size.Value(ind,j) = ymodMean(FixedParams.phytoplankton);
+        modData.size.Value_allEvents(ind,:,j) = ymod(FixedParams.phytoplankton,:);
 
         modData.size.scaled_Value(ind,:,j) = Data.size.(['scaleFun_' vs])( ...
             Data.size.dataBinned.scale_mu(ind), ...
-            Data.size.dataBinned.scale_sig(ind), ymodMean);
+            Data.size.dataBinned.scale_sig(ind), ymodMean(FixedParams.phytoplankton));
         modData.size.scaled_Value_allEvents(ind,:,j) = Data.size.(['scaleFun_' vs])( ...
-            Data.size.dataBinned.scale_mu(ind), ... 
-            Data.size.dataBinned.scale_sig(ind), ymod);
+            Data.size.dataBinned.scale_mu(ind), ...
+            Data.size.dataBinned.scale_sig(ind), ymod(FixedParams.phytoplankton,:));
+
+        
+        ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'heterotroph');
+        
+        if sum(FixedParams.zooplankton) ~= 1
+            % Number of modelled heterotrph size classes matches number
+            % of partitions in size data (there may only be one size class)
+            modData.size.Value(ind,j) = ymodMean(FixedParams.zooplankton);
+            modData.size.Value_allEvents(ind,:,j) = ymod(FixedParams.zooplankton,:);
+        else
+            modData.size.Value(ind,j) = repmat(ymodMean(FixedParams.zooplankton), [sum(ind) 1]);
+            modData.size.Value_allEvents(ind,:,j) = repmat(ymod(FixedParams.zooplankton,:), [sum(ind) 1]);
+        end
+
+        modData.size.scaled_Value(ind,:,j) = Data.size.(['scaleFun_' vs])( ...
+            Data.size.dataBinned.scale_mu(ind), ...
+            Data.size.dataBinned.scale_sig(ind), ymodMean(FixedParams.zooplankton));
+        modData.size.scaled_Value_allEvents(ind,:,j) = Data.size.(['scaleFun_' vs])( ...
+            Data.size.dataBinned.scale_mu(ind), ...
+            Data.size.dataBinned.scale_sig(ind), ymod(FixedParams.zooplankton,:));
     end
 end
+
 
 
 
@@ -356,7 +382,9 @@ switch selectFunction
         for i = 1:length(VarsSize)
             varLabel = VarsSize{i};
             ind0 = strcmp(Data.size.dataBinned.Variable, varLabel);
+
             ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'autotroph');
+            
             yobs = Data.size.dataBinned.Value(ind);
             ymod = modData.size.Value_allEvents(ind,:,:); % modelled values for each separate sampling event
             ymodMean = modData.size.Value(ind,:); % modelled values averaged over sampling events
@@ -445,10 +473,46 @@ switch selectFunction
 %             Lik = prod(1 ./ ((2*pi*sig2) .^ 0.5) .* exp(-0.5 .* (yobsTot_log - mu) .^ 2 ./ sig2)) .^ (1/m)            
             negLogLik_tot = 0.5 .* (m .* log2pi + sum(log(sig2) + (yobsTot_log - mu) .^ 2 ./ sig2)) ./ m;
             
-            L.([varLabel '_Rel']) = negLogLik_rel;
-            L.([varLabel '_Tot']) = negLogLik_tot;
-            L.(varLabel) = negLogLik_rel + negLogLik_tot;
+            L.([varLabel '_Rel_autotroph']) = negLogLik_rel;
+            L.([varLabel '_Tot_autotroph']) = negLogLik_tot;
+            L.([varLabel '_autotroph']) = negLogLik_rel + negLogLik_tot;
 
+            
+            ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'heterotroph');
+            
+            yobs = Data.size.dataBinned.Value(ind);
+            ymod = modData.size.Value_allEvents(ind,:,:); % modelled values for each separate sampling event
+            ymodMean = modData.size.Value(ind,:); % modelled values averaged over sampling events
+            
+            singleSizeClass = FixedParams.nZP_size == 1;
+            
+            if singleSizeClass
+                ymod = ymod(1,:,:);
+%                 ymodMean = ymodMean(1,:);
+                yobs = sum(yobs); % sum observations over size classes
+                
+                % dimension of ymod is [size, sampling event, replicate (trajectory choice), sample number (year or cruise)]
+                m = size(ymod, 3); % number of replicates (trajectory choices)
+                
+                % Lognormal likelihood for total abundance
+                yobsTot_log = log(yobs);
+                ymodTot_log = log(ymod);
+                mu = squeeze(mean(ymodTot_log));
+                sig2 = squeeze(var(ymodTot_log));
+                
+                negLogLik_tot = 0.5 .* (m .* log2pi + sum(log(sig2) + (yobsTot_log - mu) .^ 2 ./ sig2)) ./ m;
+
+                L.([varLabel '_heterotroph']) = negLogLik_tot;
+                
+            else
+                
+                warning('still need to set up the multiple size class model!')
+                
+                
+            end
+            
+            L.(varLabel) = L.([varLabel '_autotroph']) + L.([varLabel '_heterotroph']);
+            
         end
         
         costComponents = L;

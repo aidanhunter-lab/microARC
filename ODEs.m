@@ -24,9 +24,9 @@ N = v_in(fixedParams.IN_index)';
 
 % Plankton
 PP = reshape(v_in(fixedParams.PP_index), [nPP_size nz nPP_nut]); % phytoplankton (all nutrients)
-P_C = PP(:,:,fixedParams.PP_C_index);
+% P_C = PP(:,:,fixedParams.PP_C_index);
 ZP = reshape(v_in(fixedParams.ZP_index), [nZP_size nz nZP_nut]);
-Z_C = ZP(:,:,fixedParams.ZP_C_index); % zooplankton (carbon)
+% Z_C = ZP(:,:,fixedParams.ZP_C_index); % zooplankton (carbon)
 
 B = cat(1, PP, ...
     cat(3, ZP, zeros(1, nz, 1))); % all plankton
@@ -134,12 +134,6 @@ predation_gains_C = [zeros(nPP_size, nz); ...
 % Sources and sinks of organic matter
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-% OM sources are phyto and zooplankton mortality. Organic nitrogen is
-% modelled but there is no zooplankton N class, so assume that zooplankton
-% N quota is the same as their prey (some data on ths is would be useful...)
-% phyto_C_losses = predation_losses_C(phyto,:); % Assume that zooplankton N quota is the same as their prey (some data on ths is would be useful...)
-% Q_N_zoo = sum(Q_N .* (phyto_C_losses ./ sum(phyto_C_losses)));
-
 % Messy feeding
 lambda_predLoss_C = (1 - params.lambda_max) .* predation_losses_C;
 beta_lambda_predLoss_C = params.beta .* lambda_predLoss_C;
@@ -151,12 +145,10 @@ beta_lambda_predLoss_N = params.beta .* lambda_predLoss_N;
 OM_mess_N = [sum(beta_lambda_predLoss_N); ... 
     sum(lambda_predLoss_N-beta_lambda_predLoss_N)]; % OM_mess=[DOM_mess; POM_mess] (mmol N / m^3 / day)
 
-% OM_mess_N = Q_N_zoo .* OM_mess_C;
-
 % Mortality
 beta_m_B = params.beta .* B_C_mortality;
 OM_mort_C = [sum(beta_m_B); sum(B_C_mortality - beta_m_B)]; % OM_mort=[DOM_mort; POM_mort] (mmol C / m^3 / day)
-% B_N_mortality = [Q_N; Q_N_zoo] .* B_C_mortality;
+
 B_N_mortality = Q_N .* B_C_mortality;
 beta_m_B = params.beta .* B_N_mortality;
 OM_mort_N = [sum(beta_m_B); sum(B_N_mortality - beta_m_B)]; % OM_mort=[DOM_mort; POM_mort] (mmol N / m^3 / day)
@@ -213,7 +205,6 @@ fluxChl = V_Chl .* B_C + Q_Chl .* fluxC_; % mg Chl / m^3 / day
 fluxC = V_C .* B_C + fluxC;
 dPPdt = cat(3, fluxC(phyto,:), fluxN(phyto,:), fluxChl(phyto,:));
 dZPdt = cat(3, fluxC(zoo,:), fluxN(zoo,:));
-
 
 % Organic matter
 fluxC_ = OM_C_diffuse + OM_C_sink;

@@ -472,7 +472,7 @@ switch viewResults
 end
 
 % Save output
-tag = '_fitAllNutrientsAndBioVol_modifiedkG_2018data';
+tag = '_fitAllNutrientsAndBioVolPandZ';
 fileName = ['results/fittedParameters_' FixedParams.costFunction tag];
 
 saveParams = true;
@@ -502,7 +502,7 @@ end
 % We may continue optimising parameters stored in gaOutput by initialising
 % the algorithm with a stored population.
 
-tag = '_fitAllNutrientsAndBioVol_modifiedkG_2018data';
+tag = '_fitAllNutrientsAndBioVolPandZ';
 fileName = ['results/fittedParameters_' FixedParams.costFunction tag];
 
 % Load stored results
@@ -597,7 +597,7 @@ preferences('Editor/Debugger')
 folder = 'results/plots/';
 
 % Load fitted parameters, and associated data and fixed parameters...
-tag = '_fitAllNutrientsAndBioVol_modifiedGmax_2018data';
+tag = '_fitAllNutrientsAndBioVolPandZ';
 fileName = ['results/fittedParameters_' FixedParams.costFunction tag];
 
 [~, gaOutput, parnames, optPar, lb, ub, Data, Forc, FixedParams, Params, v0] = ... 
