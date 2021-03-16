@@ -30,6 +30,7 @@ end
 nt = fixedParams.nt;
 nz = fixedParams.nz;
 nPP_size = fixedParams.nPP_size;
+nZP_size = fixedParams.nZP_size;
 
 % Extract times
 x = yearday(forcing.t(:,1)); % yearday on x-axis
@@ -37,8 +38,10 @@ etime = unique(dat.scalar.Yearday(dat.scalar.Event == event,:)); % yearday of sa
 
 % Extract outputs
 N = squeeze(out.N(:,:,:,traj));
-P = squeeze(out.P(:,:,:,:,traj));
-Z = squeeze(out.Z(:,:,:,traj));
+% P = squeeze(out.P(:,:,:,:,traj));
+% Z = squeeze(out.Z(:,:,:,:,traj));
+P = out.P(:,:,:,:,traj);
+Z = out.Z(:,:,:,:,traj);
 OM = squeeze(out.OM(:,:,:,:,traj));
 
 
@@ -463,7 +466,14 @@ switch var
         Y = squeeze(P(:,:,fixedParams.PP_C_index,:,:));
         Y = repmat(reshape(fixedParams.zwidth, [1 nz]), [nPP_size 1]) .* Y; % conc -> quantity
         Y = squeeze(sum(Y,2));
-        Y = cat(1, Y, sum(fixedParams.zwidth .* Z));
+        
+        YZ = squeeze(Z(:,:,fixedParams.ZP_C_index,:,:));
+        if nZP_size == 1, YZ = reshape(YZ, [1 size(YZ)]); end
+        YZ = repmat(reshape(fixedParams.zwidth, [1 nz]), [nZP_size 1]) .* YZ;
+        YZ = squeeze(sum(YZ,2));
+        if nZP_size == 1, YZ = reshape(YZ, [1 size(YZ)]); end
+        
+        Y = cat(1, Y, YZ);
         
         % polygon vertices
         xpgon = [x(:); flip(x(:))];

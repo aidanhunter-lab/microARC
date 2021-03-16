@@ -57,18 +57,33 @@ FixedParams.nIN    = [];
 
 % Plankton
 FixedParams.PP_nut  = {'C','N','Chl'};                                % phytoplankton cell contents - carbon, nitrogen and chlorophyll
+FixedParams.ZP_nut  = {'C','N'};                                % phytoplankton cell contents - carbon, nitrogen and chlorophyll
 FixedParams.nPP_nut = [];
+FixedParams.nZP_nut = [];
 if ~exist('Data', 'var')
     FixedParams.nPP_size = 9;                                         % number of phytoplankton size classes
     FixedParams.PPdia = 2 .^ (0:FixedParams.nPP_size-1);              % set cell sizes if fitting is not passed as argument
 else
     % Automatic if Data is passed as argument
-    FixedParams.PPdia = unique(Data.size.size);
+    FixedParams.PPdia = unique(Data.size.size( ... 
+        strcmp(Data.size.trophicLevel, 'autotroph')));
     FixedParams.nPP_size = length(FixedParams.PPdia);
 end
 FixedParams.PPsize        = 4/3 * pi * (FixedParams.PPdia ./ 2) .^ 3; % cell volume [mu m^3]
 FixedParams.nPP           = [];                                       % number of phytoplankton classes
-FixedParams.nZP           = 1;                                        % number of zooplankton classes
+
+
+% Assume predator cell size is equal to largest autotroph cell size (if
+% using a model with a single predator size class)
+FixedParams.ZPdia = max(Data.size.size( ...
+    strcmp(Data.size.trophicLevel, 'heterotroph')));
+FixedParams.nZP_size = length(FixedParams.ZPdia);
+FixedParams.ZPsize        = 4/3 * pi * (FixedParams.ZPdia ./ 2) .^ 3; % cell volume [mu m^3]
+FixedParams.nZP           = [];                                       % number of heterotroph classes
+
+FixedParams.diaAll = [FixedParams.PPdia; FixedParams.ZPdia];
+FixedParams.sizeAll = [FixedParams.PPsize; FixedParams.ZPsize];
+
 FixedParams.diatoms       = [];                                       % assume large phytoplankton are diatoms - only needed to split SINMOD output over classes during state variable initialisation
 FixedParams.phytoplankton = [];                                       % index phytoplankton
 FixedParams.zooplankton   = [];                                       % index zooplankton
