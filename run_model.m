@@ -641,9 +641,13 @@ logPlot = false;
 pltN = plot_fitToData('N', Data, modData, logPlot); pause(0.25)
 
 logPlot = 'loglog'; % for size spectra data choose logPlot = 'loglog' or 'semilogx'
-pltCellConc = plot_fitToData('CellConc', Data, modData, logPlot); pause(0.25)
-pltBioVol = plot_fitToData('BioVol', Data, modData, logPlot); pause(0.25)
-pltNConc = plot_fitToData('NConc', Data, modData, logPlot); pause(0.25)
+
+pltCellConc_P = plot_fitToData('CellConc', Data, modData, logPlot, 'trophicGroup', 'autotroph'); pause(0.25)
+pltCellConc_Z = plot_fitToData('CellConc', Data, modData, logPlot, 'trophicGroup', 'heterotroph'); pause(0.25)
+pltBioVol_P = plot_fitToData('BioVol', Data, modData, logPlot, 'trophicGroup', 'autotroph'); pause(0.25)
+pltBioVol_Z = plot_fitToData('BioVol', Data, modData, logPlot, 'trophicGroup', 'heterotroph'); pause(0.25)
+pltNConc_P = plot_fitToData('NConc', Data, modData, logPlot, 'trophicGroup', 'autotroph'); pause(0.25)
+pltNConc_Z = plot_fitToData('NConc', Data, modData, logPlot, 'trophicGroup', 'heterotroph'); pause(0.25)
 
 switch save, case true
     % scalar data
@@ -665,17 +669,29 @@ switch save, case true
     end
     
     % size data
-    if exist('pltCellConc', 'var') && isvalid(pltCellConc)
-        filename = 'fitToData_CellConcSpectra.png';
-        print(pltCellConc, fullfile(folder, filename), '-r300', '-dpng');
+    if exist('pltCellConc_P', 'var') && isvalid(pltCellConc_P)
+        filename = 'fitToData_CellConcSpectra_P.png';
+        print(pltCellConc_P, fullfile(folder, filename), '-r300', '-dpng');
     end
-    if exist('pltBioVol', 'var') && isvalid(pltBioVol)
-        filename = 'fitToData_BioVolSpectra.png';
-        print(pltBioVol, fullfile(folder, filename), '-r300', '-dpng');
+    if exist('pltCellConc_Z', 'var') && isvalid(pltCellConc_Z)
+        filename = 'fitToData_CellConcSpectra_Z.png';
+        print(pltCellConc_Z, fullfile(folder, filename), '-r300', '-dpng');
     end
-    if exist('pltNConc', 'var') && isvalid(pltNConc)
-        filename = 'fitToData_NConcSpectra.png';
-        print(pltNConc, fullfile(folder, filename), '-r300', '-dpng');
+    if exist('pltBioVol_P', 'var') && isvalid(pltBioVol_P)
+        filename = 'fitToData_BioVolSpectra_P.png';
+        print(pltBioVol_P, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('pltBioVol_Z', 'var') && isvalid(pltBioVol_Z)
+        filename = 'fitToData_BioVolSpectra_Z.png';
+        print(pltBioVol_Z, fullfile(folder, filename), '-r300', '-dpng');
+    end    
+    if exist('pltNConc_P', 'var') && isvalid(pltNConc_P)
+        filename = 'fitToData_NConcSpectra_P.png';
+        print(pltNConc_P, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('pltNConc_Z', 'var') && isvalid(pltNConc_Z)
+        filename = 'fitToData_NConcSpectra_Z.png';
+        print(pltNConc_Z, fullfile(folder, filename), '-r300', '-dpng');
     end
 end
 
@@ -744,7 +760,10 @@ switch waterMass
         plt_P_Chl_N = plot_contour_DepthTime('phytoplankton_Chl_N', ... 
             traj, out, auxVars, FixedParams, Forc, 'linear', ...
             'Event', sampleEvent, 'waterOrigin', waterMass);
-        plt_Z = plot_contour_DepthTime('zooplankton', ... 
+        plt_Z_C = plot_contour_DepthTime('zooplankton_C', ... 
+            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', waterMass);
+        plt_Z_N = plot_contour_DepthTime('zooplankton_N', ... 
             traj, out, auxVars, FixedParams, Forc, 'linear', ...
             'Event', sampleEvent, 'waterOrigin', waterMass);
     case 'Arctic/Atlantic'
@@ -800,10 +819,16 @@ switch waterMass
         plt_P_Chl_N_Arc = plot_contour_DepthTime('phytoplankton_Chl_N', ...
             trajArctic, out, auxVars, FixedParams, Forc, 'linear', ...
             'Event', sampleEvent, 'waterOrigin', 'Arctic');
-        plt_Z_Atl = plot_contour_DepthTime('zooplankton', ...
+        plt_Z_C_Atl = plot_contour_DepthTime('zooplankton_C', ...
             trajAtlantic, out, auxVars, FixedParams, Forc, 'linear', ...
             'Event', sampleEvent, 'waterOrigin', 'Atlantic');
-        plt_Z_Arc = plot_contour_DepthTime('zooplankton', ...
+        plt_Z_C_Arc = plot_contour_DepthTime('zooplankton_C', ...
+            trajArctic, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', 'Arctic');
+        plt_Z_N_Atl = plot_contour_DepthTime('zooplankton_N', ...
+            trajAtlantic, out, auxVars, FixedParams, Forc, 'linear', ...
+            'Event', sampleEvent, 'waterOrigin', 'Atlantic');
+        plt_Z_N_Arc = plot_contour_DepthTime('zooplankton_N', ...
             trajArctic, out, auxVars, FixedParams, Forc, 'linear', ...
             'Event', sampleEvent, 'waterOrigin', 'Arctic');
 end
@@ -846,9 +871,13 @@ switch save, case true
                 filename = ['phytoplankton_Chl_N_sampleEvent' num2str(sampleEvent) '.png'];
                 print(plt_P_Chl_N, fullfile(folder, filename), '-r300', '-dpng');
             end            
-            if exist('plt_Z', 'var') && isvalid(plt_Z)
-                filename = ['zooplankton_sampleEvent' num2str(sampleEvent) '.png'];
-                print(plt_Z, fullfile(folder, filename), '-r300', '-dpng');
+            if exist('plt_Z_C', 'var') && isvalid(plt_Z_C)
+                filename = ['zooplankton_C_sampleEvent' num2str(sampleEvent) '.png'];
+                print(plt_Z_C, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            if exist('plt_Z_N', 'var') && isvalid(plt_Z_N)
+                filename = ['zooplankton_N_sampleEvent' num2str(sampleEvent) '.png'];
+                print(plt_Z_N, fullfile(folder, filename), '-r300', '-dpng');
             end
             
         case  'Arctic/Atlantic'
@@ -924,14 +953,21 @@ switch save, case true
                 filename = ['phytoplankton_Chl_N_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
                 print(plt_P_Chl_N_Arc, fullfile(folder, filename), '-r300', '-dpng');
             end
-            
-            if exist('plt_Z_Atl', 'var') && isvalid(plt_Z_Atl)
-                filename = ['zooplankton_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
-                print(plt_Z_Atl, fullfile(folder, filename), '-r300', '-dpng');
+            if exist('plt_Z_C_Atl', 'var') && isvalid(plt_Z_C_Atl)
+                filename = ['zooplankton_C_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
+                print(plt_Z_C_Atl, fullfile(folder, filename), '-r300', '-dpng');
             end
-            if exist('plt_Z_Arc', 'var') && isvalid(plt_Z_Arc)
-                filename = ['zooplankton_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
-                print(plt_Z_Arc, fullfile(folder, filename), '-r300', '-dpng');
+            if exist('plt_Z_C_Arc', 'var') && isvalid(plt_Z_C_Arc)
+                filename = ['zooplankton_C_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
+                print(plt_Z_C_Arc, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            if exist('plt_Z_N_Atl', 'var') && isvalid(plt_Z_N_Atl)
+                filename = ['zooplankton_N_sampleEvent' num2str(sampleEvent) '_AtlanticOrigin.png'];
+                print(plt_Z_N_Atl, fullfile(folder, filename), '-r300', '-dpng');
+            end
+            if exist('plt_Z_N_Arc', 'var') && isvalid(plt_Z_N_Arc)
+                filename = ['zooplankton_N_sampleEvent' num2str(sampleEvent) '_ArcticOrigin.png'];
+                print(plt_Z_N_Arc, fullfile(folder, filename), '-r300', '-dpng');
             end
             
     end

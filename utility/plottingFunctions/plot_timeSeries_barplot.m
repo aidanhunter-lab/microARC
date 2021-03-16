@@ -4,11 +4,12 @@ function plt = plot_timeSeries_barplot(var, event, traj, out, ...
 nt = fixedParams.nt;
 nz = fixedParams.nz;
 nPP_size = fixedParams.nPP_size;
+nZP_size = fixedParams.nZP_size;
 
 % Extract outputs
 N = squeeze(out.N(:,:,:,traj));
-P = squeeze(out.P(:,:,:,:,traj));
-Z = squeeze(out.Z(:,:,:,traj));
+P = out.P(:,:,:,:,traj);
+Z = out.Z(:,:,:,:,traj);
 OM = squeeze(out.OM(:,:,:,:,traj));
 
 switch var
@@ -22,7 +23,11 @@ switch var
         Y = P(:,:,fixedParams.PP_C_index,:,:);
         Y = repmat(reshape(fixedParams.zwidth, [1 nz]), [nPP_size 1]) .* Y; % conc -> quantity
         Y = squeeze(sum(Y, 2));
-        Y = cat(1, Y, sum(fixedParams.zwidth .* Z));
+        YZ = Z(:,:,fixedParams.ZP_C_index,:,:);
+        YZ = repmat(reshape(fixedParams.zwidth, [1 nz]), [nZP_size 1]) .* YZ; % conc -> quantity
+        YZ = squeeze(sum(YZ,2));
+        if nZP_size == 1, YZ = reshape(YZ, [1 size(YZ)]); end
+        Y = cat(1, Y, YZ);
         mY = median(Y, ndims(Y));
         % color scale - red --> blue
         rb_hsv = rgb2hsv([1 0 0; 0 0 1]);

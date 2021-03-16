@@ -1,4 +1,4 @@
-function plt = plot_fitToData(v, Data, modData, logPlot)
+function plt = plot_fitToData(v, Data, modData, logPlot, varargin)
 % Plot to compare model output to data used to tune the parameters.
 
 plt = figure;
@@ -360,6 +360,12 @@ switch v
         %% Relative abundances
         subplot(1,3,1)
         ind = strcmp(Data.size.dataBinned.Variable, v);
+        
+        if ~isempty(varargin) && any(strcmp(varargin, 'trophicGroup'))
+            trophicGroup = varargin{find(strcmp(varargin, 'trophicGroup')) + 1};
+            ind = ind & strcmp(Data.size.dataBinned.trophicLevel, trophicGroup);
+        end
+        
         x = unique(Data.size.dataBinned.size);
         ydat = Data.size.dataBinned.Value(ind);  % observed spectra
         ymod = modData.size.Value(ind,:);        % modelled equivalent
@@ -481,7 +487,11 @@ switch v
         end
         hold off
         
-        sgtitle(['Model fit to ' Var ' data'])
+        if exist('trophicGroup', 'var')
+            sgtitle(['Model fit to ' trophicGroup ' ' Var ' data'])
+        else
+            sgtitle(['Model fit to ' Var ' data'])
+        end
 
 end
         

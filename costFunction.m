@@ -233,13 +233,23 @@ switch selectFunction
             L.(varLabel) = sum(squaredError(:)) / numel(squaredError);
         end
         
-        % Size spectra data        
+        % Size spectra data
         for i = 1:length(VarsSize)
             varLabel = VarsSize{i};
-            yobs = Data.size.dataBinned.scaled_Value(strcmp(Data.size.dataBinned.Variable, varLabel));
-            ymod = modData.size.scaled_Value(strcmp(modData.size.Variable, varLabel),:);
+            ind0 = strcmp(Data.size.dataBinned.Variable, varLabel);
+            % autotrophs
+            ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'autotroph');
+            yobs = Data.size.dataBinned.scaled_Value(ind);
+            ymod = modData.size.scaled_Value(ind,:);
             squaredError = (yobs - ymod) .^ 2;
-            L.(varLabel) = sum(squaredError(:)) / numel(squaredError);
+            L.([varLabel '_autotroph']) = sum(squaredError(:)) / numel(squaredError);
+            % heterotrophs
+            ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'heterotroph');
+            yobs = Data.size.dataBinned.scaled_Value(ind);
+            ymod = modData.size.scaled_Value(ind,:);
+            squaredError = (yobs - ymod) .^ 2;
+            L.([varLabel '_heterotroph']) = sum(squaredError(:)) / numel(squaredError);
+            L.(varLabel) = L.([varLabel '_autotroph']) + L.([varLabel '_heterotroph']);
         end
         
         costComponents = L;
@@ -251,6 +261,7 @@ switch selectFunction
         for i = 1:length(VarsSize)
             cost = cost + costComponents.(VarsSize{i});
         end
+        
         
     case 'RMS'
         % Root mean square
@@ -267,10 +278,20 @@ switch selectFunction
         % Size spectra data
         for i = 1:length(VarsSize)
             varLabel = VarsSize{i};
-            yobs = Data.size.dataBinned.scaled_Value(strcmp(Data.size.dataBinned.Variable, varLabel));
-            ymod = modData.size.scaled_Value(strcmp(modData.size.Variable, varLabel),:);
+            ind0 = strcmp(Data.size.dataBinned.Variable, varLabel);
+            % autotrophs
+            ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'autotroph');            
+            yobs = Data.size.dataBinned.scaled_Value(ind);
+            ymod = modData.size.scaled_Value(ind,:);
             absError = sqrt((yobs - ymod) .^ 2);
-            L.(varLabel) = sum(absError(:)) / numel(absError);
+            L.([varLabel '_autotroph']) = sum(absError(:)) / numel(absError);
+            % heterotrophs
+            ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'heterotroph');            
+            yobs = Data.size.dataBinned.scaled_Value(ind);
+            ymod = modData.size.scaled_Value(ind,:);
+            absError = sqrt((yobs - ymod) .^ 2);
+            L.([varLabel '_heterotroph']) = sum(absError(:)) / numel(absError);
+            L.(varLabel) = L.([varLabel '_autotroph']) + L.([varLabel '_heterotroph']);
         end
         
         costComponents = L;
@@ -322,8 +343,11 @@ switch selectFunction
         % spectra. Log-normal distribution on total abundance in size data        
         for i = 1:length(VarsSize)
             varLabel = VarsSize{i};
-            yobs = Data.size.dataBinned.Value(strcmp(Data.size.dataBinned.Variable, varLabel));
-            ymod = modData.size.Value(strcmp(modData.size.Variable, varLabel),:);
+            ind0 = strcmp(Data.size.dataBinned.Variable, varLabel);
+            % autotrophs
+            ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'autotroph');
+            yobs = Data.size.dataBinned.Value(ind);
+            ymod = modData.size.Value(ind,:);
             % Derive Dirichlet distribution parameters from model output.
             yobsTot = sum(yobs);
             ymodTot = sum(ymod);
@@ -341,9 +365,57 @@ switch selectFunction
             sig = std(ymodTot_log);
             sig2 = sig .^ 2;
             negLogLik2 = 0.5 .* (log2pi + sum(log(sig2) + 1 ./ sig2 .* (yobsTot_log - mu) .^ 2));
-            L.([varLabel '_Rel']) = negLogLik;
-            L.([varLabel '_Tot']) = negLogLik2;
-            L.(varLabel) = negLogLik + negLogLik2;
+            L.([varLabel '_Rel_autotroph']) = negLogLik;
+            L.([varLabel '_Tot_autotroph']) = negLogLik2;
+
+            % heterotrophs
+            ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'heterotroph');
+            yobs = Data.size.dataBinned.Value(ind);
+            ymod = modData.size.Value(ind,:);
+            
+            if FixedParams.nZP_size ~= 1
+                
+                % Derive Dirichlet distribution parameters from model output.
+                yobsTot = sum(yobs);
+                ymodTot = sum(ymod);
+                pobs = yobs ./ yobsTot; % observed relative abundance -- simplex
+                pmod = ymod ./ ymodTot;
+                alpha = fitDirichlet(pmod); % estimate concentration parameter
+                % Dirichlet likelihood for simplex
+                %            L = gamma(alpha0) ./ prod(gamma(alpha)) .* prod(p_obs .^ (alpha-1));
+                negLogLik = sum(gammaln(alpha)) - gammaln(sum(alpha)) - sum((alpha - 1) .* log(pobs));
+                
+                % Lognormal likelihood for total
+                yobsTot_log = log(yobsTot);
+                ymodTot_log = log(ymodTot);
+                mu = mean(ymodTot_log);
+                sig = std(ymodTot_log);
+                sig2 = sig .^ 2;
+                negLogLik2 = 0.5 .* (log2pi + sum(log(sig2) + 1 ./ sig2 .* (yobsTot_log - mu) .^ 2));
+                L.([varLabel '_Rel_heterotroph']) = negLogLik;
+                L.([varLabel '_Tot_heterotroph']) = negLogLik2;
+                
+                L.(varLabel) = L.([varLabel '_Rel_autotroph']) + L.([varLabel '_Tot_autotroph']) + ... 
+                    L.([varLabel '_Rel_heterotroph']) + L.([varLabel '_Tot_heterotroph']);
+
+            else
+                
+                yobsTot = sum(yobs);
+                ymodTot = ymod(1,:);
+
+                % Lognormal likelihood for total
+                yobsTot_log = log(yobsTot);
+                ymodTot_log = log(ymodTot);
+                mu = mean(ymodTot_log);
+                sig2 = var(ymodTot_log);
+                negLogLik = 0.5 .* (log2pi + sum(log(sig2) + 1 ./ sig2 .* (yobsTot_log - mu) .^ 2));
+                L.([varLabel '_Tot_heterotroph']) = negLogLik;
+                
+                L.(varLabel) = L.([varLabel '_Rel_autotroph']) + L.([varLabel '_Tot_autotroph']) + ...
+                    L.([varLabel '_Tot_heterotroph']);
+
+            end
+            
         end
         
         costComponents = L;
@@ -382,7 +454,8 @@ switch selectFunction
         for i = 1:length(VarsSize)
             varLabel = VarsSize{i};
             ind0 = strcmp(Data.size.dataBinned.Variable, varLabel);
-
+            
+            % autotrophs
             ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'autotroph');
             
             yobs = Data.size.dataBinned.Value(ind);
@@ -478,6 +551,7 @@ switch selectFunction
             L.([varLabel '_autotroph']) = negLogLik_rel + negLogLik_tot;
 
             
+            % heterotrophs
             ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'heterotroph');
             
             yobs = Data.size.dataBinned.Value(ind);

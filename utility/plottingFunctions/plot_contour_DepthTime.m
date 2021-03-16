@@ -14,7 +14,7 @@ end
 % Extract outputs
 N = squeeze(out.N(:,:,:,traj));
 P = squeeze(out.P(:,:,:,:,traj));
-Z = squeeze(out.Z(:,:,:,traj));
+Z = squeeze(out.Z(:,:,:,:,traj));
 OM = squeeze(out.OM(:,:,:,:,traj));
 
 % If multiple trajectories selected then take averages
@@ -348,11 +348,11 @@ switch var
         
         %------------------------------------------------------------------
         
-    case 'zooplankton'
+    case 'zooplankton_C'
         plt = figure;
         plt.Units = 'inches';
         plt.Position = [0 0 8 3];
-        x = Z;
+        x = squeeze(Z(:,fixedParams.ZP_C_index,:));
         F = griddedInterpolant(depth, time, x, smooth);
         Fsmooth = flip(F(depthGrid, timeGrid));
         contourf(Fsmooth)
@@ -368,5 +368,29 @@ switch var
         title(['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'])
         subtitle('zooplankton abundance')
         colormap plasma
+        
+    case 'zooplankton_N'
+        plt = figure;
+        plt.Units = 'inches';
+        plt.Position = [0 0 8 3];
+        x = squeeze(Z(:,fixedParams.ZP_N_index,:));
+        F = griddedInterpolant(depth, time, x, smooth);
+        Fsmooth = flip(F(depthGrid, timeGrid));
+        contourf(Fsmooth)
+        cb = colorbar;
+        cb.Label.String = 'mmol N / m^3';
+        title('zooplankton abundance')
+        xlabel('year-day')
+        ylabel('depth (m)')
+        xticks(100:100:fixedParams.nt)
+        xticklabels(yearday(forcing.t(100:100:fixedParams.nt,1)))
+        yticks(linspace(0,abs(fixedParams.zw(end)),7))
+        yticklabels(linspace(fixedParams.zw(end),0,7))
+        title(['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'])
+        subtitle('zooplankton abundance')
+        colormap plasma
+
+        
+        
 end
         
