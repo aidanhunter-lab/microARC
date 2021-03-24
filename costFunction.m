@@ -23,20 +23,6 @@ if ~isempty(varargin)
     end
 end
 
-% % Cost function type may be given by name-value pair in varargin, otherwise
-% % set as the default
-% defaultCostType = 'LSS';
-% costTypes = {'LSS', 'polyLikelihood', 'polyLikelihood2', ... 
-%     'syntheticLikelihood_normal_Dirichlet', 'syntheticLikelihood_normalShape_Dirichlet', ...
-%     'syntheticLikelihood_normal_multinomialDirichlet'}; % possible cost functions coded below
-% selectFunction = defaultCostType;
-% if ~isempty(varargin)
-%     i = strcmp(varargin, 'selectFunction');
-%     if any(i)
-%         sf = varargin{find(i)+1};
-%         if ismember(sf, costTypes), selectFunction = sf; end
-%     end
-% end
 
 %% Run model
 
@@ -136,10 +122,8 @@ modData.size.Variable = cell(n,1);
 modData.size.trophicLevel = cell(n,1);
 modData.size.Value = nan(n,nsamples);
 modData.size.Value_allEvents = nan(n,nevent,nsamples);
-modData.size.scaled_Value = nan(n,1,nsamples);
+modData.size.scaled_Value = nan(n,nsamples);
 modData.size.scaled_Value_allEvents = nan(n,nevent,nsamples);
-
-
 
 for i = 1:length(allVarsSize)
     vs = allVarsSize{i};
@@ -152,15 +136,6 @@ for i = 1:length(allVarsSize)
         [~, J] = max(sum(out.P(:,depth_ind,FixedParams.PP_Chl_index,etime,itraj))); % use modelled values from chl-max depth layer to compare to data
         J = squeeze(J);
         switch vs
-            case 'NConc'
-                ymod = squeeze([out.P(:,depth_ind,FixedParams.PP_N_index,etime,itraj); ...
-                    out.Z(:,depth_ind,FixedParams.ZP_N_index,etime,itraj)]);
-                ymod_ = nan(size(ymod,1), nevent);
-                for k = 1:nevent
-                    ymod_(:,k) = ymod(:,J(k,k),k,k);
-                end
-                ymod = ymod_;
-                ymodMean = mean(ymod, 2); % average size-spectra over sampling events
             case 'CellConc'
 %                 ymod = auxVars.cellDensity(1:1:FixedParams.nPP_size,depth_ind,etime,itraj);
                 ymod = auxVars.cellDensity(:,depth_ind,etime,itraj);
@@ -181,19 +156,20 @@ for i = 1:length(allVarsSize)
                 ymodMean = mean(ymod, 2); % average size-spectra over sampling events
         end
         
+        % autotrophs
         ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'autotroph');
         
         modData.size.Value(ind,j) = ymodMean(FixedParams.phytoplankton);
         modData.size.Value_allEvents(ind,:,j) = ymod(FixedParams.phytoplankton,:);
 
-        modData.size.scaled_Value(ind,:,j) = Data.size.(['scaleFun_' vs])( ...
+        modData.size.scaled_Value(ind,j) = Data.size.(['scaleFun_' vs])( ...
             Data.size.dataBinned.scale_mu(ind), ...
             Data.size.dataBinned.scale_sig(ind), ymodMean(FixedParams.phytoplankton));
         modData.size.scaled_Value_allEvents(ind,:,j) = Data.size.(['scaleFun_' vs])( ...
             Data.size.dataBinned.scale_mu(ind), ...
             Data.size.dataBinned.scale_sig(ind), ymod(FixedParams.phytoplankton,:));
 
-        
+        % heterotrophs
         ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'heterotroph');
         
         if sum(FixedParams.zooplankton) ~= 1
@@ -206,7 +182,7 @@ for i = 1:length(allVarsSize)
             modData.size.Value_allEvents(ind,:,j) = repmat(ymod(FixedParams.zooplankton,:), [sum(ind) 1]);
         end
 
-        modData.size.scaled_Value(ind,:,j) = Data.size.(['scaleFun_' vs])( ...
+        modData.size.scaled_Value(ind,j) = Data.size.(['scaleFun_' vs])( ...
             Data.size.dataBinned.scale_mu(ind), ...
             Data.size.dataBinned.scale_sig(ind), ymodMean(FixedParams.zooplankton));
         modData.size.scaled_Value_allEvents(ind,:,j) = Data.size.(['scaleFun_' vs])( ...
@@ -329,9 +305,8 @@ switch selectFunction
             yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
             ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
             mu = mean(ymod, 2); % expectation of each data point
-            sig = std(ymod, 0, 2); % standard deviation of model output
-            sig(sig == 0) = min(sig(sig > 0)); % include for robustness (we only see zero variability when using single trajectories for any sampling event)
-            sig2 = sig .^ 2;
+            sig2 = var(ymod, 0, 2); % variance of model output
+            sig2(sig2 == 0) = min(sig2(sig2 > 0)); % include for robustness (we only see zero variability when using single trajectories for any sampling event)
             n = length(yobs); % sample size
 %             L = prod(1 ./ ((2*pi*sig2) .^ 0.5) .* exp(-0.5 ./ sig2 .* (yobs - mu) .^ 2)) .^ (1/n);
             negLogLik = 0.5 .* (log2pi + 1/n .* sum(log(sig2) + (yobs - mu) .^ 2 ./ sig2));
@@ -344,6 +319,7 @@ switch selectFunction
         for i = 1:length(VarsSize)
             varLabel = VarsSize{i};
             ind0 = strcmp(Data.size.dataBinned.Variable, varLabel);
+            
             % autotrophs
             ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'autotroph');
             yobs = Data.size.dataBinned.Value(ind);
@@ -362,8 +338,7 @@ switch selectFunction
             yobsTot_log = log(yobsTot);
             ymodTot_log = log(ymodTot);
             mu = mean(ymodTot_log);
-            sig = std(ymodTot_log);
-            sig2 = sig .^ 2;
+            sig2 = var(ymodTot_log);
             negLogLik2 = 0.5 .* (log2pi + sum(log(sig2) + 1 ./ sig2 .* (yobsTot_log - mu) .^ 2));
             L.([varLabel '_Rel_autotroph']) = negLogLik;
             L.([varLabel '_Tot_autotroph']) = negLogLik2;
@@ -389,8 +364,7 @@ switch selectFunction
                 yobsTot_log = log(yobsTot);
                 ymodTot_log = log(ymodTot);
                 mu = mean(ymodTot_log);
-                sig = std(ymodTot_log);
-                sig2 = sig .^ 2;
+                sig2 = var(ymodTot_log);
                 negLogLik2 = 0.5 .* (log2pi + sum(log(sig2) + 1 ./ sig2 .* (yobsTot_log - mu) .^ 2));
                 L.([varLabel '_Rel_heterotroph']) = negLogLik;
                 L.([varLabel '_Tot_heterotroph']) = negLogLik2;

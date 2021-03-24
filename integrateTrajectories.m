@@ -40,8 +40,8 @@ returnExtra = true; % By default return all auxiliary variables
 if ~isempty(varargin) && any(strcmp(varargin, 'returnExtra'))
     returnExtra = varargin{find(strcmp(varargin, 'returnExtra'))+1};
 end
-% Create and initialise arrays for extra output if needed
-[namesExtra, nExtra, AUXVARS, AUXVARS_2d] = ... 
+% Initialise arrays for extra output
+[namesExtra, nExtra, AUXVARS, AUXVARS_2d, AUXVARS_3d] = ... 
     initialiseExtraVariables(v0, parameterList, Forc, returnExtra);
 
 
@@ -57,7 +57,7 @@ clear Forc
 
 % Loop through trajectories and integrate
 parfor i = 1:nTraj
-    
+        
     % Forcing data
     forcing = struct();
     forcing.T = T(:,:,i);
@@ -92,16 +92,26 @@ parfor i = 1:nTraj
             % Update initials for next time step
             v_in = OUT(:,j,i);
             % Extract extra outputs
-            [~, extraOutput, extraOutput_2d] = ...
+            [~, extraOutput_1d, extraOutput_2d, extraOutput_3d] = ... 
                 ODEs(1, v_in, parameterList, forcing, j, returnExtra);
-            AUXVARS(:,j,i) = struct2array(extraOutput);
+            AUXVARS(:,j,i) = struct2array(extraOutput_1d);
             AUXVARS_2d(:,j,i) = struct2array(structfun(@(x)x(:)', ...
                 extraOutput_2d, 'UniformOutput', false));
+            AUXVARS_3d(:,j,i) = struct2array(structfun(@(x)x(:)', ...
+                extraOutput_3d, 'UniformOutput', false));
         else
             break;
         end
     end
 end
+
+
+%~~~~~~~~~~
+% Tidy up
+
+AUXVARS = reshape(AUXVARS, [nz nExtra(1) nt nTraj]);
+AUXVARS_2d = reshape(AUXVARS_2d, [(nPP_size + nZP_size) nz nExtra(2) nt nTraj]);
+AUXVARS_3d = reshape(AUXVARS_3d, [(nPP_size + nZP_size) nz nPP_nut nExtra(3) nt nTraj]);
 
 
 % Omit values deeper than sea floor
@@ -122,16 +132,12 @@ if any(dry(:))
     OM = reshape(OM, [nOM * nz nt nTraj]);
     OUT = [N; P; Z; OM];
     % extra outputs
-    AUXVARS = reshape(AUXVARS, [nz nExtra(1) nt nTraj]);
     AUXVARS(repmat(reshape(dry, [nz 1 nt nTraj]), [1 nExtra(1) 1 1])) = nan;
-    AUXVARS_2d = reshape(AUXVARS_2d, [(nPP_size + 1) nz nExtra(2) nt nTraj]);
-    AUXVARS_2d(repmat(reshape(dry, [1 nz 1 nt nTraj]), [(nPP_size + 1) 1 nExtra(2) 1 1])) = nan;
+    AUXVARS_2d(repmat(reshape(dry, [1 nz 1 nt nTraj]), [(nPP_size + nZP_size) 1 nExtra(2) 1 1])) = nan;
+    AUXVARS_3d(repmat(reshape(dry, [1 nz 1 1 nt nTraj]), [(nPP_size + nZP_size) 1 nPP_nut nExtra(3) 1 1])) = nan;
 end
 
 
-% Tidy up
-AUXVARS = reshape(AUXVARS, [nz nExtra(1) nt nTraj]);
-AUXVARS_2d = reshape(AUXVARS_2d, [(nPP_size + 1) nz nExtra(2) nt nTraj]);
 
 % Extract solutions from array, OUT, into a more readable struct, out.
 % Same for extra outputs...
@@ -146,6 +152,10 @@ if sum(nExtra) > 0
     end
     for k = 1:nExtra(2)
         auxVars.(namesExtra{k+nExtra(1)}) = squeeze(AUXVARS_2d(:,:,k,:,:));
+    end
+    kk = sum(nExtra(1:2));
+    for k = 1:nExtra(3)
+        auxVars.(namesExtra{k+kk}) = squeeze(AUXVARS_3d(:,:,:,k,:,:));
     end
 end
 

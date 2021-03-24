@@ -28,7 +28,8 @@ obsDir = fullfile('DATA', 'AWI_Hausgarten');
 % Choose model type -- this will influence model set-up and some aspects of
 % the ODEs.
 bioModelOptions = {'singlePredatorClass', 'multiplePredatorClasses', 'mixotrophy'};
-bioModel = bioModelOptions{1}; % Only singlePredatorClass is available so far
+
+bioModel = bioModelOptions{2}; % Only singlePredatorClass and multiplePredatorClass available so far
 
 %##########################################################################
 %##########################################################################
@@ -80,18 +81,24 @@ Data = prepareFittingData(obsDir, ...
 ESDmin = 1; % min/max sizes to retain from the data
 ESDmax = 200;
 nsizes = []; % number of modelled size classes (leave empty to view a range of values)
+nsizesP = [];
+nsizesZ = [];
 nsizesMin = 4; % min/max number of modelled size classes
 nsizesMax = 12;
-sizeData = chooseSizeClassIntervals(Data.size, 'datFull', Data.sizeFull, ...
-    'ESDmin', ESDmin, 'ESDmax', ESDmax, ...
+sizeData = chooseSizeClassIntervals(Data.size, ... 
+    'datFull', Data.sizeFull, 'ESDmin', ESDmin, 'ESDmax', ESDmax, ...
     'nsizes', nsizes, 'nsizesMin', nsizesMin, 'nsizesMax', nsizesMax, ...
     'plotSizeClassIntervals', true);
 display(sizeData)
 
 nsizes = 8; % number of modelled size classes (specifying a value makes chooseSizeClassIntervals.m return different output)
-[Data.size, Data.sizeFull] = chooseSizeClassIntervals(Data.size, 'datFull', Data.sizeFull, ... 
-    'ESDmin', ESDmin, 'ESDmax', ESDmax, ...
-    'nsizes', nsizes, 'nsizesMin', nsizesMin, 'nsizesMax', nsizesMax, ...
+nsizesP = 7;
+nsizesZ = 8;
+
+[Data.size, Data.sizeFull] = chooseSizeClassIntervals(Data.size, ... 
+    'datFull', Data.sizeFull, 'ESDmin', ESDmin, 'ESDmax', ESDmax, ...
+    'nsizes', nsizes, 'nsizesP', nsizesP, 'nsizesZ', nsizesZ, ... 
+    'nsizesMin', nsizesMin, 'nsizesMax', nsizesMax, ...
     'plotSizeClassIntervals', true);
 
 % Choose data types to use in cost function - I think bio-volume is the
@@ -126,7 +133,7 @@ end
 % within initialiseParameters.m.
 % Modelled cell size ranges are automatically chosen to correspond with the
 % size class intervals already selected using the fitting data.
-[FixedParams, Params] = initialiseParameters(F, Data);
+[FixedParams, Params] = initialiseParameters(F, Data, bioModel);
 display(FixedParams)
 display(Params)
 
@@ -261,18 +268,12 @@ v0 = initialiseVariables(FixedParams, Params, Forc);
 % NOTE:
 % Order of variables = inorganic nutrients [depth]
 %                      phytoplankton       [size, depth, nutrient]
-%                      zooplankton         [depth, nutrient]
+%                      zooplankton         [size, depth, nutrient]
 %                      organic matter      [type, depth, nutrient]
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% % Use single precision -- get back to this... it's more involved...
-% Forc = structDouble2Single(Forc);
-% Params = structDouble2Single(Params);
-% FixedParams = structDouble2Single(FixedParams);
-% v0 = single(v0);
 
 % Parallelise integrations over trajectories
 poolObj = gcp('nocreate');
@@ -288,7 +289,7 @@ odeIntegrator = integratorChoices{2};
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % NOTE:
-% ode23 seems to be the most robust. ode45 occasionally produces NaNs.
+% ode23 seems to be the most robust. ode45 has occasionally produced NaNs.
 % Maybe ode45 is less robust due to stiffness in the model equations. It
 % seems that the equations are stiff for some parameter values, as the
 % solver can slow down significantly... this is annoying, it would be
@@ -332,7 +333,7 @@ display(auxVars)
 % Select which parameters to optimise.
 % Choose from the lists: Params.scalars & Params.sizeDependent.
 parnames = {'wPOM', 'wp_a', 'wp_b', 'rDON', 'rPON', 'rPOC', 'beta2', ... 
-    'beta3', 'aP', 'Gmax', 'k_G_a', 'k_G_b', 'pmax_a', 'pmax_b', ... 
+    'beta3', 'aP', 'Gmax_a', 'Gmax_b', 'k_G', 'pmax_a', 'pmax_b', ... 
     'Qmin_QC_a', 'Qmin_QC_b', 'Qmax_delQ_a', 'Qmax_delQ_b', ... 
     'Vmax_QC_a', 'Vmax_QC_b', 'aN_QC_a', 'aN_QC_b'};
 npars = length(parnames);
@@ -365,7 +366,7 @@ costFunctionChoices = { ...
     'syntheticLikelihood_ScalarNormal_SizeSpectraLogNormalDirichlet', ...
     'syntheticLikelihood_ScalarNormalShape_SizeSpectraLogNormalDirichlet' ...
     };
-costFunctionType = costFunctionChoices{3}; % select cost function
+costFunctionType = costFunctionChoices{4}; % select cost function
 FixedParams.costFunction = costFunctionType;
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -646,8 +647,8 @@ pltCellConc_P = plot_fitToData('CellConc', Data, modData, logPlot, 'trophicGroup
 pltCellConc_Z = plot_fitToData('CellConc', Data, modData, logPlot, 'trophicGroup', 'heterotroph'); pause(0.25)
 pltBioVol_P = plot_fitToData('BioVol', Data, modData, logPlot, 'trophicGroup', 'autotroph'); pause(0.25)
 pltBioVol_Z = plot_fitToData('BioVol', Data, modData, logPlot, 'trophicGroup', 'heterotroph'); pause(0.25)
-pltNConc_P = plot_fitToData('NConc', Data, modData, logPlot, 'trophicGroup', 'autotroph'); pause(0.25)
-pltNConc_Z = plot_fitToData('NConc', Data, modData, logPlot, 'trophicGroup', 'heterotroph'); pause(0.25)
+% pltNConc_P = plot_fitToData('NConc', Data, modData, logPlot, 'trophicGroup', 'autotroph'); pause(0.25)
+% pltNConc_Z = plot_fitToData('NConc', Data, modData, logPlot, 'trophicGroup', 'heterotroph'); pause(0.25)
 
 switch save, case true
     % scalar data

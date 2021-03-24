@@ -1,4 +1,4 @@
-function [FixedParams, Params, Bounds] = defaultParameters(varargin)
+function [FixedParams, Params, Bounds] = defaultParameters(bioModel, varargin)
 
 % Set default parameter values.
 % Some variables left empty will be assigned values in initialiseParameters.m
@@ -35,8 +35,10 @@ FixedParams.years = []; % number of modelled years (determined from forcing and 
 %~~~~~~~~~~~~~
 % Depth layers
 %~~~~~~~~~~~~~
-FixedParams.nz     = 15;                                                   % number of modelled depth layers
-FixedParams.Htot   = 150;                                                  % total modelled depth
+% FixedParams.nz     = 15;                                                   % number of modelled depth layers
+FixedParams.nz     = 9;                                                    % number of modelled depth layers
+% FixedParams.Htot   = 150;                                                  % total modelled depth
+FixedParams.Htot   = 80;                                                   % total modelled depth
 FixedParams.dzmin  = 5;                                                    % minimum layer width (dzmin <= Htot/(nz-1))
 FixedParams.dzmax  = 2 * FixedParams.Htot / FixedParams.nz - ... 
     FixedParams.dzmin;                                                     % maximum layer width
@@ -73,16 +75,27 @@ FixedParams.PPsize        = 4/3 * pi * (FixedParams.PPdia ./ 2) .^ 3; % cell vol
 FixedParams.nPP           = [];                                       % number of phytoplankton classes
 
 
-% Assume predator cell size is equal to largest autotroph cell size (if
-% using a model with a single predator size class)
-FixedParams.ZPdia = max(Data.size.size( ...
-    strcmp(Data.size.trophicLevel, 'heterotroph')));
+switch bioModel
+    case 'singlePredatorClass'
+        % Assume predator cell size is equal to largest autotroph cell size (if
+        % using a model with a single predator size class)
+        FixedParams.ZPdia = max(Data.size.size( ...
+            strcmp(Data.size.trophicLevel, 'heterotroph')));
+    case 'multiplePredatorClasses'
+        FixedParams.ZPdia = unique(Data.size.size( ...
+            strcmp(Data.size.trophicLevel, 'heterotroph')));
+end
 FixedParams.nZP_size = length(FixedParams.ZPdia);
 FixedParams.ZPsize        = 4/3 * pi * (FixedParams.ZPdia ./ 2) .^ 3; % cell volume [mu m^3]
 FixedParams.nZP           = [];                                       % number of heterotroph classes
 
 FixedParams.diaAll = [FixedParams.PPdia; FixedParams.ZPdia];
 FixedParams.sizeAll = [FixedParams.PPsize; FixedParams.ZPsize];
+
+delta_pred = reshape(FixedParams.ZPsize, [FixedParams.nZP_size, 1]);
+delta_prey = [reshape(FixedParams.PPsize, [1 FixedParams.nPP_size]), ... 
+    reshape(FixedParams.ZPsize, [1 FixedParams.nZP_size])];
+FixedParams.delta = delta_pred ./ delta_prey; % predator:prey size ratios
 
 FixedParams.diatoms       = [];                                       % assume large phytoplankton are diatoms - only needed to split SINMOD output over classes during state variable initialisation
 FixedParams.phytoplankton = [];                                       % index phytoplankton
@@ -122,8 +135,10 @@ Params.scalars = {
     'aP'
     'theta'
     'xi'
-    'Gmax'
-%     'k_G'
+%     'Gmax'
+    'k_G'
+    'delta_opt'
+    'sigG'
     'Lambda'
     'lambda_max'
     'wDOM'
@@ -146,8 +161,10 @@ Params.sizeDependent = {
     'aN_QC_b'
     'pmax_a'
     'pmax_b'
-    'k_G_a'
-    'k_G_b'
+    'Gmax_a'
+    'Gmax_b'
+%     'k_G_a'
+%     'k_G_b'
     'wp_a'
     'wp_b'
     'beta1'
@@ -193,23 +210,16 @@ Params.pmax_a = 50;
 Params.pmax_b = -0.15;
 Params.pmax = [];
 
-% % maximum grazing rate
-% Params.Gmax_a = 25;
-% Params.Gmax_b = -3;
-% Params.Gmax = [];
+% maximum grazing rate
+Params.Gmax_a = 25;
+Params.Gmax_b = -0.2;
+Params.Gmax = [];
 
-% half-saturation prey concentration (mmol N / m^3) for grazing uptake
-Params.k_G_a = 0.5;
-Params.k_G_b = 0.18;
-Params.k_G = [];
+% % half-saturation prey concentration (mmol N / m^3) for grazing uptake
+% Params.k_G_a = 0.5;
+% Params.k_G_b = 0.18;
+% Params.k_G = [];
 
-% k_G_a = 0.25;
-% k_G_b = 0.4;
-% k_G = k_G_a .* FixedParams.PPsize .^ k_G_b;
-% Gmax = 22;
-% PC = linspace(0, 20, 500);
-% U = Gmax .* PC ./ (PC + k_G);
-% plot(PC, U)
 
 
 % sinking plankton
@@ -231,8 +241,14 @@ Params.Tref = 20;           % reference temperature (degrees C)
 Params.A = 0.05;            % temperature dependence (unitless)
 Params.h = 10;              % curvature on quota uptake limitation
 Params.m = 0.05;            % linear plankton mortality (1/day)
-% Params.k_G = 1;             % half-saturation prey concentration (mmol N / m^3) for grazing uptake
-Params.Gmax = 5;            % maximum grazing rate
+Params.k_G = 1;             % half-saturation prey concentration (mmol C / m^3) for grazing uptake
+% Params.Gmax = 5;            % maximum grazing rate
+Params.delta_opt = 10;      % optimal predator:prey size ratio maximising feeding fluxes
+if strcmp(bioModel, 'singlePredatorClass')
+    % adjust size ratios for single predator class model -- all prey grazed equally
+    FixedParams.delta = repmat(Params.delta_opt, size(FixedParams.delta));
+end
+Params.sigG = 2;            % variability of predator:prey size ratios
 Params.Lambda = -1;         % prey refuge parameter (unitless)
 Params.lambda_max = 0.7;    % maximum prey assimilation efficiency
 
@@ -262,8 +278,10 @@ Bounds.aP         = [0, 0.5];
 % Bounds.aP         = [0.001, 0.5];
 Bounds.theta      = [3, 5];
 Bounds.xi         = [1.5, 5];
-Bounds.Gmax       = [0, 50];
-% Bounds.k_G        = [0.01, 5];
+% Bounds.Gmax       = [0, 50];
+Bounds.k_G        = [0.01, 10];
+Bounds.sigG        = [0.01, 4];
+Bounds.delta_opt  = [0.01, 20];
 Bounds.Lambda     = [-1.5, -0.5];
 Bounds.lambda_max = [0.5, 0.9];
 Bounds.wDOM       = [0, 0];
@@ -314,10 +332,10 @@ Bounds.pmax_a = [5, 100];
 % Bounds.pmax_b = [-0.7, -0.09];
 Bounds.pmax_b = [-0.7, 0];
 
-% Bounds.Gmax_a = [0, 100];
-% Bounds.Gmax_b = [-3, 0];
-Bounds.k_G_a = [0, 10];
-Bounds.k_G_b = [0, 1];
+Bounds.Gmax_a = [0, 100];
+Bounds.Gmax_b = [-3, 0];
+% Bounds.k_G_a = [0, 10];
+% Bounds.k_G_b = [0, 1];
 
 Bounds.beta1 = [0.5, 1];
 Bounds.beta2 = [0, 0.9];

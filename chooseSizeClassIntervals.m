@@ -48,18 +48,22 @@ end
 
 % Has the number of intervals been passed as an argument?
 nsizes = [];
+nsizesP = [];
+nsizesZ = [];
 if ~isempty(varargin)
     vnsizes = strcmp(varargin, 'nsizes');
-    if any(vnsizes)
-        nsizes = varargin{find(vnsizes)+1};
-    end
+    vnsizesP = strcmp(varargin, 'nsizesP');
+    vnsizesZ = strcmp(varargin, 'nsizesZ');
+    if any(vnsizes), nsizes = varargin{find(vnsizes)+1}; end
+    if any(vnsizesP), nsizesP = varargin{find(vnsizesP)+1}; end
+    if any(vnsizesZ), nsizesZ = varargin{find(vnsizesZ)+1}; end
 end
 
 % There are 2 cases: (1) number of intervals is unknown
 %                    (2) number of size class intervals was passed as
 %                        argument
 
-if isempty(nsizes), Case = '1'; else, Case = '2'; end
+if isempty(nsizes) && (isempty(nsizesP) && isempty(nsizesZ)), Case = '1'; else, Case = '2'; end
 
 switch Case
     case '1'
@@ -83,8 +87,6 @@ switch Case
             end
         end
         
-        
-        
         scenarios = unique(dat.scenario);
         nscenarios = length(scenarios);
         cols = [[1 0 0]; [0 1 0]; [0 0 1]; [1 0 1]]; % plotting colours for different scenarios
@@ -100,7 +102,6 @@ switch Case
         for i = 1:length(nInt)
             dat3 = dat2;
             nsizes = nInt(i); % number of size class intervals
-            %             w = wTot / nsizes; % log10-scale width of each interval
             b = linspace(lESDmin, lESDmax, nsizes+1); % interval edge positions
             lm = 0.5 * (b(1:end-1) + b(2:end)); % interval midpoints
             m = 10 .^ lm; % midpoint on natural scale
@@ -157,29 +158,18 @@ switch Case
             dat_binned = unique(dat3(:,{'scenario', 'Year', 'YeardayFirst', ...
                 'YeardayLast', 'season', 'regime', 'DepthMin', 'DepthMax', 'size', ...
                 'sizeClass', 'CellConc', 'BioVol', 'NConc'}));
-            
             % convert from short to long format
             dat_binned = stack(dat_binned, {'CellConc','BioVol','NConc'}, ...
                 'IndexVariableName','Variable','NewDataVariableName','Value');
             dat_binned.Variable = cellstr(dat_binned.Variable);
-            
             % store as structs
             dat3 = table2struct(dat3, 'ToScalar', true);
             dat_binned = table2struct(dat_binned, 'ToScalar', true);
-            dat3.dataBinned = dat_binned;
-            
-            %         % Include fields specifying which of these data are used in the cost
-            %         % function
-            %         sizeData.obsInCostFunction = {'NConc'};
-            %         sizeData.dataBinned.inCostFunction = ismember(sizeData.dataBinned.Variable, ...
-            %             sizeData.obsInCostFunction);
-            
+            dat3.dataBinned = dat_binned;            
             dat_list.(['nIntervals' num2str(nInt(i))]) = dat3;
-            
         end
         
         dat = dat_list; % output size data for all possible size class intervals
-        
         
         % plot the intervals
         makePlot = true; % by default makePlot is true when the number of intervals nsizes was unspecified
@@ -263,13 +253,14 @@ switch Case
         % Number of size class intervals to return has been specified as
         % function argument
         
-        % Arrange the aggregated size spectra data
+        if isempty(nsizesP), nsizesP = nsizes; end
+        if isempty(nsizesZ), nsizesZ = nsizes; end
         
+        % Arrange the aggregated size spectra data
         scenarios = unique(dat.scenario);
         nscenarios = length(scenarios);
         trophicLevels = unique(dat.trophicLevel);
         ntrophicLevels = length(trophicLevels);
-%         cols = [[1 0 0]; [0 1 0]; [0 0 1]; [1 0 1]]; % plotting colours for different scenarios
         allESD = unique(dat.ESD);
         nESD = length(allESD);
         dat2 = table((1:nESD)', allESD); % store all unique sizes in separate table
@@ -277,22 +268,43 @@ switch Case
         dat2.log10ESD = log10(dat2.ESD);
         
         % Assign all measurements to size class intervals
-        dat3 = dat2;
-        b = linspace(lESDmin, lESDmax, nsizes+1); % interval edge positions
-        lm = 0.5 * (b(1:end-1) + b(2:end)); % interval midpoints
-        m = 10 .^ lm; % midpoint on natural scale
-        rm = round(m * 4) / 4; % round to 0.25
-        for j = nsizes:-1:1
-            ind = dat3.log10ESD <= b(j+1);
-            dat3.sizeClass(ind) = j; % assign size classes
-            dat3.size(ind) = rm(j); % and mean sizes
+        for j = 1:ntrophicLevels
+            if strcmp(trophicLevels{j}, 'autotroph'), nsizes = nsizesP; end
+            if strcmp(trophicLevels{j}, 'heterotroph'), nsizes = nsizesZ; end
+            
+            datj = dat(strcmp(dat.trophicLevel, trophicLevels{j}),:);
+            if j > 1
+                datj.size = [];
+                datj.sizeClass = [];
+            end
+            
+            dat3 = dat2;
+            if strcmp(trophicLevels{j}, 'autotroph')
+                b = linspace(lESDmin, lESDmax, nsizes+1); % interval edge positions
+            end
+            if strcmp(trophicLevels{j}, 'heterotroph')
+                % adjust edge positions of smallest grazer size
+                b = [lESDmin, linspace(lESDmin + 2 .* (lESDmax - lESDmin) ./ nsizesP, lESDmax, nsizes)];
+            end
+            
+            lm = 0.5 * (b(1:end-1) + b(2:end)); % interval midpoints
+            m = 10 .^ lm; % midpoint on natural scale
+            rm = round(m * 4) / 4; % round to 0.25
+            for jk = nsizes:-1:1
+                ind = dat3.log10ESD <= b(jk+1);
+                dat3.sizeClass(ind) = jk; % assign size classes
+                dat3.size(ind) = rm(jk); % and mean sizes
+            end
+            dat3(:,{'index','log10ESD'}) = [];
+            dat3 = innerjoin(datj, dat3); % merge tables
+            [~,o] = sort(dat3.rowIndex);
+            dat3 = dat3(o,:); % recover original row order
+            dat3.rowIndex = [];
+            
+            dat.sizeClass(strcmp(dat.trophicLevel, trophicLevels{j})) = dat3.sizeClass;
+            dat.size(strcmp(dat.trophicLevel, trophicLevels{j})) = dat3.size;
         end
-        dat3(:,{'index','log10ESD'}) = [];
-        dat3 = innerjoin(dat, dat3); % merge tables
-        [~,o] = sort(dat3.rowIndex);
-        dat3 = dat3(o,:); % recover original row order
-        dat3.rowIndex = [];
-        dat = dat3;
+
         
         % Integrate size spectra across each size class interval
         
@@ -343,7 +355,7 @@ switch Case
         
         dat_binned = table2struct(dat_binned, 'ToScalar', true);
         dat.dataBinned = dat_binned;
-        
+
         % plot the intervals
         makePlot = true; % makePlot is true by default
         if ~isempty(varargin)
@@ -378,9 +390,6 @@ switch Case
                         if jj == 1
                             hold on
                         end
-%                         if jj == ntrophicLevels
-%                             legend(trophicLevels);
-%                         end
                     end                    
                     for jj = 1:ntrophicLevels
                         ind0 = strcmp(dat.scenario, scenarios{j}) & ...
@@ -426,6 +435,7 @@ switch Case
             end
             sgtitle({'Measured size spectra',['partitioned into ' num2str(nsizes) ' evenly spaced intervals']})
         end
+
         
         %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         
@@ -442,22 +452,43 @@ switch Case
         dat2.log10ESD = log10(dat2.ESD);
         
         % Assign all measurements to size class intervals
-        dat3 = dat2;
-        b = linspace(lESDmin, lESDmax, nsizes+1); % interval edge positions
-        lm = 0.5 * (b(1:end-1) + b(2:end)); % interval midpoints
-        m = 10 .^ lm; % midpoint on natural scale
-        rm = round(m * 4) / 4; % round to 0.25
-        for j = nsizes:-1:1
-            ind = dat3.log10ESD <= b(j+1);
-            dat3.sizeClass(ind) = j; % assign size classes
-            dat3.size(ind) = rm(j); % and mean sizes
+        for j = 1:ntrophicLevels
+            
+            datj = datFull(strcmp(datFull.trophicLevel, trophicLevels{j}),:);
+            if j > 1
+                datj.size = [];
+                datj.sizeClass = [];
+            end
+            dat3 = dat2;
+            
+            if strcmp(trophicLevels{j}, 'autotroph'), nsizes = nsizesP; end
+            if strcmp(trophicLevels{j}, 'heterotroph'), nsizes = nsizesZ; end
+            if strcmp(trophicLevels{j}, 'autotroph')
+                b = linspace(lESDmin, lESDmax, nsizes+1); % interval edge positions
+            end
+            if strcmp(trophicLevels{j}, 'heterotroph')
+                % adjust edge positions of smallest grazer size
+                b = [lESDmin, linspace(lESDmin + 2 .* (lESDmax - lESDmin) ./ nsizesP, lESDmax, nsizes)];
+            end
+            
+            lm = 0.5 * (b(1:end-1) + b(2:end)); % interval midpoints
+            m = 10 .^ lm; % midpoint on natural scale
+            rm = round(m * 4) / 4; % round to 0.25
+            for jk = nsizes:-1:1
+                ind = dat3.log10ESD <= b(jk+1);
+                dat3.sizeClass(ind) = jk; % assign size classes
+                dat3.size(ind) = rm(jk); % and mean sizes
+            end
+            
+            dat3(:,{'index','log10ESD'}) = [];
+            dat3 = innerjoin(datj, dat3); % merge tables
+            [~,o] = sort(dat3.rowIndex);
+            dat3 = dat3(o,:); % recover original row order
+            dat3.rowIndex = [];
+            
+            datFull.sizeClass(strcmp(datFull.trophicLevel, trophicLevels{j})) = dat3.sizeClass;
+            datFull.size(strcmp(datFull.trophicLevel, trophicLevels{j})) = dat3.size;
         end
-        dat3(:,{'index','log10ESD'}) = [];
-        dat3 = innerjoin(datFull, dat3); % merge tables
-        [~,o] = sort(dat3.rowIndex);
-        dat3 = dat3(o,:); % recover original row order
-        dat3.rowIndex = [];
-        datFull = dat3;
         
         % Integrate size spectra across each size class interval
         
@@ -492,7 +523,7 @@ switch Case
                 end
             end
         end
-        
+
         
         % Include reduced size spectra data set containing only the binned values
         dat_binned = unique(datFull(:,{'Label', 'Cruise', 'Year', 'Yearday', 'Event', ...
@@ -506,10 +537,11 @@ switch Case
         
         % store as structs
         datFull = table2struct(datFull, 'ToScalar', true);
-%         datFull.nSamples = length(datFull.Year);
+        %         datFull.nSamples = length(datFull.Year);
         
         dat_binned = table2struct(dat_binned, 'ToScalar', true);
         datFull.dataBinned = dat_binned;
 
+        
         
 end
