@@ -366,7 +366,7 @@ switch v
             ind = ind & strcmp(Data.size.dataBinned.trophicLevel, trophicGroup);
         end
         
-        x = unique(Data.size.dataBinned.size);
+        x = unique(Data.size.dataBinned.size(ind));
         ydat = Data.size.dataBinned.Value(ind);  % observed spectra
         ymod = modData.size.Value(ind,:);        % modelled equivalent
         ydat_tot = sum(ydat);

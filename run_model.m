@@ -28,7 +28,8 @@ obsDir = fullfile('DATA', 'AWI_Hausgarten');
 % Choose model type -- this will influence model set-up and some aspects of
 % the ODEs.
 bioModelOptions = {'singlePredatorClass', 'multiplePredatorClasses', 'mixotrophy'};
-bioModel = bioModelOptions{1}; % Only singlePredatorClass is available so far
+
+bioModel = bioModelOptions{2}; % Only singlePredatorClass and multiplePredatorClass available so far
 
 %##########################################################################
 %##########################################################################
@@ -82,16 +83,20 @@ ESDmax = 200;
 nsizes = []; % number of modelled size classes (leave empty to view a range of values)
 nsizesMin = 4; % min/max number of modelled size classes
 nsizesMax = 12;
-sizeData = chooseSizeClassIntervals(Data.size, 'datFull', Data.sizeFull, ...
-    'ESDmin', ESDmin, 'ESDmax', ESDmax, ...
+sizeData = chooseSizeClassIntervals(Data.size, ... 
+    'datFull', Data.sizeFull, 'ESDmin', ESDmin, 'ESDmax', ESDmax, ...
     'nsizes', nsizes, 'nsizesMin', nsizesMin, 'nsizesMax', nsizesMax, ...
     'plotSizeClassIntervals', true);
 display(sizeData)
 
 nsizes = 8; % number of modelled size classes (specifying a value makes chooseSizeClassIntervals.m return different output)
-[Data.size, Data.sizeFull] = chooseSizeClassIntervals(Data.size, 'datFull', Data.sizeFull, ... 
-    'ESDmin', ESDmin, 'ESDmax', ESDmax, ...
-    'nsizes', nsizes, 'nsizesMin', nsizesMin, 'nsizesMax', nsizesMax, ...
+nsizesP = 7; % can choose different numbers of size classes for each plankton type
+nsizesZ = 8;
+
+[Data.size, Data.sizeFull] = chooseSizeClassIntervals(Data.size, ... 
+    'datFull', Data.sizeFull, 'ESDmin', ESDmin, 'ESDmax', ESDmax, ...
+    'nsizes', nsizes, 'nsizesP', nsizesP, 'nsizesZ', nsizesZ, ... 
+    'nsizesMin', nsizesMin, 'nsizesMax', nsizesMax, ...
     'plotSizeClassIntervals', true);
 
 % Choose data types to use in cost function - I think bio-volume is the
@@ -126,7 +131,7 @@ end
 % within initialiseParameters.m.
 % Modelled cell size ranges are automatically chosen to correspond with the
 % size class intervals already selected using the fitting data.
-[FixedParams, Params] = initialiseParameters(F, Data);
+[FixedParams, Params] = initialiseParameters(F, Data, bioModel);
 display(FixedParams)
 display(Params)
 
@@ -140,9 +145,8 @@ display(Params)
 % [FixedParams, Params] = initialiseParameters(F, Data, ...
 %     'load', 'results/parametersInitialValues_singlePredClass_2018_2');
 
-
-% [FixedParams, Params] = initialiseParameters(F, Data, ...
-%     'load', ['results/parametersInitialValues_' bioModel]);
+[FixedParams, Params] = initialiseParameters(F, Data, bioModel, ...
+    'load', ['results/parametersInitialValues_' bioModel]);
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -247,6 +251,8 @@ close all
 % plotting
 Data.scalar = sortOrderData(Data.scalar);
 
+
+
 %##########################################################################
 %##########################################################################
 
@@ -261,18 +267,12 @@ v0 = initialiseVariables(FixedParams, Params, Forc);
 % NOTE:
 % Order of variables = inorganic nutrients [depth]
 %                      phytoplankton       [size, depth, nutrient]
-%                      zooplankton         [depth, nutrient]
+%                      zooplankton         [size, depth, nutrient]
 %                      organic matter      [type, depth, nutrient]
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% % Use single precision -- get back to this... it's more involved...
-% Forc = structDouble2Single(Forc);
-% Params = structDouble2Single(Params);
-% FixedParams = structDouble2Single(FixedParams);
-% v0 = single(v0);
 
 % Parallelise integrations over trajectories
 poolObj = gcp('nocreate');
@@ -288,7 +288,7 @@ odeIntegrator = integratorChoices{2};
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % NOTE:
-% ode23 seems to be the most robust. ode45 occasionally produces NaNs.
+% ode23 seems to be the most robust. ode45 has occasionally produced NaNs.
 % Maybe ode45 is less robust due to stiffness in the model equations. It
 % seems that the equations are stiff for some parameter values, as the
 % solver can slow down significantly... this is annoying, it would be
@@ -315,7 +315,10 @@ odeOptions=odeset('AbsTol', 1e-6, 'RelTol', 1e-4,...
 
 % Run the model
 tic
-[out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, odeIntegrator, odeOptions);
+% [out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, odeIntegrator, odeOptions);
+[out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, odeIntegrator, odeOptions, ...
+    'returnExtra', true);
+% {'cellDensity','biovolume'}
 runtime = toc;
 disp([num2str(runtime) ' seconds to integrate ' num2str(Forc.nTraj) ' trajectories']); fprintf('\n')
 runtime = runtime / Forc.nTraj * numcores;
@@ -332,7 +335,7 @@ display(auxVars)
 % Select which parameters to optimise.
 % Choose from the lists: Params.scalars & Params.sizeDependent.
 parnames = {'wPOM', 'wp_a', 'wp_b', 'rDON', 'rPON', 'rPOC', 'beta2', ... 
-    'beta3', 'aP', 'Gmax', 'k_G_a', 'k_G_b', 'pmax_a', 'pmax_b', ... 
+    'beta3', 'aP', 'Gmax_a', 'Gmax_b', 'k_G', 'pmax_a', 'pmax_b', ... 
     'Qmin_QC_a', 'Qmin_QC_b', 'Qmax_delQ_a', 'Qmax_delQ_b', ... 
     'Vmax_QC_a', 'Vmax_QC_b', 'aN_QC_a', 'aN_QC_b'};
 npars = length(parnames);
@@ -365,7 +368,7 @@ costFunctionChoices = { ...
     'syntheticLikelihood_ScalarNormal_SizeSpectraLogNormalDirichlet', ...
     'syntheticLikelihood_ScalarNormalShape_SizeSpectraLogNormalDirichlet' ...
     };
-costFunctionType = costFunctionChoices{3}; % select cost function
+costFunctionType = costFunctionChoices{4}; % select cost function
 FixedParams.costFunction = costFunctionType;
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -472,7 +475,8 @@ switch viewResults
 end
 
 % Save output
-tag = '_fitAllNutrientsAndBioVolPandZ';
+tag = ['_' bioModel];
+% tag = '_fitAllNutrientsAndBioVolPandZ';
 fileName = ['results/fittedParameters_' FixedParams.costFunction tag];
 
 saveParams = true;
@@ -483,7 +487,7 @@ end
 
 % Should these parameter values be saved to use as initial values for
 % future runs?
-updateStoredInitials = false;
+updateStoredInitials = true;
 switch updateStoredInitials
     case true
         optPar = gaOutput.optPar;
@@ -502,7 +506,8 @@ end
 % We may continue optimising parameters stored in gaOutput by initialising
 % the algorithm with a stored population.
 
-tag = '_fitAllNutrientsAndBioVolPandZ';
+tag = ['_' bioModel];
+% tag = '_fitAllNutrientsAndBioVolPandZ';
 fileName = ['results/fittedParameters_' FixedParams.costFunction tag];
 
 % Load stored results
@@ -597,7 +602,8 @@ preferences('Editor/Debugger')
 folder = 'results/plots/';
 
 % Load fitted parameters, and associated data and fixed parameters...
-tag = '_fitAllNutrientsAndBioVolPandZ';
+tag = ['_' bioModel];
+% tag = '_fitAllNutrientsAndBioVolPandZ';
 fileName = ['results/fittedParameters_' FixedParams.costFunction tag];
 
 [~, gaOutput, parnames, optPar, lb, ub, Data, Forc, FixedParams, Params, v0] = ... 
@@ -613,6 +619,8 @@ Params = updateParameters(Params, FixedParams, optPar);
 costFunctionType = FixedParams.costFunction;
 Forc.integrateFullTrajectory = true;
 
+close all
+clear out auxVars
 [cost, costComponents, modData, out, auxVars] = costFunction(optPar, ...
     FixedParams, Params, Forc, Data, v0, odeIntegrator, odeOptions, ... 
     'selectFunction', costFunctionType, 'returnExtra', 'all');
@@ -632,6 +640,28 @@ Forc.integrateFullTrajectory = true;
 
 save = true;
 
+% plots of raw data
+plt1 = figure;
+plt1.Units = 'inches';
+plt1.Position = [0 0 8 6];
+subplot(2,2,1)
+plot_rawData('scalar', 'N', Data, 'Ylim', [0, 70]);
+subplot(2,2,2)
+plot_rawData('scalar', 'chl_a', Data, 'Ylim', [0, 70]);
+subplot(2,2,3)
+plot_rawData('scalar', 'PON', Data, 'Ylim', [0, 70]);
+subplot(2,2,4)
+plot_rawData('scalar', 'POC', Data, 'Ylim', [0, 70]);
+
+plt2 = figure;
+plt2.Units = 'inches';
+plt2.Position = [0 0 8 6];
+subplot(2,1,1)
+plot_rawData('sizeSpectra', 'CellConc', Data)
+subplot(2,1,2)
+plot_rawData('sizeSpectra', 'BioVol', Data)
+
+
 % Summary plots displaying model fit to data
 logPlot = true; % for scalar data choose logPlot = true or false
 pltChl = plot_fitToData('chl_a', Data, modData, logPlot); pause(0.25)
@@ -641,13 +671,12 @@ logPlot = false;
 pltN = plot_fitToData('N', Data, modData, logPlot); pause(0.25)
 
 logPlot = 'loglog'; % for size spectra data choose logPlot = 'loglog' or 'semilogx'
-
 pltCellConc_P = plot_fitToData('CellConc', Data, modData, logPlot, 'trophicGroup', 'autotroph'); pause(0.25)
 pltCellConc_Z = plot_fitToData('CellConc', Data, modData, logPlot, 'trophicGroup', 'heterotroph'); pause(0.25)
 pltBioVol_P = plot_fitToData('BioVol', Data, modData, logPlot, 'trophicGroup', 'autotroph'); pause(0.25)
 pltBioVol_Z = plot_fitToData('BioVol', Data, modData, logPlot, 'trophicGroup', 'heterotroph'); pause(0.25)
-pltNConc_P = plot_fitToData('NConc', Data, modData, logPlot, 'trophicGroup', 'autotroph'); pause(0.25)
-pltNConc_Z = plot_fitToData('NConc', Data, modData, logPlot, 'trophicGroup', 'heterotroph'); pause(0.25)
+% pltNConc_P = plot_fitToData('NConc', Data, modData, logPlot, 'trophicGroup', 'autotroph'); pause(0.25)
+% pltNConc_Z = plot_fitToData('NConc', Data, modData, logPlot, 'trophicGroup', 'heterotroph'); pause(0.25)
 
 switch save, case true
     % scalar data
@@ -685,15 +714,38 @@ switch save, case true
         filename = 'fitToData_BioVolSpectra_Z.png';
         print(pltBioVol_Z, fullfile(folder, filename), '-r300', '-dpng');
     end    
-    if exist('pltNConc_P', 'var') && isvalid(pltNConc_P)
-        filename = 'fitToData_NConcSpectra_P.png';
-        print(pltNConc_P, fullfile(folder, filename), '-r300', '-dpng');
-    end
-    if exist('pltNConc_Z', 'var') && isvalid(pltNConc_Z)
-        filename = 'fitToData_NConcSpectra_Z.png';
-        print(pltNConc_Z, fullfile(folder, filename), '-r300', '-dpng');
-    end
+%     if exist('pltNConc_P', 'var') && isvalid(pltNConc_P)
+%         filename = 'fitToData_NConcSpectra_P.png';
+%         print(pltNConc_P, fullfile(folder, filename), '-r300', '-dpng');
+%     end
+%     if exist('pltNConc_Z', 'var') && isvalid(pltNConc_Z)
+%         filename = 'fitToData_NConcSpectra_Z.png';
+%         print(pltNConc_Z, fullfile(folder, filename), '-r300', '-dpng');
+%     end
 end
+
+
+% Simpler plots -- boxplots against depth
+
+plt = figure;
+subplot(2,2,1)
+logPlot = false;
+plot_fitToData_depthBoxplot('N', Data, modData, logPlot); pause(0.25)
+logPlot = true; % for scalar data choose logPlot = true or false
+subplot(2,2,2)
+plot_fitToData_depthBoxplot('chl_a', Data, modData, logPlot); pause(0.25)
+subplot(2,2,3)
+plot_fitToData_depthBoxplot('POC', Data, modData, logPlot); pause(0.25)
+subplot(2,2,4)
+plot_fitToData_depthBoxplot('PON', Data, modData, logPlot); pause(0.25)
+plt.Units = 'inches';
+plt.Position = [0 0 8 8];
+
+filename = 'fitToData_depthBoxplot.png';
+print(plt, fullfile(folder, filename), '-r300', '-dpng');
+
+
+
 
 
 %~~~~~~~~~~~~~~~~~~
@@ -724,7 +776,7 @@ save = false;
 
 % Choose one or more trajectories -- if multiple are selected then the plot
 % will average over them.
-sampleEvent = 10;
+sampleEvent = 1;
 % All trajectories used for sampleEvent
 traj = find(Data.scalar.EventTraj(sampleEvent,:));
 % If waterMass is either Atlantic OR Arctic then it may make sense to plot
@@ -987,7 +1039,7 @@ close all
 save = false;
 
 % Choose event
-sampleEvent = 22;
+sampleEvent = 30;
 if ~ismember(sampleEvent, 1:Data.scalar.nEvents), warning(['Choose event number within range (1, ' num2str(Data.scalar.nEvents) ')']); end
 % trajectory indices
 traj = find(Data.scalar.EventTraj(sampleEvent,:));
@@ -1146,6 +1198,31 @@ switch save
 end
 
 
+% Group trajectories of Arctic and of Atlantic origin
+
+save = true;
+
+plt_Atlantic = plot_timeSeries_trajectoryPolygon('phytoZooPlanktonStacked', ...
+    [], [], out, auxVars, FixedParams, Forc, Data, ...
+    'waterMass', 'Atlantic');
+plt_Arctic = plot_timeSeries_trajectoryPolygon('phytoZooPlanktonStacked', ...
+    [], [], out, auxVars, FixedParams, Forc, Data, ...
+    'waterMass', 'Arctic');
+
+switch save
+    case true
+        if exist('plt_Atlantic', 'var') && isvalid(plt_Atlantic)
+            filename = 'stackedPolygons_planktonAtlantic.png';
+            print(plt_Atlantic, fullfile(folder, filename), '-r300', '-dpng');
+        end
+        if exist('plt_Arctic', 'var') && isvalid(plt_Arctic)
+            filename = 'stackedPolygons_planktonArctic.png';
+            print(plt_Arctic, fullfile(folder, filename), '-r300', '-dpng');
+        end
+end
+
+
+
 plt = plot_timeSeries_barplot('phytoZooPlankton',sampleEvent,traj,out,FixedParams,Forc,Data);
 
 switch save
@@ -1160,6 +1237,60 @@ end
 
 
 close all
+
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% Network plots -- fluxes, production
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+% Feeding fluxes
+plt_feedFlux_C = figure(1);
+plt_feedFlux_C.Units = 'inches';
+% plt_feedFlux_C.Position = [0 0 16 12];
+plt_feedFlux_C.Position = [0 0 10 7.5];
+subplot(2,1,1)
+plot_network('feedingFluxes', 'carbon', auxVars, FixedParams, Forc, 'Arctic');
+subplot(2,1,2)
+plot_network('feedingFluxes', 'carbon', auxVars, FixedParams, Forc, 'Atlantic');
+
+plt_feedFlux_N = figure(2);
+plt_feedFlux_N.Units = 'inches';
+plt_feedFlux_N.Position = [0 0 10 7.5];
+subplot(2,1,1)
+plot_network('feedingFluxes', 'nitrogen', auxVars, FixedParams, Forc, 'Arctic');
+subplot(2,1,2)
+plot_network('feedingFluxes', 'nitrogen', auxVars, FixedParams, Forc, 'Atlantic');
+
+% Organic matter
+plt_OM = figure(3);
+plt_OM.Units = 'inches';
+plt_OM.Position = [0 0 10 10];
+subplot(2,2,1)
+plot_network('OMfluxes', 'carbon', auxVars, FixedParams, Forc, 'Arctic');
+subplot(2,2,2)
+plot_network('OMfluxes', 'nitrogen', auxVars, FixedParams, Forc, 'Arctic');
+subplot(2,2,3)
+plot_network('OMfluxes', 'carbon', auxVars, FixedParams, Forc, 'Atlantic');
+subplot(2,2,4)
+plot_network('OMfluxes', 'nitrogen', auxVars, FixedParams, Forc, 'Atlantic');
+
+
+switch save, case true
+        if exist('plt_feedFlux_C', 'var') && isvalid(plt_feedFlux_C)
+            filename = 'networkPlot_feedingFlux_carbon.png';
+            print(plt_feedFlux_C, fullfile(folder, filename), '-r300', '-dpng');
+        end
+        if exist('plt_feedFlux_N', 'var') && isvalid(plt_feedFlux_N)
+            filename = 'networkPlot_feedingFlux_nitrogen.png';
+            print(plt_feedFlux_N, fullfile(folder, filename), '-r300', '-dpng');
+        end
+        if exist('plt_OM', 'var') && isvalid(plt_OM)
+            filename = 'networkPlot_OMFluxes.png';
+            print(plt_OM, fullfile(folder, filename), '-r300', '-dpng');
+        end
+end
+
+
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % Plot groups of trajectories corresponding to each event

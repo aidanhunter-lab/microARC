@@ -25,6 +25,10 @@ if ~isempty(varargin)
         fixedYaxis = varargin{find(strcmp(varargin, 'fixedYaxis'))+1};
     end
     
+    if any(strcmp(varargin, 'waterMass'))
+        waterMass = varargin{find(strcmp(varargin, 'waterMass')) +1};
+    end
+    
 end
 
 nt = fixedParams.nt;
@@ -34,15 +38,36 @@ nZP_size = fixedParams.nZP_size;
 
 % Extract times
 x = yearday(forcing.t(:,1)); % yearday on x-axis
-etime = unique(dat.scalar.Yearday(dat.scalar.Event == event,:)); % yearday of sampling event
+if ~isempty(event)
+    etime = unique(dat.scalar.Yearday(dat.scalar.Event == event,:)); % yearday of sampling event
+end
 
 % Extract outputs
-N = squeeze(out.N(:,:,:,traj));
-% P = squeeze(out.P(:,:,:,:,traj));
-% Z = squeeze(out.Z(:,:,:,:,traj));
-P = out.P(:,:,:,:,traj);
-Z = out.Z(:,:,:,:,traj);
-OM = squeeze(out.OM(:,:,:,:,traj));
+if ~isempty(traj)
+    N = squeeze(out.N(:,:,:,traj));
+    P = out.P(:,:,:,:,traj);
+    Z = out.Z(:,:,:,:,traj);
+    OM = squeeze(out.OM(:,:,:,:,traj));
+elseif isempty(waterMass)
+    traj = 1:forcing.nTraj;
+    N = squeeze(out.N(:,:,:,traj));
+    P = out.P(:,:,:,:,traj);
+    Z = out.Z(:,:,:,:,traj);
+    OM = squeeze(out.OM(:,:,:,:,traj));
+elseif strcmp(waterMass, 'Atlantic')
+    traj = find(strcmp(forcing.waterMass, 'Atlantic'));
+    N = squeeze(out.N(:,:,:,traj));
+    P = out.P(:,:,:,:,traj);
+    Z = out.Z(:,:,:,:,traj);
+    OM = squeeze(out.OM(:,:,:,:,traj));
+elseif strcmp(waterMass, 'Arctic')
+    traj = find(strcmp(forcing.waterMass, 'Arctic'));
+    N = squeeze(out.N(:,:,:,traj));
+    P = out.P(:,:,:,:,traj);
+    Z = out.Z(:,:,:,:,traj);
+    OM = squeeze(out.OM(:,:,:,:,traj));
+end
+
 
 
 switch var
@@ -456,12 +481,12 @@ switch var
         title(['phytoplankton carbon in ' num2str(fixedParams.Htot) 'm deep (1m^2) water column'])
 
         %----------------------------------------------------------
-
+        
     case 'phytoZooPlanktonStacked'
         
         plt = figure;
         plt.Units = 'inches';
-        plt.Position = [0 0 12 4];
+        plt.Position = [0 0 10 4*5/6];
         
         Y = squeeze(P(:,:,fixedParams.PP_C_index,:,:));
         Y = repmat(reshape(fixedParams.zwidth, [1 nz]), [nPP_size 1]) .* Y; % conc -> quantity
@@ -477,50 +502,64 @@ switch var
         
         % polygon vertices
         xpgon = [x(:); flip(x(:))];
-        ypgon = zeros(nPP_size + 2, nt);
-        ypgon(2:end,:) = mean(Y,3);
+        ypgon = zeros(nPP_size + nZP_size + 1, nt);
+        ypgon(2:end,:) = mean(Y, ndims(Y));
         ypgonc = cumsum(ypgon);
-        % color scale - red --> blue
-        rb_hsv = rgb2hsv([1 0 0; 0 0 1]);
-        r2b_hsv =  [linspace(rb_hsv(1,1), rb_hsv(2,1), nPP_size)' ...
-            linspace(rb_hsv(1,2), rb_hsv(2,2), nPP_size)' ...
-            linspace(rb_hsv(1,3), rb_hsv(2,3), nPP_size)'];
-        r2b = hsv2rgb(r2b_hsv);
-        cols = r2b;
-        cols(nPP_size + 1,:) = [0 0 0]; % black for zooplankton
-        pgon = polyshape(xpgon, [ypgonc(1,:) flip(ypgonc(2,:))]');
-        ps = plot(pgon);
-        ps.FaceColor = cols(1,:);
+        % 2 colour scales: green for autotrophs & red for heterotrophs
+        cols = zeros(nPP_size+nZP_size, 3);
+        greens = [0 100 0; 127 255 212] ./ 255; % dark green to aquamarine
+        reds = [128 0 0; 255 255 0] ./ 255;   % maroon to yellow
+        cols(1:nPP_size, 1) = linspace(greens(1,1), greens(2,1), nPP_size);
+        cols(1:nPP_size, 2) = linspace(greens(1,2), greens(2,2), nPP_size);
+        cols(1:nPP_size, 3) = linspace(greens(1,3), greens(2,3), nPP_size);        
+        cols(nPP_size+1:nPP_size+nZP_size, 1) = linspace(reds(1,1), reds(2,1), nZP_size);
+        cols(nPP_size+1:nPP_size+nZP_size, 2) = linspace(reds(1,2), reds(2,2), nZP_size);
+        cols(nPP_size+1:nPP_size+nZP_size, 3) = linspace(reds(1,3), reds(2,3), nZP_size);        
+        fill(xpgon, [ypgonc(1,:), flip(ypgonc(2,:))], cols(1,:))
         xlim([min(x) max(x)])
         ylim([0 max(ypgonc(:))])
-        xl = xlim; yl = ylim;
-        
-        yleg = linspace(yl(1)+0.95*diff(yl), yl(1)+0.5*diff(yl), nPP_size + 2);
+        xl = xlim; yl = ylim;        
+        yleg = linspace(yl(1)+0.95*diff(yl), yl(1)+0.5*diff(yl), max([nPP_size, nZP_size]) + 2);
         hold on
-        text(xl(1)+0.05*diff(xl), yleg(1), 'cell diameter')
-        ps = scatter(xl(1)+0.05*diff(xl), yleg(2), 'filled');
+        text(xl(1)+0.1*diff(xl), yleg(1), 'cell diameter')
+        text(xl(1)+0.05*diff(xl), yleg(2), 'autotrophs')        
+        text(xl(1)+0.15*diff(xl), yleg(2), 'heterotrophs')        
+        ps = scatter(xl(1)+0.05*diff(xl), yleg(3), 'filled');
         ps.MarkerFaceColor = cols(1,:);
-        text(xl(1)+0.07*diff(xl), yleg(2), ...
+        text(xl(1)+0.07*diff(xl), yleg(3), ...
             [num2str(round(fixedParams.PPdia(1),2,'significant')) ' \mum'])
-        for i = 2:nPP_size+1
-            pgon = polyshape(xpgon, [ypgonc(i,:) flip(ypgonc(i+1,:))]');
-            ps = plot(pgon);
-            ps.FaceColor = cols(i,:);
-            ps = scatter(xl(1)+0.05*diff(xl), yleg(i+1), 'filled');
+        for i = 2:nPP_size
+            fill(xpgon, [ypgonc(i,:), flip(ypgonc(i+1,:))], cols(i,:))
+            ps = scatter(xl(1)+0.05*diff(xl), yleg(i+2), 'filled');
             ps.MarkerFaceColor = cols(i,:);
-            if i < nPP_size+1
-                text(xl(1)+0.07*diff(xl), yleg(i+1), ...
+                text(xl(1)+0.07*diff(xl), yleg(i+2), ...
                     [num2str(round(fixedParams.PPdia(i),2,'significant')) ' \mum'])
-            else
-                text(xl(1)+0.07*diff(xl), yleg(i+1), 'zooplankton')
-            end
+        end        
+        for i = 1:nZP_size
+            fill(xpgon, [ypgonc(i+nPP_size,:), flip(ypgonc(i+nPP_size+1,:))], cols(i+nPP_size,:))
+            ps = scatter(xl(1)+0.15*diff(xl), yleg(i+2), 'filled');
+            ps.MarkerFaceColor = cols(i+nPP_size,:);
+            text(xl(1)+0.17*diff(xl), yleg(i+2), ...
+                [num2str(round(fixedParams.ZPdia(i),2,'significant')) ' \mum'])
         end
         hold off
         xlabel('year-day')
-        ylabel('abundance (mmol C)')
-        title(['plankton carbon in ' num2str(fixedParams.Htot) 'm deep (1m^2) water column'])
-
+        ylabel('biomass (mmol C)')
         
+        if ~exist('waterMass', 'var') || isempty(waterMass)
+            waterMass = dat.scalar.waterMass{event};
+        end
+        if strcmp(waterMass, 'Arctic/Atlantic')
+            waterMass = 'Arctic & Atlantic';
+        end
+        
+        if ~isempty(event)
+            title({['plankton carbon in ' num2str(fixedParams.Htot) 'm deep (1m^2) water column'], ...
+                [waterMass ' water mass: sample event ' num2str(event)]})
+        else
+            title({['plankton carbon in ' num2str(fixedParams.Htot) 'm deep (1m^2) water column'], ...
+                [waterMass ' water']})
+        end
 end
 
 end

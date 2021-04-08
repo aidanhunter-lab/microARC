@@ -1,5 +1,4 @@
-function [dvdt, extraOutput, extraOutput_2d] = ODEs(t, v_in, ... 
-    parameterList, forc, timeStep, returnExtra)
+function [dvdt, out] = ODEs(t, v_in, parameterList, forc, timeStep, returnExtra)
 
 fixedParams = parameterList.FixedParams;
 params = parameterList.Params;
@@ -23,20 +22,16 @@ nsize = nPP_size + nZP_size;
 N = v_in(fixedParams.IN_index)';
 
 % Plankton
-PP = reshape(v_in(fixedParams.PP_index), [nPP_size nz nPP_nut]); % phytoplankton (all nutrients)
-% P_C = PP(:,:,fixedParams.PP_C_index);
-ZP = reshape(v_in(fixedParams.ZP_index), [nZP_size nz nZP_nut]);
-% Z_C = ZP(:,:,fixedParams.ZP_C_index); % zooplankton (carbon)
-
-B = cat(1, PP, ...
-    cat(3, ZP, zeros(1, nz, 1))); % all plankton
+B = cat(1, ...
+    reshape(v_in(fixedParams.PP_index), [nPP_size nz nPP_nut]), ... % autotrophs
+    cat(3, ...
+    reshape(v_in(fixedParams.ZP_index), [nZP_size nz nZP_nut]), ... % heterotrophs (include extra zeros for chl-a)
+    zeros(nZP_size, nz, 1))); % all plankton
 
 B_C = B(:,:,fixedParams.PP_C_index); % all planktonic carbon
 
-
 % Organic matter
 OM =reshape(v_in(fixedParams.OM_index), [nOM_type nz nOM_nut]);
-OM_C = OM(:,:,fixedParams.OM_C_index); % DOC and POC
 
 
 %% FORCING DATA
@@ -53,9 +48,10 @@ Isurf = (Isurf(:,1) + diff(Isurf,1,2) .* t)';
 % Calculate light levels at depth -- within each depth layer light
 % attenuates over half the layer width plus the combined widths of all
 % shallower layers.
-att = (fixedParams.attSW + fixedParams.attP .* sum(PP(:,:,fixedParams.PP_Chl_index))) .* fixedParams.zwidth';
+att = (fixedParams.attSW + fixedParams.attP .* sum(B(phyto,:,fixedParams.PP_Chl_index))) .* fixedParams.zwidth';
+% att = (fixedParams.attSW + fixedParams.attP .* sum(PP(:,:,fixedParams.PP_Chl_index))) .* fixedParams.zwidth';
 att = 0.5 * att + [0 cumsum(att(1:nz-1))];
-I = Isurf * exp(-att);
+out.I = Isurf * exp(-att);
 
 
 %% MODEL EQUATIONS
@@ -64,153 +60,155 @@ I = Isurf * exp(-att);
 % Physiology
 %~~~~~~~~~~~
 
-% N and Chl quotas relative to C
-Q_N = B(:,:,fixedParams.PP_N_index) ./ B_C;
-Q_Chl = B(:,:,fixedParams.PP_Chl_index) ./ B_C;
+% nutrient quotas
+out.Q = B ./ B_C;
 
 % Nutrient limitation
-gammaN = max(0, min(1, (Q_N - params.Qmin_QC) ./ params.delQ_QC));
+out.gammaN = max(0, min(1, (out.Q(:,:,fixedParams.PP_N_index) - params.Qmin_QC) ./ params.delQ_QC));
 
 % Uptake regulation
-Qstat = 1 - gammaN .^ params.h;
+out.Qstat = 1 - out.gammaN .^ params.h;
 
 % Temperature dependence
-gammaT = exp(params.A .* (T - params.Tref));
+out.gammaT = exp(params.A .* (T - params.Tref));
 
 % Background mortality
-B_C_mortality = params.m .* B_C; % linear mortality
+% B_C_mortality = params.m .* B_C; % linear mortality
 % B_C_mortality = params.m .* B_C .^ 2; % non-linear mortality
-
+out.mortality = params.m .* B;
 
 %~~~~~~~~~~~
 % Autotrophy
 %~~~~~~~~~~~
 
-% zeros_size_nz = zeros(nPP_size, nz);
-zeros_size_nz = zeros(nsize, nz);
+out.V = zeros(nsize, nz, nPP_nut); % all uptake rates
 
 % Nutrient uptake
-V_N = MichaelisMenton(params.Vmax_QC, params.kN, N) .* gammaT .* Qstat;
-V_N(zoo,:) = 0;
-
-% V_N = params.Vmax_QC ./ (1 + params.Vmax_QC ./ (params.aN_QC .* N)) .* gammaT .* Qstat; % nitrogen uptake rate (mmol N / mmol C / day)
-N_uptake = V_N .* B_C; % mmol N / m^3 / day
-N_uptake_losses = sum(N_uptake);
+out.V(:,:,fixedParams.PP_N_index) = ... 
+    MichaelisMenton(params.Vmax_QC, params.kN, N) .* out.gammaT .* out.Qstat;
+out.V(zoo,:,fixedParams.PP_N_index) = 0;
 
 % Photosynthesis
-zeroLight = all(I == 0);
-if zeroLight
-    V_Chl = zeros_size_nz;
-    V_C = zeros_size_nz;
-%     V_C = zeros(nPP_size+1, nz);
-else
-    psat = params.pmax .* gammaT .* gammaN; % light saturated photosynthetic rate
-    aP_Q_I = (params.aP .* I) .* Q_Chl;
-    pc = psat .* (1 - exp(-aP_Q_I ./ psat )); % photosynthetic (carbon production) rate (1 / day)
-    rho = params.theta .* pc ./ aP_Q_I;  % proportion of new nitrogen prodcution allocated to chlorophyll (mg Chl / mmol N)
-    V_Chl = rho .* V_N; % chlorophyll production rate (mg Chl / mmol C / day)
-    V_C = max(0, pc - params.xi .* V_N);
-%     V_C = [max(0, pc - params.xi .* V_N); zeros(1, nz)];
+zeroLight = all(out.I == 0);
+if ~zeroLight
+    out.psat = params.pmax .* out.gammaT .* out.gammaN; % light saturated photosynthetic rate
+    aP_Q_I = (params.aP .* out.I) .* out.Q(:,:,fixedParams.PP_Chl_index);
+    out.pc = out.psat .* (1 - exp(-aP_Q_I ./ out.psat )); % photosynthetic (carbon production) rate (1 / day)
+    out.rho = params.theta .* out.pc ./ aP_Q_I;  % proportion of new nitrogen prodcution allocated to chlorophyll (mg Chl / mmol N)
+    out.V(:,:,fixedParams.PP_Chl_index) = out.rho .* out.V(:,:,fixedParams.PP_N_index); % chlorophyll production rate (mg Chl / mmol C / day)
+    out.V(:,:,fixedParams.PP_C_index) = max(0, out.pc - params.xi .* out.V(:,:,fixedParams.PP_N_index));
 end
+
+out.uptake = B_C .* out.V;
+out.N_uptake_losses = sum(out.uptake(:,:,fixedParams.PP_N_index));
 
 
 %~~~~~~~~~~~~~
 % Heterotrophy
 %~~~~~~~~~~~~~
 
-% Grazing - single predator class, with cannibalism
-F = sum(B_C); % total prey carbon
-BC2 = B_C .^ 2;
-Phi = BC2 ./ sum(BC2); % prey preference
+% phi = exp(-log(fixedParams.delta ./ params.delta_opt) .^ 2 ./ (2 .* params.sigG .^ 2)); % phi could be moved outside of ODEs if delta_opt and sigG are not tuned
+phi_BC = exp(-log(fixedParams.delta ./ params.delta_opt) .^ 2 ./ (2 .* params.sigG .^ 2)) .* ... 
+    reshape(B_C, [1 size(B_C)]);
+F = sum(phi_BC, 2);
 
-G = (MichaelisMenton(params.Gmax, params.k_G, F) .* ... 
-    gammaT .* (1-exp(params.Lambda .* F))) .* Phi;  % grazing rate (1 / day)
+phi_BC2 = phi_BC .^ 2;
+% phi_BC2 = (phi .* reshape(B_C, [1 size(B_C)])) .^ 2;
+Phi = phi_BC2 ./ sum(phi_BC2, 2); % prey preference
 
-predation_losses_C = G .* B_C; % mmol C / m^3 / day
-predation_gains_C = [zeros(nPP_size, nz); ... 
-    params.lambda_max .* sum(predation_losses_C)];
-    
+out.G = (reshape(out.gammaT, [1 size(out.gammaT)]) .* ...
+    MichaelisMenton(params.Gmax, params.k_G, F) .* (1-exp(params.Lambda .* F))) .* Phi;  % grazing rate (1 / day)
+
+out.predation_losses_all = reshape(out.Q, [1, nsize, nz, nPP_nut]) .* reshape(B_C(zoo,:), [nZP_size, 1, nz]) .* out.G;
+
+out.lambda = zeros(nZP_size, 1, nz, nPP_nut);
+out.lambda(:,:,:,fixedParams.ZP_C_index) = out.gammaN(zoo,:);
+out.lambda(:,:,:,fixedParams.ZP_N_index) = out.Qstat(zoo,:);
+out.lambda = params.lambda_max .* out.lambda;
+
+out.predation_gains_all = out.lambda .* out.predation_losses_all;
+
+mess = out.predation_losses_all(:,:,:,~fixedParams.PP_Chl_index) - ... 
+    out.predation_gains_all(:,:,:,~fixedParams.PP_Chl_index);
+
+if nZP_size > 1
+    out.predation_losses = sum(out.predation_losses_all);  % sum over predators
+end
+out.predation_losses = reshape(out.predation_losses, [nsize, nz, nPP_nut]);
+out.predation_gains = [zeros(nPP_size, nz, nPP_nut);  
+    reshape(sum(out.predation_gains_all, 2), [nZP_size, nz, nPP_nut])];  % sum over prey
+
+
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % Sources and sinks of organic matter
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 % Messy feeding
-lambda_predLoss_C = (1 - params.lambda_max) .* predation_losses_C;
-beta_lambda_predLoss_C = params.beta .* lambda_predLoss_C;
-OM_mess_C = [sum(beta_lambda_predLoss_C); ... 
-    sum(lambda_predLoss_C-beta_lambda_predLoss_C)]; % OM_mess=[DOM_mess; POM_mess] (mmol C / m^3 / day)
-
-lambda_predLoss_N = Q_N .* lambda_predLoss_C;
-beta_lambda_predLoss_N = params.beta .* lambda_predLoss_N;
-OM_mess_N = [sum(beta_lambda_predLoss_N); ... 
-    sum(lambda_predLoss_N-beta_lambda_predLoss_N)]; % OM_mess=[DOM_mess; POM_mess] (mmol N / m^3 / day)
+out.OM_mess = zeros(nOM_type, nz, nOM_nut);
+beta_mess = reshape(params.beta, [1, nsize]) .* mess;
+out.OM_mess(fixedParams.DOM_index,:,:) = sum(beta_mess, [1, 2]);
+out.OM_mess(fixedParams.POM_index,:,:) = sum(mess - beta_mess, [1, 2]);
 
 % Mortality
-beta_m_B = params.beta .* B_C_mortality;
-OM_mort_C = [sum(beta_m_B); sum(B_C_mortality - beta_m_B)]; % OM_mort=[DOM_mort; POM_mort] (mmol C / m^3 / day)
-
-B_N_mortality = Q_N .* B_C_mortality;
-beta_m_B = params.beta .* B_N_mortality;
-OM_mort_N = [sum(beta_m_B); sum(B_N_mortality - beta_m_B)]; % OM_mort=[DOM_mort; POM_mort] (mmol N / m^3 / day)
+out.OM_mort = zeros(nOM_type, nz, nOM_nut);
+beta_m_B = params.beta .* out.mortality(:,:,~fixedParams.PP_Chl_index);
+out.OM_mort(fixedParams.DOM_index,:,:) = sum(beta_m_B);
+out.OM_mort(fixedParams.POM_index,:,:) = sum(out.mortality(:,:,~fixedParams.PP_Chl_index) - beta_m_B);
 
 % Remineralisation
-OM_remin = params.rOM .* OM;
+out.OM_remin = params.rOM .* OM;
 
-SOM_C = OM_mort_C + OM_mess_C - OM_remin(:,:,fixedParams.OM_C_index); % (mmol C / m^3 / day)
-SOM_N = OM_mort_N + OM_mess_N - OM_remin(:,:,fixedParams.OM_N_index); % (mmol N / m^3 / day)
+SOM = out.OM_mort + out.OM_mess - out.OM_remin; % (mmol / m^3 / day)
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % Sources of inorganic nutrients
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 % Remineralisation
-SN = sum(OM_remin(:,:,fixedParams.OM_N_index)); % (mmol N / m^3 / day)
+SN = sum(out.OM_remin(:,:,fixedParams.OM_N_index)); % (mmol N / m^3 / day)
 
 %~~~~~~~~~~
 % Diffusion
 %~~~~~~~~~~
 
 B_C_t = B_C';
-OM_C_t = OM_C';
+OM_ = reshape(permute(OM, [2, 1, 3]), [nz, nOM_type * nOM_nut]);
 
-v_diffuse = diffusion_1D([N(:), B_C_t, OM_C_t], K, fixedParams.zwidth, fixedParams.delz);
+v_diffuse = diffusion_1D([N(:), B_C_t, OM_], K, fixedParams.zwidth, fixedParams.delz);
 
 N_diffuse = v_diffuse(:,1);
-B_C_diffuse = v_diffuse(:,2:nPP_size+nZP_size+1)';
-OM_C_diffuse = v_diffuse(:,end-nOM_type+1:end)';
+B_diffuse = out.Q .* v_diffuse(:,2:nsize+1)';
+OM_diffuse = permute(reshape( ...
+    v_diffuse(:,nsize+2:end), ...
+    [nz, nOM_type, nOM_nut]), [2, 1, 3]);
+
 
 %~~~~~~~~
 % Sinking
 %~~~~~~~~
 
-v_sink = sinking([B_C_t, OM_C_t], [params.wp, params.wk], fixedParams.zwidth);
-% v_sink = sinking([B_C_t(:,phyto), OM_C_t], [params.wp, params.wk], fixedParams.zwidth);
+wk = repmat(params.wk, [1 nOM_nut]);
 
-B_C_sink = v_sink(:,1:nPP_size+nZP_size)';
-% B_C_sink = [v_sink(:,1:nPP_size), zeros(nz, 1)]';
-OM_C_sink = v_sink(:,nPP_size+nZP_size+1:end)';
+v_sink = sinking([B_C_t, OM_], [params.wp, wk], fixedParams.zwidth);
+
+B_sink = out.Q .* v_sink(:,1:nsize)';
+OM_sink = permute(reshape(v_sink(:,nsize+1:end), ... 
+    [nz, nOM_type, nOM_nut]), [2, 1, 3]);
 
 %~~~~~
 % ODEs
 %~~~~~
 
 % Inorganic nutrients
-dNdt = N_diffuse - N_uptake_losses(:) + SN(:);
+dNdt = N_diffuse - out.N_uptake_losses(:) + SN(:);
 
 % Plankton
-fluxC_ = B_C_sink + B_C_diffuse - predation_losses_C - B_C_mortality; % mmol C / m^3 / day
-fluxC = fluxC_ + predation_gains_C;
-fluxN = N_uptake + Q_N .* fluxC; % mmol N / m^3 / day
-fluxChl = V_Chl .* B_C + Q_Chl .* fluxC_; % mg Chl / m^3 / day
-fluxC = V_C .* B_C + fluxC;
-dPPdt = cat(3, fluxC(phyto,:), fluxN(phyto,:), fluxChl(phyto,:));
-dZPdt = cat(3, fluxC(zoo,:), fluxN(zoo,:));
+dBdt = B_sink + B_diffuse + out.uptake - out.predation_losses + out.predation_gains - out.mortality;
+dPPdt = dBdt(phyto,:,:);
+dZPdt = dBdt(zoo,:,~fixedParams.PP_Chl_index);
 
 % Organic matter
-fluxC_ = OM_C_diffuse + OM_C_sink;
-fluxN = OM(:,:,fixedParams.OM_N_index) ./ OM_C .* fluxC_ + SOM_N;
-fluxC = fluxC_ + SOM_C;
-dOMdt = cat(3, fluxC, fluxN);
+dOMdt = OM_diffuse + OM_sink + SOM;
 
 dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)];
 
@@ -221,70 +219,27 @@ dvdt = [dNdt; dPPdt(:); dZPdt(:); dOMdt(:)];
 if (islogical(returnExtra) && returnExtra) || ... 
         (~islogical(returnExtra) && ~any(strcmp(returnExtra, 'none')))
     
-    cellDensity = B_C ./ params.Q_C;
-    biovolume = 1e-18 * fixedParams.sizeAll .* cellDensity;
+    out.cellDensity = B_C ./ params.Q_C;
+    out.biovolume = 1e-18 * fixedParams.sizeAll .* out.cellDensity;
+
+    % Extra output variables retained by default when return = true or 'all'.
+    keepVars = {'I', 'Q', 'V', 'G', 'lambda', 'cellDensity', 'biovolume'};
+    % Any term can be included in keepVars, but it's useful to be sparing
+    % with memory by only on returning some terms then deriving extra output
+    % outside the ODEs.m script.
     
-    %~~~~~~~~~~~
-    % 1D (depth)
-    %~~~~~~~~~~~
-    extraOutput.PAR = I; % PAR-at-depth depends upon plankton concentrations
-    extraOutput.gammaT = gammaT; % Temperature dependence
-    extraOutput.F = F; % Total prey carbon
-    
-    %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    % 2D (depth & cell size, including zooplankton)
-    %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    extraOutput_2d.cellDensity = cellDensity;
-    extraOutput_2d.biovolume = biovolume;
-    extraOutput_2d.Q_N = Q_N;
-    extraOutput_2d.Q_Chl = Q_Chl;
-    extraOutput_2d.gammaN = gammaN;
-    extraOutput_2d.Qstat = Qstat;
-    extraOutput_2d.V_N = V_N;
-    
-    if ~zeroLight
-        extraOutput_2d.V_Chl = V_Chl;
-        extraOutput_2d.V_C = V_C;
-        extraOutput_2d.psat = psat;
-        extraOutput_2d.pc = pc;
-        extraOutput_2d.rho = rho;
-    else
-        extraOutput_2d.V_Chl = zeros_size_nz;
-        extraOutput_2d.V_C = zeros_size_nz;
-        extraOutput_2d.psat = zeros_size_nz;
-        extraOutput_2d.pc = zeros_size_nz;
-        extraOutput_2d.rho = zeros_size_nz;
-    end
-    extraOutput_2d.Phi = Phi;
-    extraOutput_2d.G = G;
-    extraOutput_2d.predation_losses_C = predation_losses_C;
-    extraOutput_2d.predation_gains_C = predation_gains_C;
-    
-%     fields = fieldnames(extraOutput_2d);
-%     for i = 1:length(fields)
-%         if size(extraOutput_2d.(fields{i}), 1) == nPP_size
-%             extraOutput_2d.(fields{i}) = [extraOutput_2d.(fields{i}); nan(1, nz)];
-%         end
-%     end
-    
-    
-    
-    if ~islogical(returnExtra) && ~any(strcmp(returnExtra,'all'))
-        f1 = fieldnames(extraOutput);
-        f1 = f1(~ismember(f1, returnExtra));
-        f2 = fieldnames(extraOutput_2d);
-        f2 = f2(~ismember(f2, returnExtra));
-        extraOutput = rmfield(extraOutput, f1);
-        extraOutput_2d = rmfield(extraOutput_2d, f2);
-        if isempty(extraOutput), clear extraOutput; end
-        if isempty(extraOutput_2d), clear extraOutput_2d; end
+    if ~islogical(returnExtra) && ~all(strcmp(returnExtra, 'all'))
+        % if extra output variables have been specified explicitly...
+        keepVars = returnExtra;
     end
     
+    fields = fieldnames(out);
+    out = rmfield(out, fields(~ismember(fields, keepVars)));
     
+else
+    out = struct();
 end
 
-
-    
     
 end
 
@@ -314,4 +269,30 @@ function v = MichaelisMenton(m,k,u)
 u(u<0) = 0; % include for robustness... there shouldn't be any negatives
 v = m .* u ./ (u + k);
 end
+
+% function [out1, out2, out3, out4] = groupByDimension(v)
+% % Organises extra output structs
+% fields = fieldnames(v);
+% out1 = struct();
+% out2 = struct();
+% out3 = struct();
+% out4 = struct();
+% for i = 1:length(fields)
+%     x = v.(fields{i});
+%     if isvector(x)
+%         out1.(fields{i}) = x;
+%     end
+%     if ~isvector(x) && ismatrix(x)
+%         out2.(fields{i}) = x;
+%     end
+% %     if size(x, 1) > 1 && ndims(x) == 3
+%     if ndims(x) == 3
+%         out3.(fields{i}) = x;
+%     end
+% %     if size(x, 1) > 1 && ndims(x) == 4
+%     if ndims(x) == 4
+%         out4.(fields{i}) = x;
+%     end
+% end
+% end
 

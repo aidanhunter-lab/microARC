@@ -502,10 +502,26 @@ if ~isempty(v) && any(strcmp(v(1,:), 'plotSizeData'))
             
             trophicLevels = unique(d.trophicLevel);
             ntrophicLevels = length(trophicLevels);
+            
             nsizes = length(unique(d.sizeClass));
-            y = reshape(y, [nsizes, ntrophicLevels]);
-            ys = reshape(ys, [nsizes, ntrophicLevels]);
-            x = reshape(x, [nsizes, ntrophicLevels]);
+            nsizesP = length(unique(d.sizeClass(strcmp(d.trophicLevel, 'autotroph'))));
+            nsizesZ = length(unique(d.sizeClass(strcmp(d.trophicLevel, 'heterotroph'))));
+            y_ = nan(nsizes, ntrophicLevels);
+            y_(1:nsizesP, strcmp(trophicLevels, 'autotroph')) = y(strcmp(d.trophicLevel, 'autotroph'));
+            y_(1:nsizesZ, strcmp(trophicLevels, 'heterotroph')) = y(strcmp(d.trophicLevel, 'heterotroph'));
+            y = y_;
+            
+            y_ = nan(nsizes, ntrophicLevels);
+            y_(1:nsizesP, strcmp(trophicLevels, 'autotroph')) = ys(strcmp(d.trophicLevel, 'autotroph'));
+            y_(1:nsizesZ, strcmp(trophicLevels, 'heterotroph')) = ys(strcmp(d.trophicLevel, 'heterotroph'));
+            ys = y_;
+%             y = reshape(y, [nsizes, ntrophicLevels]);
+%             ys = reshape(ys, [nsizes, ntrophicLevels]);
+            y_ = nan(nsizes, ntrophicLevels);
+            y_(1:nsizesP, strcmp(trophicLevels, 'autotroph')) = x(strcmp(d.trophicLevel, 'autotroph'));
+            y_(1:nsizesZ, strcmp(trophicLevels, 'heterotroph')) = x(strcmp(d.trophicLevel, 'heterotroph'));
+            x = y_;
+%             x = reshape(x, [nsizes, ntrophicLevels]);
             
             Cols = [0 1 0; 1 0 0];
             

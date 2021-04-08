@@ -1,4 +1,4 @@
-function [FixedParams, Params] = initialiseParameters(Forc, Data, varargin)
+function [FixedParams, Params] = initialiseParameters(Forc, Data, bioModel, varargin)
 
 % Load default parameter set and output initialised FixedParams and Params
 % structs
@@ -11,7 +11,8 @@ if ~isempty(varargin)
     end
 end
 
-[FixedParams, Params, Bounds] = defaultParameters('Data', Data, 'load', parFile);
+[FixedParams, Params, Bounds] = defaultParameters(bioModel, 'Data', Data, ... 
+    'load', parFile);
 
 %% Fixed Parameters
 
@@ -66,7 +67,6 @@ if isempty(FixedParams.nZP_nut)
     FixedParams.nZP_nut = length(FixedParams.ZP_nut);              % number of nutrient types
 end
 
-
 if isempty(FixedParams.PPdia)
     FixedParams.PPdia = 2 .^ (0:FixedParams.nPP_size-1);           % cell diameter
 end
@@ -76,8 +76,15 @@ end
 if isempty(FixedParams.nPP)
     FixedParams.nPP = FixedParams.nPP_size * FixedParams.nPP_nut;  % number of phytoplankton classes
 end
+
+if isempty(FixedParams.ZPdia)
+    FixedParams.ZPdia = 2 .^ (0:FixedParams.nZP_size-1);           % cell diameter
+end
+if isempty(FixedParams.ZPsize)
+    FixedParams.ZPsize = 4/3 * pi * (FixedParams.ZPdia ./ 2) .^ 3; % cell volume [mu m^3]
+end
 if isempty(FixedParams.nZP)
-    FixedParams.nZP = FixedParams.nZP_size * FixedParams.nZP_nut;  % number of phytoplankton classes
+    FixedParams.nZP = FixedParams.nZP_size * FixedParams.nZP_nut;  % number of zooplankton classes
 end
 
 
@@ -135,6 +142,9 @@ FixedParams.dt_max = 1 /tx;
 
 % Size-dependent
 Vol = FixedParams.sizeAll;
+VolP = FixedParams.PPsize;
+VolZ = FixedParams.ZPsize;
+
 % Vol = FixedParams.PPsize;
 if isempty(Params.Q_C)
     Params.Q_C = powerFunction(Params.Q_C_a, Params.Q_C_b, Vol);
@@ -156,12 +166,18 @@ if isempty(Params.pmax)
     Params.pmax = powerFunction(Params.pmax_a, Params.pmax_b, Vol);
 end
 
-% if isempty(Params.Gmax)
-%     Params.Gmax = powerFunction(Params.Gmax_a, Params.Gmax_b, Vol);
-% end
-if isempty(Params.k_G)
-    Params.k_G = powerFunction(Params.k_G_a, Params.k_G_b, Vol);
+if isempty(Params.Gmax)
+    switch bioModel
+        case 'singlePredatorClass'
+            Params.Gmax = powerFunction(Params.Gmax_a, Params.Gmax_b, Vol)';
+        case {'multiplePredatorClasses','mixotrophy'}
+            Params.Gmax = powerFunction(Params.Gmax_a, Params.Gmax_b, VolZ);
+    end
 end
+if isempty(Params.k_G)
+    Params.k_G = powerFunction(Params.k_G_a, Params.k_G_b, VolZ);
+end
+
 
 if isempty(Params.wp)
     Params.wp = powerFunction(Params.wp_a, Params.wp_b, Vol, ... 
@@ -179,7 +195,7 @@ Params.delQ_QC = Params.Qmax_QC - Params.Qmin_QC;
 
 Params.kN = Params.Vmax_QC ./ Params.aN_QC;
 
-Params.beta(FixedParams.nPP_size+1) = Params.beta(FixedParams.nPP_size); % assume beta for zooplankton is equivalent to largest phytoplankton size class
+% Params.beta(FixedParams.nPP_size+1) = Params.beta(FixedParams.nPP_size); % assume beta for zooplankton is equivalent to largest phytoplankton size class
 
 Params.rOM = nan(FixedParams.nOM_type,1,FixedParams.nOM_nut);
 Params.rOM(FixedParams.DOM_index,1,FixedParams.OM_C_index) = Params.rDOC;

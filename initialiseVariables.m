@@ -17,9 +17,15 @@ smallCell_N = (1/nSmall) .* repmat(reshape(smallCell_N, ...
     [1 size(smallCell_N)]), [nSmall 1 1]);
 largeCell_N = (1/nLarge) .* repmat(reshape(largeCell_N, ...
     [1 size(largeCell_N)]), [nLarge 1 1]);
-P.N = cat(1,smallCell_N,largeCell_N);                        % merge arrays of small and large plankton
 
-% Initialise carbon by assuming N quotas are 0<Crat<1 the maximum
+PS = FixedParams.phytoplankton & ~FixedParams.diatoms;
+PL = FixedParams.phytoplankton & FixedParams.diatoms;
+
+P.N = cat(1, smallCell_N(1:sum(PS),:,:), largeCell_N(1:sum(PL),:,:), ...
+    smallCell_N(sum(PS)+1:end,:,:), largeCell_N(sum(PL)+1:end,:,:)); % merge arrays of small and large plankton
+
+
+% Initialise carbon by assuming N quotas are 0<Crat<1 times the maximum
 Crat = 0.75;
 Q_N = Params.Qmin_QC + Crat .* Params.delQ_QC;
 P.C = P.N ./ Q_N;
@@ -29,6 +35,7 @@ chlN_max = Params.theta; % maximum Chl:N ratio (mg Chl / mmol N)
 chlFrac = 0.75;
 % P.Chl = chlFrac * chlN_max .* P.N(FixedParams.phytoplankton,:,:);
 P.Chl = chlFrac * chlN_max .* P.N;
+P.Chl(FixedParams.zooplankton,:,:) = nan;
 
 % autotrophs
 PP = structfun(@(z) z(FixedParams.phytoplankton,:,:), P, 'UniformOutput', false);

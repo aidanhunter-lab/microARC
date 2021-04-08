@@ -50,6 +50,10 @@ if ~isempty(varargin)
             Params.kN = Params.Vmax_QC ./ Params.aN_QC;
         end
         
+        if any(strcmp('Gmax_a', parnames)) || any(strcmp('Gmax_b', parnames))
+            Params.Gmax = Params.Gmax(FixedParams.zooplankton);
+        end
+        
         if any(strcmp('rDOC', parnames)), Params.rOM(FixedParams.DOM_index,1,FixedParams.OM_C_index) = Params.rDOC; end
         if any(strcmp('rDON', parnames)), Params.rOM(FixedParams.DOM_index,1,FixedParams.OM_N_index) = Params.rDON; end
         if any(strcmp('rPOC', parnames)), Params.rOM(FixedParams.POM_index,1,FixedParams.OM_C_index) = Params.rPOC; end
@@ -122,6 +126,10 @@ if ~isempty(varargin)
             Params.kN = Params.Vmax_QC ./ Params.aN_QC;
         end
         
+        if any(strcmp('Gmax_a', parnames)) || any(strcmp('Gmax_b', parnames))
+            Params.Gmax = Params.Gmax(FixedParams.zooplankton);
+        end
+
         if any(strcmp('rDOC', varargin)), Params.rOM(FixedParams.DOM_index,1,FixedParams.OM_C_index) = Params.rDOC; end
         if any(strcmp('rDON', varargin)), Params.rOM(FixedParams.DOM_index,1,FixedParams.OM_N_index) = Params.rDON; end
         if any(strcmp('rPOC', varargin)), Params.rOM(FixedParams.POM_index,1,FixedParams.OM_C_index) = Params.rPOC; end
