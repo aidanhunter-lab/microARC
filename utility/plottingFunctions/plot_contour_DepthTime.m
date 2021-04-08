@@ -79,7 +79,7 @@ switch var
         
         % PAR
         subplot(3,1,3)
-        x = auxVars.PAR(:,:,traj);
+        x = squeeze(auxVars.I(:,:,:,traj));
         if ntraj > 1
             x = mean(x, ndims(x));
         end
@@ -348,47 +348,108 @@ switch var
         
         %------------------------------------------------------------------
         
+
+    
+    
+    
+    
     case 'zooplankton_C'
-        plt = figure;
+        plt = figure;        
+        nc = floor(sqrt(fixedParams.nZP_size));
+        nr = ceil(fixedParams.nZP_size / nc);
         plt.Units = 'inches';
-        plt.Position = [0 0 8 3];
-        x = squeeze(Z(:,fixedParams.ZP_C_index,:));
-        F = griddedInterpolant(depth, time, x, smooth);
-        Fsmooth = flip(F(depthGrid, timeGrid));
-        contourf(Fsmooth)
-        cb = colorbar;
-        cb.Label.String = 'mmol C / m^3';
-        title('zooplankton abundance')
-        xlabel('year-day')
-        ylabel('depth (m)')
-        xticks(100:100:fixedParams.nt)
-        xticklabels(yearday(forcing.t(100:100:fixedParams.nt,1)))
-        yticks(linspace(0,abs(fixedParams.zw(end)),7))
-        yticklabels(linspace(fixedParams.zw(end),0,7))
-        title(['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'])
-        subtitle('zooplankton abundance')
+        plt.Position = [0 0 8*nc 3*nr];
+        index = reshape([1:fixedParams.nZP_size, ...
+            zeros(1, nc * nr - fixedParams.nZP_size)], [nc nr])';
+        for ii = 1:fixedParams.nZP_size
+            subplot(nr,nc,index(ii))
+            x = squeeze(Z(ii,:,fixedParams.ZP_C_index,:));
+            F = griddedInterpolant(depth, time, x, smooth);
+            Fsmooth = flip(F(depthGrid, timeGrid));
+            contourf(Fsmooth)
+            cb = colorbar;
+            cb.Label.String = 'mmol C / m^3';
+            title([num2str(round(fixedParams.ZPdia(ii),2,'significant')) ' \mum'])
+            xlabel('year-day')
+            ylabel('depth (m)')
+            xticks(100:100:fixedParams.nt)
+            xticklabels(yearday(forcing.t(100:100:fixedParams.nt,1)))
+            yticks(linspace(0,abs(fixedParams.zw(end)),7))
+            yticklabels(linspace(fixedParams.zw(end),0,7))
+        end
+        sgtitle({['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'], ...
+            'zooplankton carbon concentration given cell diameter'})
         colormap plasma
-        
+
     case 'zooplankton_N'
         plt = figure;
+        nc = floor(sqrt(fixedParams.nZP_size));
+        nr = ceil(fixedParams.nZP_size / nc);
         plt.Units = 'inches';
-        plt.Position = [0 0 8 3];
-        x = squeeze(Z(:,fixedParams.ZP_N_index,:));
-        F = griddedInterpolant(depth, time, x, smooth);
-        Fsmooth = flip(F(depthGrid, timeGrid));
-        contourf(Fsmooth)
-        cb = colorbar;
-        cb.Label.String = 'mmol N / m^3';
-        title('zooplankton abundance')
-        xlabel('year-day')
-        ylabel('depth (m)')
-        xticks(100:100:fixedParams.nt)
-        xticklabels(yearday(forcing.t(100:100:fixedParams.nt,1)))
-        yticks(linspace(0,abs(fixedParams.zw(end)),7))
-        yticklabels(linspace(fixedParams.zw(end),0,7))
-        title(['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'])
-        subtitle('zooplankton abundance')
+        plt.Position = [0 0 8*nc 3*nr];
+        index = reshape([1:fixedParams.nZP_size, ...
+            zeros(1, nc * nr - fixedParams.nZP_size)], [nc nr])';
+        for ii = 1:fixedParams.nZP_size
+            subplot(nr,nc,index(ii))
+            x = squeeze(Z(ii,:,fixedParams.ZP_N_index,:));
+            F = griddedInterpolant(depth, time, x, smooth);
+            Fsmooth = flip(F(depthGrid, timeGrid));
+            contourf(Fsmooth)
+            cb = colorbar;
+            cb.Label.String = 'mmol N / m^3';
+            title([num2str(round(fixedParams.ZPdia(ii),2,'significant')) ' \mum'])
+            xlabel('year-day')
+            ylabel('depth (m)')
+            xticks(100:100:fixedParams.nt)
+            xticklabels(yearday(forcing.t(100:100:fixedParams.nt,1)))
+            yticks(linspace(0,abs(fixedParams.zw(end)),7))
+            yticklabels(linspace(fixedParams.zw(end),0,7))
+        end
+        sgtitle({['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'], ...
+            'zooplankton nitrogen concentration given cell diameter'})
         colormap plasma
+
+%     case 'zooplankton_C'
+%         plt = figure;
+%         plt.Units = 'inches';
+%         plt.Position = [0 0 8 3];
+%         x = squeeze(Z(:,fixedParams.ZP_C_index,:));
+%         F = griddedInterpolant(depth, time, x, smooth);
+%         Fsmooth = flip(F(depthGrid, timeGrid));
+%         contourf(Fsmooth)
+%         cb = colorbar;
+%         cb.Label.String = 'mmol C / m^3';
+%         title('zooplankton abundance')
+%         xlabel('year-day')
+%         ylabel('depth (m)')
+%         xticks(100:100:fixedParams.nt)
+%         xticklabels(yearday(forcing.t(100:100:fixedParams.nt,1)))
+%         yticks(linspace(0,abs(fixedParams.zw(end)),7))
+%         yticklabels(linspace(fixedParams.zw(end),0,7))
+%         title(['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'])
+%         subtitle('zooplankton abundance')
+%         colormap plasma
+%         
+%     case 'zooplankton_N'
+%         plt = figure;
+%         plt.Units = 'inches';
+%         plt.Position = [0 0 8 3];
+%         x = squeeze(Z(:,fixedParams.ZP_N_index,:));
+%         F = griddedInterpolant(depth, time, x, smooth);
+%         Fsmooth = flip(F(depthGrid, timeGrid));
+%         contourf(Fsmooth)
+%         cb = colorbar;
+%         cb.Label.String = 'mmol N / m^3';
+%         title('zooplankton abundance')
+%         xlabel('year-day')
+%         ylabel('depth (m)')
+%         xticks(100:100:fixedParams.nt)
+%         xticklabels(yearday(forcing.t(100:100:fixedParams.nt,1)))
+%         yticks(linspace(0,abs(fixedParams.zw(end)),7))
+%         yticklabels(linspace(fixedParams.zw(end),0,7))
+%         title(['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'])
+%         subtitle('zooplankton abundance')
+%         colormap plasma
 
         
         
