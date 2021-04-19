@@ -1,6 +1,7 @@
 function [Data, Forc, FixedParams] = selectYears(data, forc, fixedpars, varargin)
-
 % Select which years to model and filter the other years out of the data
+
+extractVarargin(varargin)
 
 Data = data;
 Forc = forc;
@@ -29,12 +30,10 @@ end
 % do any years have all fitting-data types?
 anyCompleteYears = any(sum(mat, 2) == length(prefOrd));
 
-singleYear = true; % return data from a single year? (default true... false will be trickier and would need a multi-year cost function)
-if ~isempty(varargin)
-    if any(strcmp(varargin, 'singleYear'))
-        singleYear = varargin{find(strcmp(varargin, 'singleYear'))+1};
-    end
+if ~exist('singleYear', 'var')
+    singleYear = true; % return data from a single year? (default true... false will be trickier and would need a multi-year cost function)
 end
+
 
 mat(~mat(:,1),:) = false; % Forcing data is always required
 dataCount = sum(mat(:,2:end), 2);
@@ -156,10 +155,8 @@ Data.scalar.nSamples = length(Data.scalar.Value);
 Data.scalar.nEvents = length(unique(Data.scalar.Event));
 
 % Filter size spectra data
-if ~isempty(varargin)
-    if any(strcmp(varargin, 'singleSpectra'))
-        useSingleSizeSpectra = varargin{find(strcmp(varargin, 'singleSpectra')) + 1};
-    end
+if ~exist('singleSpectra', 'var')
+    singleSpectra = true;
 end
 
 % data aggregated over events
@@ -173,7 +170,7 @@ for i = 1:length(fields)
 end
 Data.size.nSamples = size(Data.size.ESD,1);
 
-if useSingleSizeSpectra
+if singleSpectra
     uscenario = unique(Data.size.scenario);
     if length(uscenario) > 1
         keep = strcmp(Data.size.scenario, uscenario{1}); % this could be better coded, but it works given the data we have!
@@ -187,7 +184,7 @@ end
 Data.size.nSamples = size(Data.size.ESD,1);
 
 keep = ismember(Data.size.dataBinned.Year, datYear{strcmp(prefOrd, 'size')});
-if useSingleSizeSpectra
+if singleSpectra
     uscenario = unique(Data.size.dataBinned.scenario(keep));
     if length(uscenario) > 1
         keep = keep & strcmp(Data.size.dataBinned.scenario, uscenario{1});
@@ -208,7 +205,7 @@ for i = 1:length(fields)
 end
 Data.sizeFull.nSamples = size(Data.sizeFull.ESD,1);
 
-if useSingleSizeSpectra
+if singleSpectra
     uscenario = unique(Data.sizeFull.Cruise);
     if length(uscenario) > 1
         keep = strcmp(Data.sizeFull.scenario, uscenario{1}); % this could be better coded, but it works given the data we have!
@@ -222,7 +219,7 @@ end
 Data.sizeFull.nSamples = size(Data.sizeFull.ESD,1);
 
 keep = ismember(Data.sizeFull.dataBinned.Year, datYear{strcmp(prefOrd, 'size')});
-if useSingleSizeSpectra
+if singleSpectra
     uscenario = unique(Data.sizeFull.dataBinned.Cruise(keep));
     if length(uscenario) > 1
         keep = keep & strcmp(Data.sizeFull.dataBinned.Cruise, uscenario{1});

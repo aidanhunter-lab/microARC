@@ -1,27 +1,31 @@
-function [cost, costComponents, modData, out, auxVars] = ...
-    costFunction(pars, FixedParams, Params, Forc, Data, v0, odeIntegrator, odeOptions, varargin)
+function [cost, costComponents, modData, out, auxVars] = costFunction(pars, ... 
+    FixedParams, Params, Forc, Data, odeIntegrator, odeOptions, varargin)
+% Returns a scalar 'cost' quantifying model misfit to data, given parameters
+% 'pars'.
+% May optionally return a struct 'costComponents' containing the cost 
+% ascribed to each separate data type; all model outputs, 'out' and 
+% 'auxVars'; and the modelled equivalents of the data, 'modData'.
 
-% Returns a scalar 'cost' describing model misfit to data given parameters
-% 'pars' and, optionally, a struct 'costComponents' containing the cost 
-% ascribed to each separate data type, all model outputs and the modelled
-% equivalents of the data.
+extractVarargin(varargin)
 
-% disp(pars') % useful for debugging
-% Cost function type may be given by name-value pair in varargin, otherwise
-% set as the default
-defaultCostType = 'LSS';
-selectFunction = defaultCostType;
-returnExtra = {'cellDensity', 'biovolume'}; % extra output needed for the cost function
-if ~isempty(varargin)
-    i = strcmp(varargin, 'selectFunction');
-    if any(i)
-        selectFunction = varargin{find(i)+1};
-    end
-    i = strcmp(varargin, 'returnExtra');
-    if any(i)
-        returnExtra = varargin{find(i)+1};
-    end
+returnExtra_ = {'cellDensity', 'biovolume'}; % extra output needed for the cost function
+if ~exist('returnExtra', 'var')
+    % more outputs may be returned as extra outputs (not recommended while
+    % optimising parameters)
+    returnExtra = returnExtra_;
+else
+    returnExtra = unique([eval('returnExtra'), returnExtra_], 'stable');
 end
+    
+% Cost function type should be given by name-value pair in varargin,
+% otherwise the default is used
+defaultCostType = 'LSS';
+if ~exist('selectFunction', 'var')
+    selectFunction = defaultCostType;
+end
+
+Vars = Data.scalar.obsInCostFunction; % Data types used to fit the model
+VarsSize = Data.size.obsInCostFunction;
 
 
 %% Run model
@@ -29,9 +33,11 @@ end
 % Set parameter values
 Params = updateParameters(Params, FixedParams, pars);
 
-% Set initial state variable values -- some of which are selected using
-% parameter values
-
+% Some initial state variables are specified as functions of parameter
+% values => should be recalculated for each parameter set. If v0 were totally
+% independent of parameter values then it would be absolutely fixed and, to 
+% avoid wasted computation, should be passed as an argument to costFunction.m.
+v0 = initialiseVariables(FixedParams, Params, Forc);
 
 % Integrate
 [out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, ...
@@ -41,157 +47,9 @@ Params = updateParameters(Params, FixedParams, pars);
 %% Match model outputs to data
 
 % Extract output from times and depths matching the data, then transform
-% the output using the same functions that standardised the data.
-
-% Scalar data
-Vars = Data.scalar.obsInCostFunction;
-% Vars = unique(Data.scalar.Variable);
-
-evTraj = Data.scalar.evTraj;
-nsamples = size(evTraj, 1); % number of trajectories used per sampling event
-
-nEvent = Data.scalar.nEvents;
-depths_mod = abs(FixedParams.z);
-
-modData.scalar.Yearday = nan(Data.scalar.nSamples,1);
-modData.scalar.Depth = modData.scalar.Yearday;
-modData.scalar.Variable = cell(Data.scalar.nSamples,1);
-modData.scalar.Value = nan(Data.scalar.nSamples, nsamples);
-modData.scalar.scaled_Value = modData.scalar.Value;
-
-% Standardise model output with respect to depth and event using linear mixed models
-for i = 1:nEvent
-    iEvent = Data.scalar.Event == i; % index event
-    itraj = evTraj(:,i); % trajectories used for event i
-    vars = unique(Data.scalar.Variable(iEvent)); % variables measured in event i
-    vars = vars(ismember(vars, Vars));
-    iEvent = ismember(Data.scalar.Variable, vars) & iEvent; % omit unmodelled variables from the event index
-    Yearday = Data.scalar.Yearday(find(iEvent, 1));
-    Depth = Data.scalar.Depth(iEvent);    
-    Variable = Data.scalar.Variable(iEvent);
-    modData.scalar.Yearday(iEvent) = Yearday;
-    modData.scalar.Depth(iEvent) = Depth;
-    modData.scalar.Variable(iEvent) = Variable;
-    for j = 1:length(vars)
-        % loop through all data types sampled during event i
-        jvar = vars{j};
-        ind = iEvent & strcmp(Data.scalar.Variable, jvar);
-        depth = modData.scalar.Depth(ind);
-        switch jvar
-            % modelled values [depth,trajectory]
-            case 'N'
-                ymod = squeeze(out.N(:,:,Yearday,itraj));
-            case 'PON'
-                ymod = squeeze(out.OM(FixedParams.POM_index,:,FixedParams.OM_N_index,Yearday,itraj));
-            case 'POC'
-                ymod = squeeze(out.OM(FixedParams.POM_index,:,FixedParams.OM_C_index,Yearday,itraj));
-            case 'chl_a'
-                ymod = squeeze(sum(out.P(:,:,FixedParams.PP_Chl_index,Yearday,itraj)));
-        end
-        ymod = interp1(depths_mod, ymod, depth); % interpolate modelled output to match observation depths
-        ymod_scaled = Data.scalar.(['scaleFun_' jvar])(Data.scalar.scale_mu(ind), ...
-            Data.scalar.scale_sig(ind), ymod); % scale model output using same functions that scaled the data
-        modData.scalar.Value(ind,:) = ymod;
-        modData.scalar.scaled_Value(ind,:) = ymod_scaled;
-    end
-end
-
-
-% Size spectra
-
-ind = ismember(Data.scalar.Year, unique(Data.size.Year)); % index relavent sampling events
-ev = unique(Data.scalar.Event(ind));
-et = evTraj(:,ev); % sampling events and associated trajectories
-nevent = size(et, 2);
-% sample times of each event
-etime = nan(nevent, 1);
-for i = 1:nevent
-    ue = unique(Data.scalar.Yearday(Data.scalar.Event == ev(i)));
-    etime(i) = ue(1);
-%     etime(i) = unique(Data.scalar.Yearday(Data.scalar.Event == ev(i)));
-end
-depths_obs = [min(Data.size.DepthMin) max(Data.size.DepthMax)]; % sample depth range
-depth_ind = -FixedParams.zw(2:end) > depths_obs(1,1) & ...
-    -FixedParams.zw(1:end-1) < depths_obs(1,2); % depth layers corresponding to samples
-
-VarsSize = Data.size.obsInCostFunction;
-allVarsSize = unique(Data.size.dataBinned.Variable);
-
-n = size(Data.size.dataBinned.Year, 1);
-modData.size.Variable = cell(n,1);
-modData.size.trophicLevel = cell(n,1);
-modData.size.Value = nan(n,nsamples);
-modData.size.Value_allEvents = nan(n,nevent,nsamples);
-modData.size.scaled_Value = nan(n,nsamples);
-modData.size.scaled_Value_allEvents = nan(n,nevent,nsamples);
-
-for i = 1:length(allVarsSize)
-    vs = allVarsSize{i};
-    ind0 = strcmp(Data.size.dataBinned.Variable, vs);
-    modData.size.Variable(ind0,:) = Data.size.dataBinned.Variable(ind0);
-    modData.size.trophicLevel(ind0,:) = Data.size.dataBinned.trophicLevel(ind0);
-        
-    for j = 1:nsamples
-        itraj = et(j,:); % trajectories associated with sampling event j
-        [~, J] = max(sum(out.P(:,depth_ind,FixedParams.PP_Chl_index,etime,itraj))); % use modelled values from chl-max depth layer to compare to data
-        J = squeeze(J);
-        switch vs
-            case 'CellConc'
-%                 ymod = auxVars.cellDensity(1:1:FixedParams.nPP_size,depth_ind,etime,itraj);
-                ymod = auxVars.cellDensity(:,depth_ind,etime,itraj);
-                ymod_ = nan(size(ymod,1), nevent);
-                for k = 1:nevent
-                    ymod_(:,k) = ymod(:,J(k,k),k,k);
-                end
-                ymod = ymod_;
-                ymodMean = mean(ymod, 2); % average size-spectra over sampling events
-            case 'BioVol'
-%                 ymod = auxVars.biovolume(1:FixedParams.nPP_size,depth_ind,etime,itraj);
-                ymod = auxVars.biovolume(:,depth_ind,etime,itraj);
-                ymod_ = nan(size(ymod,1), nevent);
-                for k = 1:nevent
-                    ymod_(:,k) = ymod(:,J(k,k),k,k);
-                end
-                ymod = ymod_;
-                ymodMean = mean(ymod, 2); % average size-spectra over sampling events
-        end
-        
-        % autotrophs
-        ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'autotroph');
-        
-        modData.size.Value(ind,j) = ymodMean(FixedParams.phytoplankton);
-        modData.size.Value_allEvents(ind,:,j) = ymod(FixedParams.phytoplankton,:);
-
-        modData.size.scaled_Value(ind,j) = Data.size.(['scaleFun_' vs])( ...
-            Data.size.dataBinned.scale_mu(ind), ...
-            Data.size.dataBinned.scale_sig(ind), ymodMean(FixedParams.phytoplankton));
-        modData.size.scaled_Value_allEvents(ind,:,j) = Data.size.(['scaleFun_' vs])( ...
-            Data.size.dataBinned.scale_mu(ind), ...
-            Data.size.dataBinned.scale_sig(ind), ymod(FixedParams.phytoplankton,:));
-
-        % heterotrophs
-        ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'heterotroph');
-        
-        if sum(FixedParams.zooplankton) ~= 1
-            % Number of modelled heterotrph size classes matches number
-            % of partitions in size data (there may only be one size class)
-            modData.size.Value(ind,j) = ymodMean(FixedParams.zooplankton);
-            modData.size.Value_allEvents(ind,:,j) = ymod(FixedParams.zooplankton,:);
-        else
-            modData.size.Value(ind,j) = repmat(ymodMean(FixedParams.zooplankton), [sum(ind) 1]);
-            modData.size.Value_allEvents(ind,:,j) = repmat(ymod(FixedParams.zooplankton,:), [sum(ind) 1]);
-        end
-
-        modData.size.scaled_Value(ind,j) = Data.size.(['scaleFun_' vs])( ...
-            Data.size.dataBinned.scale_mu(ind), ...
-            Data.size.dataBinned.scale_sig(ind), ymodMean(FixedParams.zooplankton));
-        modData.size.scaled_Value_allEvents(ind,:,j) = Data.size.(['scaleFun_' vs])( ...
-            Data.size.dataBinned.scale_mu(ind), ...
-            Data.size.dataBinned.scale_sig(ind), ymod(FixedParams.zooplankton,:));
-    end
-end
-
-
+% the output using the same functions that standardised the data. The
+% resulting 'modData' should be comparable to the observations in 'Data'.
+modData = matchModOutput2Data(out, auxVars, Data, FixedParams);
 
 
 %% Cost function
@@ -437,9 +295,9 @@ switch selectFunction
             ymodMean = modData.size.Value(ind,:); % modelled values averaged over sampling events
             % dimension of ymod is [size, sampling event, replicate (trajectory choice), sample number (year or cruise)]
             nsize = size(ymod, 1); % number of sizes
-            ne = size(ymod, 2); % number of sampling events
+%             ne = size(ymod, 2); % number of sampling events
             m = size(ymod, 3); % number of replicates (trajectory choices)
-            n = size(ymod, 4); % number of samples/years/cruises etc
+%             n = size(ymod, 4); % number of samples/years/cruises etc
             
             % decompose spectra into total and relative abundance (a single number and a simplex)
             yobsTot = sum(yobs); % totals
@@ -463,7 +321,7 @@ switch selectFunction
             Yobs = log(pobs(1:end-1) ./ pobs(end));
             % Now assume that Yobs is multi-variate normal with
             % expectation, mu, and covariance, V.
-            mu = log(pmod(1:end-1,:,:) ./ pmod(end,:,:)); % expectations for [nsize-1] multi-variate normal Yobs (all sampling events)
+%             mu = log(pmod(1:end-1,:,:) ./ pmod(end,:,:)); % expectations for [nsize-1] multi-variate normal Yobs (all sampling events)
             Mu = log(pmodMean(1:end-1,:) ./ pmodMean(end,:)); % expectations for [nsize-1] multi-variate normal Yobs (averaged sampling events)
 
             log_pmod = log(pmod); % expectations (for each separate sampling event) of [nsize] multivariate-normal distribution for X
@@ -530,7 +388,7 @@ switch selectFunction
             
             yobs = Data.size.dataBinned.Value(ind);
             ymod = modData.size.Value_allEvents(ind,:,:); % modelled values for each separate sampling event
-            ymodMean = modData.size.Value(ind,:); % modelled values averaged over sampling events
+%             ymodMean = modData.size.Value(ind,:); % modelled values averaged over sampling events
             
             singleSizeClass = FixedParams.nZP_size == 1;
             
@@ -665,19 +523,22 @@ end
 
 %%
 
-if exist('cost', 'var') == 0
+if ~exist('cost', 'var')
     cost = nan;
     warning('Could not evaluate cost... Check that the name-value pair (selectFunction,costFunctionType) is properly specified and corresponds to a viable option within costFunction.m')
 end
-if exist('costComponents', 'var') == 0
+if ~exist('costComponents', 'var')
     costComponents = nan;
 end
-if exist('modData', 'var') == 0
+if ~exist('modData', 'var')
     modData = nan;
 end
-if exist('out', 'var') == 0
+if ~exist('out', 'var')
     out = nan;
 end
-if exist('auxVars', 'var') == 0
+if ~exist('auxVars', 'var')
     auxVars = nan;
 end
+
+
+disp(cost)

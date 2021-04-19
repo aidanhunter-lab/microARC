@@ -1,5 +1,11 @@
-function F = loadForcing(forcModel, forcName, expName, years, forcDir, ... 
-    forcDummy, useTraj)
+function F = loadForcing(Directories, years, useTraj)
+% Load and extract relevant forcing data from physical model.
+
+extractStruct(Directories)
+forcDirVars = {'forcModel', 'forcName', 'expName', 'forcDir', 'forcDummy'};
+for j = 1:length(forcDirVars)
+   if ~exist(forcDirVars{j}, 'var'), error(['The ' forcDirVars{j} ' field is missing from Directories.']); end
+end
 
 % List of biological forcing variables (used for model initalization)
 switch lower(forcModel)
@@ -25,11 +31,6 @@ for iy = 1:length(years)
         error('Forcing file does not exist:\n ==> %s.', fullfile(forcDir, forcFile));
     end
     
-%     % Use single precision    
-%     forcing = structDouble2Single(forcing);
-%     forcing.profiles = structDouble2Single(forcing.profiles);
-%     grid = structDouble2Single(grid);
-
     % filter trajectories with geographical jumps
     forcing = filterTrajectoryJumps(forcing);
 
@@ -86,12 +87,3 @@ end
 
 end
 
-function out = structDouble2Single(x)
-out = x;
-fields = fieldnames(out);
-for j = 1:length(fields)
-    if isa(out.(fields{j}), 'double')
-        out.(fields{j}) = single(out.(fields{j}));
-    end
-end
-end

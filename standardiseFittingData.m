@@ -1,8 +1,9 @@
 function Data = standardiseFittingData(Data, varargin)
-
 % Use linear mixed models to standardise fitting data.
 % Returns linear-model coefficients used to rescale data as a function of
 % depth and (if significant) sampling event.
+
+extractVarargin(varargin)
 
 obsInCostFunction_scalar = Data.scalar.obsInCostFunction;
 obsInCostFunction_size = Data.size.obsInCostFunction;
@@ -22,12 +23,6 @@ for i = 1:length(fields)
 end
 
 dat = struct2table(dat);
-
-% Extra arguments control whether plots are returned. Name-value pairs with
-% options: 'plotScaledPON', 'plotScaledPOC', 'plotScaledN', 'plotAllData'
-v = [];
-if ~isempty(varargin), v = reshape(varargin, [2 0.5*length(varargin)]); end
-
 
 %% Find scaling factors for all fitting data
 
@@ -340,9 +335,9 @@ Data.sizeFull.dataBinned = sizeDatFullBinned;
 %% Plots of standardised data
 
 % Scalar data
-if ~isempty(v) && any(strcmp(v(1,:), 'plotScalarData'))
-    if v{2,strcmp(v(1,:), 'plotScalarData')}
-        for jj = 1:length(obsInCostFunction_scalar)
+
+if exist('plotScalarData', 'var') && plotScalarData
+            for jj = 1:length(obsInCostFunction_scalar)
             vv = obsInCostFunction_scalar{jj};
             if ismember(vv, logy)
                 dv = logy{cellfun(@(x)~isempty(x),regexp(vv,logy))};
@@ -483,143 +478,135 @@ if ~isempty(v) && any(strcmp(v(1,:), 'plotScalarData'))
             
             pause(0.1)
         end
-    end
 end
+    
 
 
 % Size data
-if ~isempty(v) && any(strcmp(v(1,:), 'plotSizeData'))
-    if v{2,strcmp(v(1,:), 'plotSizeData')}
-        for jj = 1:length(obsInCostFunction_size)
-            vv = obsInCostFunction_size{jj};
-            
-            d_ind = strcmp(sizeDatBinned.Variable, vv);
-            d = structfun(@(x) x(d_ind), sizeDatBinned, 'UniformOutput', false);
-            
-            y = d.Value; % raw data
-            ys = d.scaled_Value; % scaled data
-            x = d.size;
-            
-            trophicLevels = unique(d.trophicLevel);
-            ntrophicLevels = length(trophicLevels);
-            
-            nsizes = length(unique(d.sizeClass));
-            nsizesP = length(unique(d.sizeClass(strcmp(d.trophicLevel, 'autotroph'))));
-            nsizesZ = length(unique(d.sizeClass(strcmp(d.trophicLevel, 'heterotroph'))));
-            y_ = nan(nsizes, ntrophicLevels);
-            y_(1:nsizesP, strcmp(trophicLevels, 'autotroph')) = y(strcmp(d.trophicLevel, 'autotroph'));
-            y_(1:nsizesZ, strcmp(trophicLevels, 'heterotroph')) = y(strcmp(d.trophicLevel, 'heterotroph'));
-            y = y_;
-            
-            y_ = nan(nsizes, ntrophicLevels);
-            y_(1:nsizesP, strcmp(trophicLevels, 'autotroph')) = ys(strcmp(d.trophicLevel, 'autotroph'));
-            y_(1:nsizesZ, strcmp(trophicLevels, 'heterotroph')) = ys(strcmp(d.trophicLevel, 'heterotroph'));
-            ys = y_;
-%             y = reshape(y, [nsizes, ntrophicLevels]);
-%             ys = reshape(ys, [nsizes, ntrophicLevels]);
-            y_ = nan(nsizes, ntrophicLevels);
-            y_(1:nsizesP, strcmp(trophicLevels, 'autotroph')) = x(strcmp(d.trophicLevel, 'autotroph'));
-            y_(1:nsizesZ, strcmp(trophicLevels, 'heterotroph')) = x(strcmp(d.trophicLevel, 'heterotroph'));
-            x = y_;
-%             x = reshape(x, [nsizes, ntrophicLevels]);
-            
-            Cols = [0 1 0; 1 0 0];
-            
-            % Compare raw data to standardised data
-            figure
-            subplot(1,2,1)
-            
-            lplt = loglog(x, y, 'o-');
-            
-            set(lplt, {'color'}, num2cell(Cols, 2))
-            
-            legend(trophicLevels)
-
-            hold on
-            
-            ca = gca; xl = ca.XLim; yl = ca.YLim;
-            
-%             mu = mean(log10(y));
-%             s = std(log10(y));
-%             lb = 10 .^ (mu-s);
-%             ub = 10 .^ (mu+s);
-%             
-%             line(xl, 10 .^ [mu mu], 'Color', [0 0 0], 'LineStyle', '--')
-%             line(xl, [lb lb], 'Color', [0 0 0], 'LineStyle', ':')
-%             line(xl, [ub ub], 'Color', [0 0 0], 'LineStyle', ':')
-            
-            
-            xlabel('ESD (\mum)');
-            
-            switch vv
-                case 'CellConc'
-                    ylab = 'raw cell conc. data (cells m^{-3})';
-                case 'BioVol'
-                    ylab = 'raw biovolume data (m^3 m^{-3})';
-                case 'NConc'
-                    ylab = 'raw N conc. data (mmol N m^{-3})';
-            end
-            
-            ylabel(ylab);
-            hold off
-            
-            
-            subplot(1,2,2)
-            lplt = semilogx(x, ys, 'o-');
-            set(lplt, {'color'}, num2cell(Cols, 2))
-
-            hold on
-            
-            ca = gca; xl = ca.XLim; yl = ca.YLim;
-            
-%             mu = mean(ys);
-%             s = std(ys);
-%             lb = mu-s;
-%             ub = mu+s;
-%             
-%             line(xl, [mu mu], 'Color', [0 0 0], 'LineStyle', '--')
-%             line(xl, [lb lb], 'Color', [0 0 0], 'LineStyle', ':')
-%             line(xl, [ub ub], 'Color', [0 0 0], 'LineStyle', ':')
-            
-            
-            xlabel('ESD (\mum)');
-            
-            switch vv
-                case 'CellConc'
-                    ylab = 'standardised cell conc. data';
-                    tl = 'Compare raw and standardised cell conc. measurements';
-                case 'BioVol'
-                    ylab = 'standardised biovolume data';
-                    tl = 'Compare raw and standardised biovolume measurements';
-                case 'NConc'
-                    ylab = 'standardised N conc. data';
-                    tl = 'Compare raw and standardised N conc. measurements';
-            end
-            
-            ylabel(ylab);
-            hold off
-            sgtitle(tl)
-            
-            pause(0.1)
+if exist('plotSizeData', 'var') && plotSizeData
+    for jj = 1:length(obsInCostFunction_size)
+        vv = obsInCostFunction_size{jj};
+        
+        d_ind = strcmp(sizeDatBinned.Variable, vv);
+        d = structfun(@(x) x(d_ind), sizeDatBinned, 'UniformOutput', false);
+        
+        y = d.Value; % raw data
+        ys = d.scaled_Value; % scaled data
+        x = d.size;
+        
+        trophicLevels = unique(d.trophicLevel);
+        ntrophicLevels = length(trophicLevels);
+        
+        nsizes = length(unique(d.sizeClass));
+        nsizesP = length(unique(d.sizeClass(strcmp(d.trophicLevel, 'autotroph'))));
+        nsizesZ = length(unique(d.sizeClass(strcmp(d.trophicLevel, 'heterotroph'))));
+        y_ = nan(nsizes, ntrophicLevels);
+        y_(1:nsizesP, strcmp(trophicLevels, 'autotroph')) = y(strcmp(d.trophicLevel, 'autotroph'));
+        y_(1:nsizesZ, strcmp(trophicLevels, 'heterotroph')) = y(strcmp(d.trophicLevel, 'heterotroph'));
+        y = y_;
+        
+        y_ = nan(nsizes, ntrophicLevels);
+        y_(1:nsizesP, strcmp(trophicLevels, 'autotroph')) = ys(strcmp(d.trophicLevel, 'autotroph'));
+        y_(1:nsizesZ, strcmp(trophicLevels, 'heterotroph')) = ys(strcmp(d.trophicLevel, 'heterotroph'));
+        ys = y_;
+        %             y = reshape(y, [nsizes, ntrophicLevels]);
+        %             ys = reshape(ys, [nsizes, ntrophicLevels]);
+        y_ = nan(nsizes, ntrophicLevels);
+        y_(1:nsizesP, strcmp(trophicLevels, 'autotroph')) = x(strcmp(d.trophicLevel, 'autotroph'));
+        y_(1:nsizesZ, strcmp(trophicLevels, 'heterotroph')) = x(strcmp(d.trophicLevel, 'heterotroph'));
+        x = y_;
+        %             x = reshape(x, [nsizes, ntrophicLevels]);
+        
+        Cols = [0 1 0; 1 0 0];
+        
+        % Compare raw data to standardised data
+        figure
+        subplot(1,2,1)
+        
+        lplt = loglog(x, y, 'o-');
+        
+        set(lplt, {'color'}, num2cell(Cols, 2))
+        
+        legend(trophicLevels)
+        
+        hold on
+        
+        ca = gca; xl = ca.XLim; yl = ca.YLim;
+        
+        %             mu = mean(log10(y));
+        %             s = std(log10(y));
+        %             lb = 10 .^ (mu-s);
+        %             ub = 10 .^ (mu+s);
+        %
+        %             line(xl, 10 .^ [mu mu], 'Color', [0 0 0], 'LineStyle', '--')
+        %             line(xl, [lb lb], 'Color', [0 0 0], 'LineStyle', ':')
+        %             line(xl, [ub ub], 'Color', [0 0 0], 'LineStyle', ':')
+        
+        
+        xlabel('ESD (\mum)');
+        
+        switch vv
+            case 'CellConc'
+                ylab = 'raw cell conc. data (cells m^{-3})';
+            case 'BioVol'
+                ylab = 'raw biovolume data (m^3 m^{-3})';
+            case 'NConc'
+                ylab = 'raw N conc. data (mmol N m^{-3})';
         end
+        
+        ylabel(ylab);
+        hold off
+        
+        
+        subplot(1,2,2)
+        lplt = semilogx(x, ys, 'o-');
+        set(lplt, {'color'}, num2cell(Cols, 2))
+        
+        hold on
+        
+        ca = gca; xl = ca.XLim; yl = ca.YLim;
+        
+        %             mu = mean(ys);
+        %             s = std(ys);
+        %             lb = mu-s;
+        %             ub = mu+s;
+        %
+        %             line(xl, [mu mu], 'Color', [0 0 0], 'LineStyle', '--')
+        %             line(xl, [lb lb], 'Color', [0 0 0], 'LineStyle', ':')
+        %             line(xl, [ub ub], 'Color', [0 0 0], 'LineStyle', ':')
+        
+        
+        xlabel('ESD (\mum)');
+        
+        switch vv
+            case 'CellConc'
+                ylab = 'standardised cell conc. data';
+                tl = 'Compare raw and standardised cell conc. measurements';
+            case 'BioVol'
+                ylab = 'standardised biovolume data';
+                tl = 'Compare raw and standardised biovolume measurements';
+            case 'NConc'
+                ylab = 'standardised N conc. data';
+                tl = 'Compare raw and standardised N conc. measurements';
+        end
+        
+        ylabel(ylab);
+        hold off
+        sgtitle(tl)
+        
+        pause(0.1)
     end
 end
 
 
-
-pause(0.1)
-
-if ~isempty(v) && any(strcmp(v(1,:), 'plotAllData'))
-    if v{2,strcmp(v(1,:), 'plotAllData')}
-    % Plot all standardised data sources together
+if exist('plotAllData', 'var') && plotAllData
     figure
-    
     alph = 0.5;
     col_PON = [1 0 0];
     col_POC = [1 0.5 0];
     col_Chl = [0 1 0];
     col_N = [0 0 1];
-
+    
     subplot(3,1,1)
     ind = strcmp(dat.Variable, 'PON');
     scatter(dat.scaled_Value(ind),dat.Depth(ind), 'MarkerEdgeColor', col_PON, 'MarkerFaceColor', col_PON, 'MarkerEdgeAlpha', alph, 'MarkerFaceAlpha', alph);
@@ -649,7 +636,7 @@ if ~isempty(v) && any(strcmp(v(1,:), 'plotAllData'))
     yl_ = yl(1) + [0.775 0.725] * diff(yl);
     pgon = polyshape([xl_(1) xl_(2) xl_(2) xl_(1) xl_(1)], [yl_(1) yl_(1) yl_(2) yl_(2) yl_(1)]);
     pg = plot(pgon); pg.FaceColor = [col_Chl alph];
-
+    
     text(xl(1)+0.1*diff(xl),yl(1)+0.65*diff(yl),'N')
     yl_ = yl(1) + [0.675 0.625] * diff(yl);
     pgon = polyshape([xl_(1) xl_(2) xl_(2) xl_(1) xl_(1)], [yl_(1) yl_(1) yl_(2) yl_(2) yl_(1)]);
@@ -659,7 +646,7 @@ if ~isempty(v) && any(strcmp(v(1,:), 'plotAllData'))
     
     subplot(3,1,2)
     ind = strcmp(dat.Variable, 'PON');
-    scatter(dat.scaled_Value(ind), dat.Event(ind), 'MarkerEdgeColor', col_PON, 'MarkerFaceColor', col_PON, 'MarkerEdgeAlpha', alph, 'MarkerFaceAlpha', alph)    
+    scatter(dat.scaled_Value(ind), dat.Event(ind), 'MarkerEdgeColor', col_PON, 'MarkerFaceColor', col_PON, 'MarkerEdgeAlpha', alph, 'MarkerFaceAlpha', alph)
     hold on
     ylabel('sampling event')
     ind = strcmp(dat.Variable, 'POC');
@@ -677,12 +664,12 @@ if ~isempty(v) && any(strcmp(v(1,:), 'plotAllData'))
     y = dat.scaled_Value(ind);
     x_ = [min(y) max(y)];
     yf_PON = fitdist(y,'kernel','BandWidth',bw);
-
+    
     ind = strcmp(dat.Variable, 'POC');
     y = dat.scaled_Value(ind);
     x_(1) = min([min(y), x_]); x_(2) = max([max(y), x_]);
     yf_POC = fitdist(y,'kernel','BandWidth',bw);
-
+    
     ind = strcmp(dat.Variable, 'chl_a');
     y = dat.scaled_Value(ind);
     x_(1) = min([min(y), x_]); x_(2) = max([max(y), x_]);
@@ -711,10 +698,8 @@ if ~isempty(v) && any(strcmp(v(1,:), 'plotAllData'))
     ylabel('sample density')
     hold off
     
-    
-    pause(0.1)
-
-    end
 end
-    
-    
+
+
+
+

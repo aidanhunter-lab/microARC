@@ -83,26 +83,47 @@ ESDmax = 200;
 nsizes = []; % number of modelled size classes (leave empty to view a range of values)
 nsizesMin = 4; % min/max number of modelled size classes
 nsizesMax = 12;
-sizeData = chooseSizeClassIntervals(Data.size, ... 
+sizeData = setSizeClassIntervals(Data.size, ... 
     'datFull', Data.sizeFull, 'ESDmin', ESDmin, 'ESDmax', ESDmax, ...
     'nsizes', nsizes, 'nsizesMin', nsizesMin, 'nsizesMax', nsizesMax, ...
     'plotSizeClassIntervals', true);
 display(sizeData)
 
-nsizes = 8; % number of modelled size classes (specifying a value makes chooseSizeClassIntervals.m return different output)
-nsizesP = 7; % can choose different numbers of size classes for each plankton type
-nsizesZ = 8;
+nsizes = 8; % number of modelled size classes
+% Use the same size classes for autotrophs and heterotrophs to ensure that
+% grazing pressure is unbiased across sizes
 
-[Data.size, Data.sizeFull] = chooseSizeClassIntervals(Data.size, ... 
-    'datFull', Data.sizeFull, 'ESDmin', ESDmin, 'ESDmax', ESDmax, ...
-    'nsizes', nsizes, 'nsizesP', nsizesP, 'nsizesZ', nsizesZ, ... 
-    'nsizesMin', nsizesMin, 'nsizesMax', nsizesMax, ...
+% Initialise model parameters.
+% Values can be modified in defaultParameters.m, which is called from
+% within initialiseParameters.m.
+[FixedParams, Params] = initialiseParameters(F, bioModel, ... 
+    'nsizes', nsizes, 'ESDmin', ESDmin, 'ESDmax', ESDmax);
+% [FixedParams, Params] = initialiseParameters(F, bioModel, ...
+%     'nsizes', nsizes, 'ESDmin', ESDmin, 'ESDmax', ESDmax, ...
+%     'load', ['results/parametersInitialValues_' bioModel]);
+
+display(FixedParams)
+display(Params)
+
+Params0 = Params; % store the default values as separate workspace object
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% NOTE:
+% Parameter values should not be changed by directly modifying Params
+% because the size-dependent vector parameters will not update. Instead, 
+% parameter values should be changed using name-value pair arguments in 
+% updateParameters.m, e.g.,
+% Params = updateParameters(Params, FixedParams, ... 
+%     'pmax_a', 30, 'pmax_b', -0.55, 'k_G', 3);
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+% Aggregate size spectra data according to size classes specified in
+% FixedParams -- store in struct Data.size.dataBinned
+[Data.size, Data.sizeFull] = setSizeClassIntervals(Data.size, ... 
+    'datFull', Data.sizeFull, 'nsizes', nsizes, 'FixedParams', FixedParams, ...
     'plotSizeClassIntervals', true);
 
 % Choose data types to use in cost function - I think bio-volume is the
 % best choice for the size data
-% Data = selectCostFunctionData(Data, ...
-%     {'N','chl_a','PON','POC'}, {'BioVol'});
 Data = selectCostFunctionData(Data, ...
     {'N','chl_a','PON','POC'}, {'BioVol'});
 
@@ -122,45 +143,6 @@ switch viewData
         disp('size-spectra data grouped into bins: Data.sizeFull.dataBinned')
         display(Data.sizeFull.dataBinned)
 end
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% Initialise model parameters.
-% Values can be modified in defaultParameters.m, which is called from
-% within initialiseParameters.m.
-% Modelled cell size ranges are automatically chosen to correspond with the
-% size class intervals already selected using the fitting data.
-[FixedParams, Params] = initialiseParameters(F, Data, bioModel);
-display(FixedParams)
-display(Params)
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-% NOTE:
-% Parameters may be initialised (probably at better values) by loading
-% saved values that resulted from optimisation, e.g.,
-
-% [FixedParams, Params] = initialiseParameters(F, Data, ...
-%     'load', 'results/parametersInitialValues_singlePredClass_2018');
-% [FixedParams, Params] = initialiseParameters(F, Data, ...
-%     'load', 'results/parametersInitialValues_singlePredClass_2018_2');
-
-[FixedParams, Params] = initialiseParameters(F, Data, bioModel, ...
-    'load', ['results/parametersInitialValues_' bioModel]);
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Params0 = Params; % store the default values as separate workspace object
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-% NOTE:
-% Parameter values should not be changed by directly modifying Params
-% because the size-dependent vector parameters will not update. Instead, 
-% parameter values should be changed using name-value pair arguments in 
-% updateParameters.m, e.g.,
-% Params = updateParameters(Params, FixedParams, ... 
-%     'pmax_a', 30, 'pmax_b', -0.55, 'k_G', 3);
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
