@@ -65,8 +65,10 @@ if ~exist('v0', 'var') || ~isnumeric(v0)
 end
 
 % Generate model outputs
+tic; disp('.. started at'); disp(datetime('now'))
 [out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, ... 
     FixedParams.odeIntegrator, FixedParams.odeOptions);
+toc
 
 % Generate modelled equivalents of the data
 modData = matchModOutput2Data(out, auxVars, Data, FixedParams);
@@ -79,6 +81,7 @@ modData = matchModOutput2Data(out, auxVars, Data, FixedParams);
 % The above outputs are now used as arguments to various plotting 
 % functions stored in utility/plottingFunctions/...
 
+folder =Directories.plotDir; % save plots here
 
 %% Model fit to data
 
@@ -588,9 +591,7 @@ for varIndex = 1:length(plotOptions)
         case 'phytoZooPlanktonStacked'
             plt_P_C_stacked = plot_timeSeries_trajectoryPolygon('phytoZooPlanktonStacked', ...
                 sampleEvent, traj, out, auxVars, FixedParams, Forc, Data);
-
     end
-    
 end
 
 switch save
@@ -638,7 +639,7 @@ end
 
 % Group trajectories of Arctic and of Atlantic origin
 
-save = true;
+save = false;
 
 plt_Atlantic = plot_timeSeries_trajectoryPolygon('phytoZooPlanktonStacked', ...
     [], [], out, auxVars, FixedParams, Forc, Data, ...
@@ -744,7 +745,7 @@ outputPlot('trajectoryLine_LatLong','forcing',ie,kk,out,FixedParams,Forc,auxVars
 outputPlot('trajectoryLine_LatLong','inorganicNutrient',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 outputPlot('trajectoryLine_LatLong','DOM_POM',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 outputPlot('trajectoryLine_LatLong','phytoplankton_N',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
-outputPlot('trajectoryLine_LatLong','zooplankton',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
+% outputPlot('trajectoryLine_LatLong','zooplankton',ie,kk,out,FixedParams,Forc,auxVars,Data,0.1);
 
 
 close all
