@@ -1,13 +1,13 @@
-function [m, gaOutput, parnames, optPar, lb, ub, Data, Forc, FixedParams, ...
+function [m, fittingOutput, parnames, optPar, lb, ub, Data, Forc, FixedParams, ...
     Params, v0] = loadOptimisationRun(fileName)
 
 m = load(fileName);
 % m = matfile(fileName, 'Writable', true);
-gaOutput = m.gaOutput;
-parnames = gaOutput.parNames;
-optPar = gaOutput.optPar;
-lb = gaOutput.lowerBound;
-ub = gaOutput.upperBound;
+fittingOutput = m.fittingOutput;
+parnames = fittingOutput.parNames;
+optPar = fittingOutput.optPar;
+lb = fittingOutput.lowerBound;
+ub = fittingOutput.upperBound;
 Data = m.Data;
 Forc = m.Forc;
 FixedParams = m.FixedParams;

@@ -1,9 +1,7 @@
 function Data = prepareFittingData(obsDir, varargin)
-
-% Include time-of-day in data output
-
 % Load and clean fitting data, output as struct
 
+extractVarargin(varargin)
 
 %% Inorganic nutrient
 
@@ -389,13 +387,13 @@ nutrition = unique(dat_size_all.nutrition, 'stable');
 % cols = cols(1:N,:); % plotting colours for different cruises
 
 
-v = reshape(varargin, [2 0.5*length(varargin)]);
+% v = reshape(varargin, [2 0.5*length(varargin)]);
 
 %~~~
 % optional plots
-plotNconcSpectra = ~isempty(v) && any(contains(v(1,:),'plotNconcSpectra')) && v{2,strcmp(v(1,:), 'plotNconcSpectra')};
-plotCellConcSpectra = ~isempty(v) && any(contains(v(1,:),'plotCellConcSpectra')) && v{2,strcmp(v(1,:), 'plotCellConcSpectra')};
-plotBioVolSpectra = ~isempty(v) && any(contains(v(1,:),'plotBioVolSpectra')) && v{2,strcmp(v(1,:), 'plotBioVolSpectra')};
+plotCellConcSpectra = exist('plotCellConcSpectra', 'var') && plotCellConcSpectra;
+plotBioVolSpectra = exist('plotBioVolSpectra', 'var') && plotBioVolSpectra;
+plotNconcSpectra = exist('plotNconcSpectra', 'var') && plotNconcSpectra;
 
 % makePlots = table(plotNconcSpectra, plotCellConcSpectra, plotBioVolSpectra);
 % makePlots.Properties.VariableNames = {'Ndensity', 'cellDensity', 'BioVolDensity'};

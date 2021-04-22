@@ -1,7 +1,8 @@
 function [gaOutput, optPar] = storeGAoutput(gapopulationhistory, ... 
     gacosthistory, gaOptions, FixedParams, varargin)
+% Store output from genetic algorithm within a single struct
 
-% Store output from genetic algorithm within a singe struct
+extractVarargin(varargin)
 
 [I,J] = find(gacosthistory == min(gacosthistory(:))); % extract best parameter set
 if length(I) > 1 || length(J) > 1
@@ -27,36 +28,16 @@ gaOutput.gaOptions = gaOptions;
 
 % Extra output options may be included if the genetic algorithm was not
 % terminated early
-
-if ~isempty(varargin)
-    i = strcmp(varargin, 'stoppedEarly');
-    if any(i)
-        stoppedEarly = varargin{find(i)+1};
-    else
-        stoppedEarly = false;
-    end
-    if ~stoppedEarly
-        gaOutput.fval = evalin('base', 'fval');
-        gaOutput.exitflag = evalin('base', 'exitflag');
-        gaOutput.output = evalin('base', 'output');
-        gaOutput.population = evalin('base', 'population');
-        gaOutput.scores = evalin('base', 'scores');
-    end
+if ~exist('stoppedEarly', 'var')
+    % By default assume that tuning algorithm was halted before completion
+    stoppedEarly = true;
 end
 
+if ~stoppedEarly
+    gaOutput.fval = evalin('caller', 'fval');
+    gaOutput.exitflag = evalin('caller', 'exitflag');
+    gaOutput.output = evalin('caller', 'output');
+    gaOutput.population = evalin('caller', 'population');
+    gaOutput.scores = evalin('caller', 'scores');
+end
 
-% if ~isempty(varargin)
-%     i = strcmp(varargin, 'stoppedEarly');
-%     if any(i)
-%         stoppedEarly = varargin{i+1};
-%         if ~stoppedEarly
-%             % If algorithm was terminated early then  some outputs are not available
-%             gaOutput.fval = fval;
-%             gaOutput.exitflag = exitflag;
-%             gaOutput.output = output;
-%             gaOutput.population = population;
-%             gaOutput.scores = scores;
-%         end
-%     end
-% end
-% 

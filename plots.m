@@ -1,624 +1,86 @@
 %% Size-structured 1D NPZD model
 
-clear
-clc
-close all
-delete(gcp('nocreate'))
+%~~~~~~~~~~~~~~~~~~~
+% Plot model outputs
+%~~~~~~~~~~~~~~~~~~~
 
-rng(1) % set random seed
+%% Set up model & generate outputs
 
-%##########################################################################
-%##########################################################################
+% Refresh the workspace
+clear; close all; delete(gcp('nocreate')); clc
+% Include all subdirectories within search path
+addpath(genpath(fileparts(which('fit_parameters'))))
 
-%% Directories and files
+% Store folders/filenames of data and saved parameters
+Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
+    'parFile', []);
+% Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
+%     'parFile', 'parameterInitialValues_1.mat');
+display(Directories)
 
-% Choose forcing data
-forcModel = 'sinmod';
-% Forcing name (subfolder)
-forcName = 'FramStrait_dep0-100';
-% Experiment name
-expName = 'AWI-Hausgarten';
-% Forcing data directories
-forcDir = fullfile('DATA', 'particle_trajectories', forcModel, forcName);
-forcDummy = 'particles_MODEL_DOMAIN_EXPERIMENT-YEAR_YEAR_t*iSub03.mat';
+% Load saved outputs from optimisation runs or choose default set-up
+loadFittedParams = true; % use output saved from optimisation run?
+fileName = 'fittedParameters';  % saved parameters file name
+tag = '1';                      % and identifying tag
+fileName = fullfile(Directories.resultsDir, ...
+    [fileName '_' tag]);
 
-% In-situ data directory
-obsDir = fullfile('DATA', 'AWI_Hausgarten');
-
-% Choose model type -- this will influence model set-up and some aspects of
-% the ODEs.
-bioModelOptions = {'singlePredatorClass', 'multiplePredatorClasses', 'mixotrophy'};
-
-bioModel = bioModelOptions{2}; % Only singlePredatorClass and multiplePredatorClass available so far
-
-%##########################################################################
-%##########################################################################
-
-%% Model set-up
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-% Model input is stored in 4 structs: Forc, FixedParams, Params, and Data.
-% Forc:        forcing data from physical model particle trajectories.
-% FixedParams: constant model parameters (not numerically tuned).
-% Params:      model parameters that MAY be tuned.
-% Data:        observed data included in cost function to tune parameters.
-% These structs are created in this code section.
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% Select trajectories to use from physical model
-% - options: 1. Use all trajectories by setting useTraj = []. Trajectories
-%               are filtered later during model set-up.
-%            2. Save RAM by manually defining trajectory index vector, 
-%                e.g., useTraj = 1:50:5000 to extract every 50th trajectory
-useTraj = [];
-% useTraj = 1:200:5000;
-
-% Specify years of available forcing data
-years = 2017:2018;
-
-% Load and extract relevant forcing data from physical model 'forcModel'.
-F = loadForcing(forcModel, forcName, expName, years, forcDir, forcDummy, useTraj);
-
-viewForcing = true;
-switch viewForcing
+switch loadFittedParams
     case true
-        display(F); fprintf('\n\n')
-        fields = fieldnames(F);
-        disp('First year of forcing data. Dimensions include: yearday, depth layer, and particle trajectory.')
-        display(F.(fields{1}))
+        % Load stored results
+        [~, results, parNames, optPar, boundsLower, boundsUpper, Data, Forc, ...
+            FixedParams, Params, v0] = loadOptimisationRun(fileName);
+        displayFittedParameters(results)
+        Params = updateParameters(Params, FixedParams, optPar); % ensure Params struct contains the best-fitting parameter set
+        
+        % Parameters may be modified using name-value pairs in updateParameters.m
+        % Params = updateParameters(Params, FixedParams, 'pmax_a', 20, 'aP', 0.01);
+        
+    case false % Use default model set-up if fitted outputs are not loaded
+        [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
+            'displayAllOutputs', true); % default set-up -- no plots
+        
+        % modelSetup.m may also produce plots -- set to 'true' any name-value pair as shown below
+        
+        % [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
+        %     'plotCellConcSpectra', true, 'plotBioVolSpectra', true, ...
+        %     'plotSizeClassIntervals', true, ...
+        %     'trajectoryPlot', true, 'dendrogramPlot', true, ...
+        %     'plotScalarData', true, 'plotSizeData', true, 'plotAllData', true, ...
+        %     'displayForc', true, 'displayData', true);
 end
 
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% Load/prepare in-situ fitting data.
-% prepareFittingData.m must be tailored to specific data sets.
-Data = prepareFittingData(obsDir, ...
-    'plotCellConcSpectra', true, 'plotBioVolSpectra', true);
-
-% Choose number of modelled size class intervals using function
-% chooseSizeClassIntervals.m
-ESDmin = 1; % min/max sizes to retain from the data
-ESDmax = 200;
-nsizes = []; % number of modelled size classes (leave empty to view a range of values)
-nsizesMin = 4; % min/max number of modelled size classes
-nsizesMax = 12;
-sizeData = setSizeClassIntervals(Data.size, ... 
-    'datFull', Data.sizeFull, 'ESDmin', ESDmin, 'ESDmax', ESDmax, ...
-    'nsizes', nsizes, 'nsizesMin', nsizesMin, 'nsizesMax', nsizesMax, ...
-    'plotSizeClassIntervals', true);
-display(sizeData)
-
-nsizes = 8; % number of modelled size classes
-% Use the same size classes for autotrophs and heterotrophs to ensure that
-% grazing pressure is unbiased across sizes
-
-% Initialise model parameters.
-% Values can be modified in defaultParameters.m, which is called from
-% within initialiseParameters.m.
-[FixedParams, Params] = initialiseParameters(F, bioModel, ... 
-    'nsizes', nsizes, 'ESDmin', ESDmin, 'ESDmax', ESDmax);
-% [FixedParams, Params] = initialiseParameters(F, bioModel, ...
-%     'nsizes', nsizes, 'ESDmin', ESDmin, 'ESDmax', ESDmax, ...
-%     'load', ['results/parametersInitialValues_' bioModel]);
-
-display(FixedParams)
-display(Params)
-
-Params0 = Params; % store the default values as separate workspace object
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-% NOTE:
-% Parameter values should not be changed by directly modifying Params
-% because the size-dependent vector parameters will not update. Instead, 
-% parameter values should be changed using name-value pair arguments in 
-% updateParameters.m, e.g.,
-% Params = updateParameters(Params, FixedParams, ... 
-%     'pmax_a', 30, 'pmax_b', -0.55, 'k_G', 3);
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% Aggregate size spectra data according to size classes specified in
-% FixedParams -- store in struct Data.size.dataBinned
-[Data.size, Data.sizeFull] = setSizeClassIntervals(Data.size, ... 
-    'datFull', Data.sizeFull, 'nsizes', nsizes, 'FixedParams', FixedParams, ...
-    'plotSizeClassIntervals', true);
-
-% Choose data types to use in cost function - I think bio-volume is the
-% best choice for the size data
-Data = selectCostFunctionData(Data, ...
-    {'N','chl_a','PON','POC'}, {'BioVol'});
-
-clear sizeData
-close all
-
-viewData = true; % display the fitting-data struct?
-switch viewData
-    case true
-        display(Data); fprintf('\n\n')        
-        disp('scalar data: Data.scalar')
-        display(Data.scalar); fprintf('\n\n')
-        disp('size-spectra (vector) data aggregated over sample events: Data.size')
-        display(Data.size); fprintf('\n\n')
-        disp('size-spectra data for separate sample events: Data.sizeFull')
-        display(Data.sizeFull); fprintf('\n\n')
-        disp('size-spectra data grouped into bins: Data.sizeFull.dataBinned')
-        display(Data.sizeFull.dataBinned)
-end
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% Interpolate forcing data over modelled depth layers, and combine multiple
-% years of forcing data into a single structure using prepareForcing.m.
-% A few extra useful metrics are also calculated here.
-Forc = prepareForcing(F,FixedParams);
-clear F % to save memory
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% The 4 main structs (Forc, FixedParams, Params, Data) should now be stored
-% in the workspace.
-% The rest of this set-up code section selects which data to use, 
-% standardises data, filters out unrequired data, and derives a few useful
-% metrics.
-
-% Remove fitting-data samples from below the maximum modelled depth
-Data = omitDeepSamples(Data, FixedParams);
-
-% Select which year(s) to model and filter out unused data.
-% Function selectYears.m automatically chooses which year(s) to use based
-% upon which years are most replete with data.
-useSingleYear = true; % run model over a single year? If false, then 
-                      % multiple years of forcing data MAY be used
-                      % depending on fitting-data availability
-useSingleSizeSpectra = true; % there are 2 size spectra for 2018, use only
-                             % the Polarstern samples if true
-[Data, Forc, FixedParams] = selectYears(Data, Forc, FixedParams, ... 
-    'singleYear', useSingleYear, 'singleSpectra', useSingleSizeSpectra);
-
-% There are lots of forcing data particle trajectories -- far too many to
-% include within a parameter optimisation procedure, so these need to be
-% filtered.
-% For each in-situ sample event (specified in Data.scalar), choose a set of
-% particle trajectories that pass nearby.
-maxDist = 25; % Choose trajectories from within maxDist km radius of
-              % sampling sites.
-numTraj = 10; % Number of trajectories per sample event (duplicates may be 
-              % required for some events, depending on maxDist).
-[Forc_, eventTraj] = chooseTrajectories(Forc, Data.scalar, maxDist, numTraj);
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-% NOTE:
-% The choice of maxDist is important. If maxDist is very large then the 
-% trajectories ascribed to each sampling event will correspond poorly to
-% the history of the water at the events, so small values are better.
-% However, if maxDist is small then this can limit the number of
-% trajectories available to use for each sampling event, and may entirely
-% exclude some sampling events from the analyses if no trajectories are
-% within the maxDist radius. We want to set maxDist small, but not too
-% small...
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% Observe any warnings produced by chooseTrajectories.m and use the table
-% 'eventTraj' to help evaluate choice of maxDist and numTraj: if happy then
-% set Forc = Forc_, otherwise reselect maxDist and numTraj and repeat
-% chooseTrajectories.m
-Forc = Forc_; clear Forc_
-
-% Omit data from any sampling events not matched with a set of trajectories
-[Data, eventTraj] = omitUnmatchedEvents(Data, eventTraj, Forc);
-
-% For each trajectory, find the time of the latest sampling event.
-% Integrations along trajectories can then be stopped at these events to
-% reduce model run-times during parameter optimisation.
-Forc = latestSampleTime(Forc, Data);
-
-% Group sampling events by origin of particles: Arctic or Atlantic.
-% Each individual trajectory is either of Atlantic or Arctic origin
-% (stored in Forc.waterMass).
-% Each sampling event is associated with a selection of trajectories, so
-% may be considered as Atlantic, Arctic, or a mixture (stored in 
-% Data.scalar.waterMass).
-[Forc, Data.scalar] = particleOrigin(Forc, Data.scalar, ...
-    'trajectoryPlot', true, 'dendrogram', true); pause(0.25)
-
-% Standardise the fitting data using linear mixed models to adjust for
-% variability due to depth and sampling event.
-Data = standardiseFittingData(Data, ...
-    'plotScalarData', true, 'plotSizeData', true, 'plotAllData', true);
-
-close all
-
-% Include extra fields indexing sorted order of data -- convenience for
-% plotting
-Data.scalar = sortOrderData(Data.scalar);
-
-
-
-%##########################################################################
-%##########################################################################
-
-%% Integrate
-
-% Initialise state variables.
-% Store state variables in array v0: 1st dimension = variable
-%                                    2nd dimension = location (trajectory)
-v0 = initialiseVariables(FixedParams, Params, Forc);
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-% NOTE:
-% Order of variables = inorganic nutrients [depth]
-%                      phytoplankton       [size, depth, nutrient]
-%                      zooplankton         [size, depth, nutrient]
-%                      organic matter      [type, depth, nutrient]
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
+% Run model over entire trajectories?
+Forc.integrateFullTrajectory = true;
 % Parallelise integrations over trajectories
 poolObj = gcp('nocreate');
-if isempty(poolObj)
-    poolObj = parpool('SpmdEnabled', false);
-    numcores = poolObj.NumWorkers;
+if isempty(poolObj), poolObj = parpool('SpmdEnabled', false); end
+% Initialise variables
+if ~exist('v0', 'var') || ~isnumeric(v0)
+    % If initial condition v0 has not been loaded then create initials.
+    % NOTE: initialiseVariables.m uses the quota parameters to initialise 
+    % the plankton state variables. Thus, loaded v0 values may differ from 
+    % those here generated using "best-fitting" quota params...
+    v0 = initialiseVariables(FixedParams, Params, Forc);
 end
 
-% Choose ODE solver.
-integratorChoices = {'ode45', 'ode23', 'ode113', ...
-    'ode15s', 'ode23s'};
-odeIntegrator = integratorChoices{2};
+% Generate model outputs
+[out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, ... 
+    FixedParams.odeIntegrator, FixedParams.odeOptions);
 
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-% NOTE:
-% ode23 seems to be the most robust. ode45 has occasionally produced NaNs.
-% Maybe ode45 is less robust due to stiffness in the model equations. It
-% seems that the equations are stiff for some parameter values, as the
-% solver can slow down significantly... this is annoying, it would be
-% useful to be able to dynamically switch between stiff and non-stiff
-% solvers during the integrations (such switching functionality is
-% available in the DEsolve package in R...)
-% The stiff-solvers (ode15s, ode23s) are not working (at least partly)
-% because they cannot use the non-negative constraint...
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% Set solver options.
-% Integrator is called separately for each time step -- defined by forcing 
-% data (daily) intervals.
-odeMaxTime = FixedParams.dt_max; % max timestep (days)
-odeInitTime = 0.5 * odeMaxTime; % initial integration timestep (solver will
-                                % automatically reduce this if required)
-
-% odeOptions=odeset('AbsTol', 1e-6, 'RelTol', 1e-4,...
-%     'InitialStep', odeInitTime, 'MaxStep', odeMaxTime, ...
-%     'NonNegative', ones(FixedParams.nEquations,1));
-
-odeOptions=odeset('AbsTol', 1e-6, 'RelTol', 1e-4,...
-    'InitialStep', odeInitTime, 'MaxStep', odeMaxTime);
-
-% Run the model
-tic
-% [out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, odeIntegrator, odeOptions);
-[out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, odeIntegrator, odeOptions, ...
-    'returnExtra', true);
-% {'cellDensity','biovolume'}
-runtime = toc;
-disp([num2str(runtime) ' seconds to integrate ' num2str(Forc.nTraj) ' trajectories']); fprintf('\n')
-runtime = runtime / Forc.nTraj * numcores;
-disp([num2str(runtime) ' seconds = average integration time of single trajectory on single processor']); fprintf('\n')
-
-display(out)
-display(auxVars)
-
-%##########################################################################
-%##########################################################################
-
-%% Parameter tuning
-
-% Select which parameters to optimise.
-% Choose from the lists: Params.scalars & Params.sizeDependent.
-parnames = {'wPOM', 'wp_a', 'wp_b', 'rDON', 'rPON', 'rPOC', 'beta2', ... 
-    'beta3', 'aP', 'Gmax_a', 'Gmax_b', 'k_G', 'pmax_a', 'pmax_b', ... 
-    'Qmin_QC_a', 'Qmin_QC_b', 'Qmax_delQ_a', 'Qmax_delQ_b', ... 
-    'Vmax_QC_a', 'Vmax_QC_b', 'aN_QC_a', 'aN_QC_b'};
-npars = length(parnames);
-par0 = nan(1,npars); % initial (default) values of tuning parameters
-lb = nan(1,npars); % lower and upper bounds on tuning parameters
-ub = nan(1,npars);
-for i = 1:npars
-    par0(i) = Params.(parnames{i});
-    lb(i) = Params.bounds.(parnames{i})(1);
-    ub(i) = Params.bounds.(parnames{i})(2);
-end
-FixedParams.tunePars = parnames;
-FixedParams.tunePars_lb = lb;
-FixedParams.tunePars_ub = ub;
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% Select optimising algorithm (so far only ga is available)
-optimiserChoices = {'ga','muga'};
-optimiser = optimiserChoices{1};
-optimise = str2func(optimiser);
-
-% Select cost function.
-% There's a few options for the cost function. Not yet sure which is the
-% best... from this list choose either option 3 or 4
-costFunctionChoices = { ...
-    'LSS', ...
-    'RMS', ...
-    'syntheticLikelihood_ScalarNormal_SizeSpectraLogNormal_logisticNormal', ...
-    'syntheticLikelihood_ScalarNormal_SizeSpectraLogNormalDirichlet', ...
-    'syntheticLikelihood_ScalarNormalShape_SizeSpectraLogNormalDirichlet' ...
-    };
-costFunctionType = costFunctionChoices{4}; % select cost function
-FixedParams.costFunction = costFunctionType;
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% Test the cost function
-
-% Parallelise integrations over trajectories
-if isempty(gcp('nocreate'))
-    poolObj = parpool('SpmdEnabled', false);
-    numcores = poolObj.NumWorkers;
-end
-
-% Halt integrations at each trajectory's final sampling events to save time
-Forc.integrateFullTrajectory = false;
-
-% Integrate and calculate cost...
-clear out auxVars
-tic
-[cost, costComponents, modData, out, auxVars] = costFunction(par0, ...
-    FixedParams, Params, Forc, Data, v0, odeIntegrator, odeOptions, ... 
-    'selectFunction', costFunctionType);
-runtime = toc;
-disp([num2str(runtime) ' seconds to integrate ' num2str(Forc.nTraj) ' trajectories']); fprintf('\n')
-runtime = runtime / Forc.nTraj * numcores; 
-disp([num2str(runtime) ' seconds = average integration time of single trajectory on single processor'])
-
-display(modData) % modelled equivalents of fitting data
-display(out) % state variable output
-display(auxVars) % other model output
-display(costComponents) % cost associated to each data type
-display(cost) % total cost
+% Generate modelled equivalents of the data
+modData = matchModOutput2Data(out, auxVars, Data, FixedParams);
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% Optimise parameters using a numerical population-based algorithm
-
-popSize = 100; % number of parameter sets in algorithm population
-niter = 10; % algorithm iterations
-
-% This approxRunTime.m function was supposed to estimate time required to
-% run the optimisation, but it doesn't work because the ODE solver slows
-% down when equations become stiff for some parameter values.
-if exist('runtime', 'var'), approxOptimisationTime = ... 
-        approxRunTime(runtime, numcores, Forc.nTraj, popSize, niter+1, 'Display', true); end
-
-% Optimising algorithm options
-gaOptions = optimoptions('ga', ...
-    'PopulationSize', popSize, ...
-    'Generations', niter, ...
-    'InitialPopulationRange', [lb;ub], ...
-    'InitialPopulationMatrix', par0, ...
-    'Display', 'iter', ...
-    'OutputFcn', @gaStoreHistory, ... % gaStoreHistory.m function dynamically stores output, which is available in workspace even if algorithm is halted prematurely
-    'PlotFcn', @gaplotbestf);
-
-% Call optimiser
-clear cost costComponents modData out auxVars optPars fval
-tic; disp('.. started at'); disp(datetime('now'))
-[optPar, fval, exitflag, output, population, scores] = optimise(@(x) ... 
-    costFunction(x, FixedParams, Params, Forc, Data, v0, odeIntegrator, ...
-    odeOptions, 'selectFunction', costFunctionType), ... 
-    npars, [], [], [], [], lb, ub, [], gaOptions);
-optimisationTime = toc / 60 / 60; disp('.. finished at'); disp(datetime('now')); fprintf('\n')
-disp(['Optimisation time: ' num2str(floor(optimisationTime)) ' hrs, ' ...
-    num2str(floor(mod(60*optimisationTime,60))) ' mins'])
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% Examine and store results.
-
-% If algorithm was terminated before reaching 'niter' iterations then only
-% 'gapopulationhistory' and 'gacosthistory' are returned via gaStoreHistory.m
-stoppedEarly = ~exist('fval', 'var');
-
-% Store results in gaOutput
-switch stoppedEarly
-    case false
-        gaOutput = storeGAoutput(gapopulationhistory, gacosthistory, gaOptions, ...
-            FixedParams, 'stoppedEarly', stoppedEarly);
-    case true
-        [gaOutput, optPar] = storeGAoutput(gapopulationhistory, gacosthistory, gaOptions, ...
-            FixedParams, 'stoppedEarly', stoppedEarly);
-end
-
-viewResults = true;
-switch viewResults
-    case true
-        display(gaOutput)
-        if ~stoppedEarly
-            bestFit = table(FixedParams.tunePars', FixedParams.tunePars_lb', ...
-                optPar', FixedParams.tunePars_ub');
-            bestFit.Properties.VariableNames = {'par','lower','opt','upper'};
-            display(bestFit); fprintf('\n')
-            disp(['Cost of best fit = ' num2str(fval)]); fprintf('\n')
-            disp(['Optimisation exit flag = ' num2str(exitflag)]); fprintf('\n')
-            display(output); fprintf('\n')
-            display(population); fprintf('\n')
-            display(scores)
-        else
-            display(gaOutput.optPar_summary); fprintf('\n')
-            disp(['Cost of best fit = ' num2str(min(gaOutput.scoreHistory(:)))]); fprintf('\n')
-        end
-end
-
-% Save output
-tag = ['_' bioModel];
-% tag = '_fitAllNutrientsAndBioVolPandZ';
-fileName = ['results/fittedParameters_' FixedParams.costFunction tag];
-
-saveParams = true;
-switch saveParams
-    case true
-        saveOptimisationRun(fileName, gaOutput, Data, Forc, FixedParams, Params, v0);
-end
-
-% Should these parameter values be saved to use as initial values for
-% future runs?
-updateStoredInitials = true;
-switch updateStoredInitials
-    case true
-        optPar = gaOutput.optPar;
-        optPars_table = table(FixedParams.tunePars', optPar');
-        optPars_table.Properties.VariableNames = {'Param','Value'};
-        % take care choosing file name -- don't overwrite good values!
-        saveObj = matfile(['results/parametersInitialValues_' bioModel]);
-%         saveObj = matfile('results/parametersInitialValues_singlePredClass_2018_2');
-        saveObj.Properties.Writable = true;
-        saveObj.pars = optPars_table;
-end
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% We may continue optimising parameters stored in gaOutput by initialising
-% the algorithm with a stored population.
-
-tag = ['_' bioModel];
-% tag = '_fitAllNutrientsAndBioVolPandZ';
-fileName = ['results/fittedParameters_' FixedParams.costFunction tag];
-
-% Load stored results
-[~, gaOutput, ~, ~, lb, ub, Data, Forc, FixedParams, Params, v0] = ... 
-    loadOptimisationRun(fileName);
-
-
-% Use stored result to initialise new optimisation run
-populationOld = gaOutput.populationHistory(:,:,end);
-scoresOld = gaOutput.scoreHistory(:,end);
-gaOptions = gaOutput.gaOptions;
-
-niter = 10;
-
-gaOptions.MaxGenerations = niter;
-gaOptions.InitialPopulationMatrix = populationOld;
-gaOptions.InitialScoresMatrix = scoresOld;
-
-clear optPars fval modData out auxVars
-tic; disp('.. started at'); disp(datetime('now'))
-[optPar, fval, exitflag, output, population, scores] = optimise(@(x) ...
-    costFunction(x, FixedParams, Params, Forc, Data, v0, odeIntegrator, ... 
-    odeOptions, 'selectFunction', costFunctionType), ... 
-    npars, [], [], [], [], lb, ub, [], gaOptions);
-optimisationTime = toc / 60 / 60; disp('.. finished at');
-disp(datetime('now')); fprintf('\n')
-disp(['Optimisation time: ' num2str(floor(optimisationTime)) ' hrs, ' ...
-    num2str(floor(mod(60*optimisationTime,60))) ' mins'])
-
-% As above, examine and save output...
-stoppedEarly = ~exist('fval', 'var');
-switch stoppedEarly
-    case false
-        gaOutput = storeGAoutput(gapopulationhistory, gacosthistory, gaOptions, ...
-            FixedParams, 'stoppedEarly', stoppedEarly);
-    case true
-        [gaOutput, optPar] = storeGAoutput(gapopulationhistory, gacosthistory, gaOptions, ...
-            FixedParams, 'stoppedEarly', stoppedEarly);
-end
-
-viewResults = false;
-switch viewResults
-    case true
-        display(gaOutput)
-        if ~stoppedEarly
-            bestFit = table(FixedParams.tunePars', FixedParams.tunePars_lb', ...
-                optPar', FixedParams.tunePars_ub');
-            bestFit.Properties.VariableNames = {'par','lower','opt','upper'};
-            display(bestFit); fprintf('\n')
-            disp(['Cost of best fit = ' num2str(fval)]); fprintf('\n')
-            disp(['Optimisation exit flag = ' num2str(exitflag)]); fprintf('\n')
-            display(output); fprintf('\n')
-            display(population); fprintf('\n')
-            display(scores)
-        else
-            display(gaOutput.optPar_summary); fprintf('\n')
-            disp(['Cost of best fit = ' num2str(min(gaOutput.scoreHistory(:)))]); fprintf('\n')
-        end
-end
-
-% Save output
-saveParams = true;
-switch saveParams
-    case true
-        saveOptimisationRun(fileName, gaOutput, Data, Forc, FixedParams, Params, v0);
-end
-
-updateStoredInitials = false;
-switch updateStoredInitials
-    case true
-        optPar = gaOutput.optPar;
-        optPars_table = table(FixedParams.tunePars', optPar');
-        optPars_table.Properties.VariableNames = {'Param','Value'};
-        % take care choosing file name -- don't overwrite good values!        
-        saveObj = matfile(['results/parametersInitialValues_' bioModel]);
-%         saveObj = matfile('results/parametersInitialValues_singlePredClass_2018_2');
-        saveObj.Properties.Writable = true;
-        saveObj.pars = optPars_table;
-end
-
-%##########################################################################
-%##########################################################################
 
 %% Plots
 
-% Code folding for switches is not enabled by default, so type 'preferences'
-% into command window then go to MATLAB -> Editor/Debugger -> Code Folding
-% to enable folding on switches. This is useful but not necessary...
-preferences('Editor/Debugger')
-
-% Directory for saved plots
-folder = 'results/plots/';
-
-% Load fitted parameters, and associated data and fixed parameters...
-tag = ['_' bioModel];
-% tag = '_fitAllNutrientsAndBioVolPandZ';
-fileName = ['results/fittedParameters_' FixedParams.costFunction tag];
-
-[~, gaOutput, parnames, optPar, lb, ub, Data, Forc, FixedParams, Params, v0] = ... 
-    loadOptimisationRun(fileName);
+% The above outputs are now used as arguments to various plotting 
+% functions stored in utility/plottingFunctions/...
 
 
-% Params = updateParameters(Params, FixedParams, ...
-%     'Gmax', 5, 'k_G_a', 0.5, 'k_G_b', 0.18);
-% optPar = cellfun(@(x) Params.(x), FixedParams.tunePars);
-
-% Generate model output using fitted parameters
-Params = updateParameters(Params, FixedParams, optPar);
-costFunctionType = FixedParams.costFunction;
-Forc.integrateFullTrajectory = true;
-
-close all
-clear out auxVars
-[cost, costComponents, modData, out, auxVars] = costFunction(optPar, ...
-    FixedParams, Params, Forc, Data, v0, odeIntegrator, odeOptions, ... 
-    'selectFunction', costFunctionType, 'returnExtra', 'all');
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-% NOTE:
-% All of these plotting functions require further work to make them more
-% generally applicable for any model outputs...
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-%~~~~~~~~~~~~~~~~~~
-% Model fit to data
-%~~~~~~~~~~~~~~~~~~
+%% Model fit to data
 
 save = true;
 
@@ -727,18 +189,13 @@ filename = 'fitToData_depthBoxplot.png';
 print(plt, fullfile(folder, filename), '-r300', '-dpng');
 
 
-
-
-
-%~~~~~~~~~~~~~~~~~~
-% Fitted parameters
-%~~~~~~~~~~~~~~~~~~
+%% Fitted parameters
 
 save = false;
 
 % Display fitted parameters in relation to their bounding values (in the
 % table, columns widths shoukd be adjustable).
-plt = plot_fittedParameters(gaOutput.optPar_summary);
+plt = plot_fittedParameters(results.optPar_summary);
 
 switch save, case true
     if exist('plt', 'var') && isvalid(plt)
@@ -750,9 +207,9 @@ end
 
 close all
 
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-% Contour plots -- single trajectories, or grouped by sample event
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+%% Contour plots -- single trajectories, or grouped by sample event
+
 
 save = false;
 
@@ -1010,9 +467,8 @@ end
 
 close all
 
-%~~~~~~~~~~~~~~~
-% Time evolution
-%~~~~~~~~~~~~~~~
+
+%% Time evolution
 
 % These polygon plots should be extended to show water masses of Atlantic
 % and of Arctic orgin because some sampling events ue trajectories
@@ -1205,25 +661,21 @@ end
 
 
 
-plt = plot_timeSeries_barplot('phytoZooPlankton',sampleEvent,traj,out,FixedParams,Forc,Data);
-
-switch save
-
-    case true
-        
-        if exist('plt', 'var') && isvalid(plt)
-            filename = ['barplot_timeSeries_plankton_sampleEvent' num2str(sampleEvent) '.png'];
-            print(plt, fullfile(folder, filename), '-r300', '-dpng');
-        end
-end
-
+% plt = plot_timeSeries_barplot('phytoZooPlankton',sampleEvent,traj,out,FixedParams,Forc,Data);
+% 
+% switch save
+%     case true
+%         if exist('plt', 'var') && isvalid(plt)
+%             filename = ['barplot_timeSeries_plankton_sampleEvent' num2str(sampleEvent) '.png'];
+%             print(plt, fullfile(folder, filename), '-r300', '-dpng');
+%         end
+% end
+% 
 
 close all
 
 
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-% Network plots -- fluxes, production
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%% Network plots -- fluxes, production
 
 % Feeding fluxes
 plt_feedFlux_C = figure(1);
@@ -1273,10 +725,7 @@ switch save, case true
 end
 
 
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-% Plot groups of trajectories corresponding to each event
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%% Plot groups of trajectories corresponding to each event
 
 % These plots need improved... better to run model over ALL available
 % trajectories (not just those used for optimisation), then display output

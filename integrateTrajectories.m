@@ -1,6 +1,8 @@
 function [out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, ...
     v0, odeIntegrator, odeOptions, varargin)
 
+extractVarargin(varargin)
+
 nt = FixedParams.nt;
 nz = FixedParams.nz;
 % nPP = FixedParams.nPP;
@@ -35,10 +37,11 @@ parameterList.Params = Params;
 OUT = nan(nEquations, nt, nTraj); % stores state variable outputs
 OUT(:,1,:) = reshape(v0, [nEquations 1 nTraj]);
 
-returnExtra = true; % By default return all auxiliary variables (specified at end of ODEs.m)
-if ~isempty(varargin) && any(strcmp(varargin, 'returnExtra'))
-    returnExtra = varargin{find(strcmp(varargin, 'returnExtra'))+1};
+if ~exist('returnExtra', 'var')
+% By default return all auxiliary variables (specified at end of ODEs.m)
+    returnExtra = true;
 end
+
 % Initialise arrays for extra output
 [namesExtra, dimsExtra, indexExtra, AUXVARS] = ... 
     initialiseExtraVariables(v0, parameterList, Forc, returnExtra);

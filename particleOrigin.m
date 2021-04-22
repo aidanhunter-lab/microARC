@@ -1,17 +1,14 @@
 function [Forc, Data] = particleOrigin(forc, data, varargin)
-
 % Do data values depend on whether samples are from Arctic or Atlantic waters?
 % Associate each sample event with either Arctic or Atlantic water.
 % Use dynamic time warping metrics to create matrix of distances separating
 % forcing data particle trajectories, then use hierchical clustering to
 % pick out the 2 main clusters which will correspond to Arctic/Atlantic
 
+extractVarargin(varargin)
+
 Forc = forc;
 Data = data;
-
-% extra arguments can be name-value pairs controlling whether to display
-% plots
-v = reshape(varargin, [2 0.5*length(varargin)]);
 
 dist_dtw = zeros(Forc.nTraj);
 for i = 2:Forc.nTraj
@@ -27,14 +24,14 @@ for i = 2:Forc.nTraj
 end
 lat_link = linkage(dist_dtw);
 
-if ~isempty(v) && any(strcmp(v(1,:),'dendrogram')) && v{2,strcmp(v(1,:),'dendrogram')}
+if exist('dendrogramPlot', 'var') && dendrogramPlot
     figure
     dendrogram(lat_link,'ColorThreshold','default');
     xlabel('particle groups')
-    title({'Particle trajectories clustered by latitude', ... 
+    title({'Particle trajectories clustered by latitude', ...
         'Two main clusters separate water of Arctic & Atlantic origin'})
 end
-
+    
 clust = cluster(lat_link,'maxclust',2);
 waterMass = cell(size(clust));
 if mean(Forc.y(1,clust==1)) < mean(Forc.y(1,clust==2))
@@ -46,7 +43,7 @@ end
 Forc.waterMass = waterMass'; % Does particle originate from Arctic or Atlantic ocean?
 
 % Plot result of clustering
-if ~isempty(v) && any(strcmp(v(1,:),'trajectoryPlot')) && v{2,strcmp(v(1,:),'trajectoryPlot')}
+if exist('trajectoryPlot', 'var') && trajectoryPlot
     figure
     for i = 1:Forc.nTraj
         if i==2
@@ -72,7 +69,7 @@ if ~isempty(v) && any(strcmp(v(1,:),'trajectoryPlot')) && v{2,strcmp(v(1,:),'tra
         end
     end
 end
-
+    
 % Associate each sample with Arctic or Atlantic waters, or both...
 waterMass = zeros(Data.nEvents,2); % for each event, count particles originating from Atlantic or Arctic
 for i = 1:Data.nEvents

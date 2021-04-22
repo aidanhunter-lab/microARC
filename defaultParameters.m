@@ -1,29 +1,7 @@
-function [FixedParams, Params, Bounds] = defaultParameters(bioModel, varargin)
-
+function [FixedParams, Params, Bounds] = defaultParameters(bioModel)
 % Set default parameter values.
 % Some variables left empty will be assigned values in initialiseParameters.m
 
-parFile = []; % path to saved 'good' initial parameter values
-if ~isempty(varargin)
-    if any(strcmp(varargin, 'Data'))
-        % If size spectra data are included in the optional arguments then
-        % modelled size classes are chosen to match the data
-        Data = varargin{find(strcmp(varargin, 'Data'))+1};
-    end
-    if any(strcmp(varargin, 'load'))
-        parFile = varargin{find(strcmp(varargin, 'load'))+1};
-    end
-end
-
-if ~isempty(parFile)
-    useSavedPars = true;
-    savedpars = matfile(parFile, 'Writable', true);
-    savedpars = savedpars.pars;
-else
-    useSavedPars = false;
-end
-    
-    
 %% Fixed parameters
 
 %~~~~~~~~
@@ -59,43 +37,78 @@ FixedParams.nIN    = [];
 
 % Plankton
 FixedParams.PP_nut  = {'C','N','Chl'};                                % phytoplankton cell contents - carbon, nitrogen and chlorophyll
-FixedParams.ZP_nut  = {'C','N'};                                % phytoplankton cell contents - carbon, nitrogen and chlorophyll
+FixedParams.ZP_nut  = {'C','N'};                                      % zooplankton cell contents - carbon, nitrogen
 FixedParams.nPP_nut = [];
 FixedParams.nZP_nut = [];
-if ~exist('Data', 'var')
-    FixedParams.nPP_size = 9;                                         % number of phytoplankton size classes
-    FixedParams.PPdia = 2 .^ (0:FixedParams.nPP_size-1);              % set cell sizes if fitting is not passed as argument
-else
-    % Automatic if Data is passed as argument
-    FixedParams.PPdia = unique(Data.size.size( ... 
-        strcmp(Data.size.trophicLevel, 'autotroph')));
-    FixedParams.nPP_size = length(FixedParams.PPdia);
-end
-FixedParams.PPsize        = 4/3 * pi * (FixedParams.PPdia ./ 2) .^ 3; % cell volume [mu m^3]
+
+FixedParams.nPP_size = 9; % number of phytoplankton size classes
+FixedParams.PPdia_intervals = [];
+FixedParams.PPdia = 2 .^ (0:FixedParams.nPP_size - 1); % cell diameters -- each class is double the diameter of the previous (evenly spaced on log scale)
+FixedParams.PPdia = FixedParams.PPdia(:);
+logPPdia = log10(FixedParams.PPdia);
+d = diff(logPPdia(1:2));
+FixedParams.PPdia_intervals = 10 .^ [logPPdia - 0.5 .* d; ... 
+    logPPdia(end) + 0.5 .* d];   % edges of size class intervals
+FixedParams.PPsize = d2vol(FixedParams.PPdia); % cell volumes [mu m^3]
+
+% if isempty(nsizes)
+%     % Default size classes for autotrophs -- each successive size class is
+%     % twice the diameter of the previous class
+%     FixedParams.nPP_size = 9;                                         % number of phytoplankton size classes
+%     FixedParams.PPdia = 2 .^ (0:FixedParams.nPP_size-1);
+% else
+%     % Number of phytoplankton size classes is selected in varargin    
+%     FixedParams.nPP_size = nsizes;
+%     % If varargin also contains the maximum and minimum sizes (ESDmax, ESDmin)
+%     % then we can define a good-fitting size scale. Otherwise repeat the
+%     % above...
+%     if isempty(ESDmin) && isempty(ESDmax)
+%         PPdia = 2 .^ (0:FixedParams.nPP_size-1);
+%         logPPdia = log10(PPdia);
+%         d = diff(logPPdia(1:2));
+%         FixedParams.PPdia_intervals = 10 .^ [logPPdia - 0.5 * d, logPPdia(end) + 0.5 * d];
+%         FixedParams.PPdia = PPdia;
+%     else
+%         % Create size class intervals that are evenly spaced on log-scale
+%         lim = log10([ESDmin, ESDmax]);
+%         edges = linspace(lim(1), lim(2), nsizes + 1);
+%         FixedParams.PPdia_intervals = 10 .^ edges; % edges of each size class
+%         FixedParams.PPdia = 10 .^ (0.5 .* (edges(1:end-1) + edges(2:end)));
+%     end
+% end
+% FixedParams.PPsize = d2vol(FixedParams.PPdia);    % cell volume [mu m^3]
+
+% Use the same size interval grid for heterotrophs
+FixedParams.nZP_size = FixedParams.nPP_size;
+FixedParams.ZPdia_intervals = FixedParams.PPdia_intervals;
+FixedParams.ZPdia = FixedParams.PPdia;
+FixedParams.ZPsize = FixedParams.PPsize;
+
+% FixedParams.nZP_size = FixedParams.nPP_size;
+% switch bioModel
+%     case 'singlePredatorClass'
+%         % Assume predator cell size is equal to largest autotroph cell size (if
+%         % using the model with a single predator class then the actual size
+%         % is 'somewhat' arbitrary as all prey are made equally available)
+%         FixedParams.ZPdia = max(FixedParams.PPdia);
+%         FixedParams.ZPsize = d2vol(FixedParams.ZPdia);
+%     case 'multiplePredatorClasses'
+%         FixedParams.ZPdia_intervals = FixedParams.PPdia_intervals;
+%         FixedParams.ZPdia = FixedParams.PPdia;
+%         FixedParams.ZPsize = FixedParams.PPsize;
+% end
+
 FixedParams.nPP           = [];                                       % number of phytoplankton classes
-
-
-switch bioModel
-    case 'singlePredatorClass'
-        % Assume predator cell size is equal to largest autotroph cell size (if
-        % using a model with a single predator size class)
-        FixedParams.ZPdia = max(Data.size.size( ...
-            strcmp(Data.size.trophicLevel, 'heterotroph')));
-    case 'multiplePredatorClasses'
-        FixedParams.ZPdia = unique(Data.size.size( ...
-            strcmp(Data.size.trophicLevel, 'heterotroph')));
-end
-FixedParams.nZP_size = length(FixedParams.ZPdia);
-FixedParams.ZPsize        = 4/3 * pi * (FixedParams.ZPdia ./ 2) .^ 3; % cell volume [mu m^3]
 FixedParams.nZP           = [];                                       % number of heterotroph classes
 
 FixedParams.diaAll = [FixedParams.PPdia; FixedParams.ZPdia];
 FixedParams.sizeAll = [FixedParams.PPsize; FixedParams.ZPsize];
 
-delta_pred = reshape(FixedParams.ZPsize, [FixedParams.nZP_size, 1]);
-delta_prey = [reshape(FixedParams.PPsize, [1 FixedParams.nPP_size]), ... 
-    reshape(FixedParams.ZPsize, [1 FixedParams.nZP_size])];
-FixedParams.delta = delta_pred ./ delta_prey; % predator:prey size ratios
+% delta_pred = reshape(FixedParams.ZPsize, [FixedParams.nZP_size, 1]);
+% delta_prey = [reshape(FixedParams.PPsize, [1 FixedParams.nPP_size]), ... 
+%     reshape(FixedParams.ZPsize, [1 FixedParams.nZP_size])];
+% FixedParams.delta = delta_pred ./ delta_prey; % predator:prey size ratios
+FixedParams.delta = []; % predator:prey size ratios
 
 FixedParams.diatoms       = [];                                       % assume large phytoplankton are diatoms - only needed to split SINMOD output over classes during state variable initialisation
 FixedParams.phytoplankton = [];                                       % index phytoplankton
@@ -135,7 +148,6 @@ Params.scalars = {
     'aP'
     'theta'
     'xi'
-%     'Gmax'
     'k_G'
     'delta_opt'
     'sigG'
@@ -163,8 +175,6 @@ Params.sizeDependent = {
     'pmax_b'
     'Gmax_a'
     'Gmax_b'
-%     'k_G_a'
-%     'k_G_b'
     'wp_a'
     'wp_b'
     'beta1'
@@ -178,39 +188,57 @@ Params.sizeDependent = {
 %~~~~~~~~~
 
 % Size-dependent
-% (mostly power functions y=aV^b, formulas given in initialiseParameters.m)
+% (mostly power functions y=aV^b)
 
 % carbon quota [mmol C / cell], Maranon et al. (2013)
+Params.Q_C_func = @(a,b,V) a .* V .^ b;
 Params.Q_C_a = (1/12) * 1e-9 * 10^-0.69;
 Params.Q_C_b = 0.88;
 Params.Q_C = [];
 
 % min and max cellular nitrogen quota [mmol N / cell], scaled by C quota [mmol N / mmol C], Maranon et al. (2013)
+Params.Qmin_QC_func = @(a,b,V) a .* V .^ b;
 Params.Qmin_QC_a = (1/14) * 1e-9 * 10^-1.47 / Params.Q_C_a;
 Params.Qmin_QC_b = 0.84 - Params.Q_C_b;
 Params.Qmin_QC = [];
 
 % max quota
+
+Params.Qmax_QC_func = @(Qmin_QC, Qmax_delQ) Qmin_QC ./ (1 - 1 ./ Qmax_delQ);
+Params.Qmax_QC = [];
+
+Params.delQ_QC_func = @(Qmin_QC, Qmax_QC) Qmax_QC - Qmin_QC;
+Params.delQ_QC = [];
+
+Params.Qmax_delQ_func = @(a,b,V) 1 ./ (1 - (a .* V .^ b));
 Params.Qmax_delQ_a = 10^(-1.47+1.26);
 Params.Qmax_delQ_b = 0.84 - 0.93;
 Params.Qmax_delQ = [];
 
 % maximum nitrogen uptake rate Vmax [mmol N/cell/day] scaled by C quota, Vmax_over_QC [mmol N / mmol C / day], Maranon et al. (2013)
+Params.Vmax_QC_func = @(a,b,V) a .* V .^ b;
 Params.Vmax_QC_a = 24 / 14 * 1e-9 * 10^-3 / Params.Q_C_a;
 Params.Vmax_QC_b = 0.97 - Params.Q_C_b;
 Params.Vmax_QC = [];
 
 % cellular affinity for nitrogen scaled by QC [m^3 / mmol C / day], derived using half saturation from Litchmann et al. (2007)
+Params.aN_QC_func = @(a,b,V) a .* V .^ b;
 Params.aN_QC_a = Params.Vmax_QC_a / 10^-0.77;
 Params.aN_QC_b = Params.Vmax_QC_b -0.27;
 Params.aN_QC = [];
 
+% half saturation
+Params.kN_func = @(Vmax_QC, aN_QC) Vmax_QC ./ aN_QC;
+Params.kN = [];
+
 % maximum photosynthetic rate [1/day]
+Params.pmax_func = @(a,b,V) a .* V .^ b;
 Params.pmax_a = 50;
 Params.pmax_b = -0.15;
 Params.pmax = [];
 
 % maximum grazing rate
+Params.Gmax_func = @(a,b,V) a .* V .^ b;
 Params.Gmax_a = 25;
 Params.Gmax_b = -0.2;
 Params.Gmax = [];
@@ -221,13 +249,15 @@ Params.Gmax = [];
 % Params.k_G = [];
 
 
-
 % sinking plankton
+Params.wp_func = @(a,b,V) a .* (V') .^ b;
 Params.wp_a = 1e-5; % intercept = 0 => no sinking at any size
 Params.wp_b = 0.33;
 Params.wp = [];
 
 % partitioning of dead matter into DOM and POM,  initial values from Ward et al. (2016)
+Params.beta_func = @(b1,b2,b3,V) b1 ./ (1 + exp(log10(V) - b3)) + ...
+    b1 .* b2 ./ (1 + exp((b3 - log10(V)))); % % flexible 3-parameter double logistic function of log10(V)
 Params.beta1 = 0.9;
 Params.beta2 = 0.2/0.9;
 Params.beta3 = 2.0;
@@ -255,13 +285,25 @@ Params.lambda_max = 0.7;    % maximum prey assimilation efficiency
 %~~~~~~~~~~~~~~~
 % Organic matter
 %~~~~~~~~~~~~~~~
+Params.rOM_func = @(rDOC, rDON, rPOC, rPON, DOM_ind, POM_ind, C_ind, N_ind) ...
+    reshape( ...
+    rDOC .* (DOM_ind' & C_ind) + ...
+    rDON .* (DOM_ind' & N_ind) + ...
+    rPOC .* (POM_ind' & C_ind) + ...
+    rPON .* (POM_ind' & N_ind), ...
+    [length(DOM_ind), 1 , length(C_ind)]);
+Params.rOM = []; % remineralisation rates (1 / day)
+
 Params.rDON = 0.02;         % dissolved organic nitrogen remineralisation rate (1/day)
 Params.rDOC = 0.02;         % dissolved organic carbon remineralisation rate (1/day)
 Params.rPON = 0.04;         % particulate organic nitrogen remineralisation rate (1/day)
 Params.rPOC = 0.04;         % particulate organic nitrogen remineralisation rate (1/day)
-Params.wDOM = 0;            % POM sinking rate (m / day)
-Params.wPOM = 2;
 
+
+Params.wk_func = @(wDOM, wPOM, DOM_i, POM_i) wDOM .* DOM_i + wPOM .* POM_i; % OM sinking rate (m / day)
+Params.wk = [];
+Params.wDOM = 0; % sinking rates of DOM and POM
+Params.wPOM = 2;
 
 %% Parameter bounds
 
@@ -360,68 +402,20 @@ Bounds.wp_a = [0, FixedParams.PPsize(end) .^ (-2/3) .* FixedParams.maxSinkSpeed_
 Bounds.wp_b = [0, log(FixedParams.maxSinkSpeed_P ./ Bounds.wp_a(2)) ./ log(max(FixedParams.PPsize))];
 
 
-
-%% Use pre-saved values?
-% If previously saved 'good' initial parameters are to be used, then
-% replace the above default values
-if useSavedPars
-    for i = 1:height(savedpars)
-        savedpars.Param(i);
-        Params.(savedpars.Param{i}) = savedpars.Value(i);
-    end
-end
-
-
-
 %% Tidy up
 
-% Have all parameters listed in scalars and sizeDependent been assigned
-% values? If not then display warning
-allPars = [Params.scalars; Params.sizeDependent];
-for i = 1:length(allPars)
-    n = allPars{i};
-    try p = Params.(n);
-    catch, p = nan;
-    end
-    if any(isnan(p))
-        warning(['Value of ' n ' has not been assigned. See defaultParameters.m'])
-        Params.(n) = [];
-    end
-end
+[Params, Bounds] = paramCheck(Params, Bounds);
 
-% Flag and correct any out-of-bounds parameters. This just catches any
-% incompatabilities between values selected for parameters and their bounds.
-% Also, if bounds have not been selected then they are set 
-for i = 1:length(allPars)
-    n = allPars{i};
-    p = Params.(n);
-    if ~isempty(p)
-        try b = Bounds.(n);
-        catch, b = nan;
-        end
-        if ~any(isnan(b)) % if bounds have been set
-            if p < b(1)
-%                 warning(['Default ' n ' value is less than its lower bound, so ' ...
-%                     n ' has been reset to its lower bound. Choose consistent values in defaultParameters.m'])
-%                 Params.(n) = b(1);
-                warning(['Default ' n ' value is less than its lower bound, so ' ...
-                    n ' has been reset to the midpoint between its bounds. Choose consistent values in defaultParameters.m'])
-                Params.(n) = 0.5 .* (b(1)+b(2));
-            end
-            if p > b(2)
-%                 warning(['Default ' n ' value is greater than its upper bound, so ' ...
-%                     n ' has been reset to its upper bound. Choose consistent values in defaultParameters.m'])
-%                 Params.(n) = b(2);
-                warning(['Default ' n ' value is greater than its upper bound, so ' ...
-                    n ' has been reset to the midpoint between its bounds. Choose consistent values in defaultParameters.m'])
-                Params.(n) = 0.5 .* (b(1)+b(2));
-            end
-        else % if bounds have not been set then parameter is deemed to be fixed
-            warning(['Parameter ' n ' declared without bounding values. Bounds now set equal to ' n ' value. See defaultParameters.m'])
-            Bounds.(n) = [p, p];
-        end
-    end
+
 end
 
 
+%% auxiliarly functions
+% Sphere diameter & volume conversions
+function vol = d2vol(d)
+vol = 4 ./ 3 .* pi .* (0.5 .* d) .^ 3;
+end
 
+% function d = vol2d(vol)
+% d = 2 .* (vol .* (3 ./ 4 ./ pi)) .^ (1/3);
+% end

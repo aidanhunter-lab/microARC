@@ -1,0 +1,8 @@
+function displayFittedParameters(results)
+fprintf('\n')
+disp('Fitted parameters')
+fprintf('\n')
+display(results.optPar_summary)
+fprintf('\n')
+disp(['Cost of best fit = ' num2str(min(results.scoreHistory(:)))])
+fprintf('\n')

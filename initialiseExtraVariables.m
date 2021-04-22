@@ -9,7 +9,7 @@ forcing.T = Forc.T(:,:,1);
 forcing.K = Forc.K(:,:,1);
 forcing.PARsurf = Forc.PARsurf(:,:,1);
 
-[~, extraOutput] = ODEs3(0, v0(:,1), parameterList, forcing, 2, returnExtra);
+[~, extraOutput] = ODEs(0, v0(:,1), parameterList, forcing, 2, returnExtra);
 
 namesExtra = fieldnames(extraOutput);
 nExtra = length(namesExtra);
@@ -45,7 +45,7 @@ for i = 2:nTraj  % Loop through remaining trajectories
     forcing.T = Forc.T(:,:,i);
     forcing.K = Forc.K(:,:,i);
     forcing.PARsurf = Forc.PARsurf(:,:,i);
-    [~, extraOutput] = ODEs3(0, v0(:,i), parameterList, forcing, 2, returnExtra);
+    [~, extraOutput] = ODEs(0, v0(:,i), parameterList, forcing, 2, returnExtra);
     extraOutput = structfun(@(x) x(:)', extraOutput, 'UniformOutput', false);
     AUXVARS(:,1,i) = struct2array(structfun(@(x) x(:)', extraOutput, ...
         'UniformOutput', false));    
