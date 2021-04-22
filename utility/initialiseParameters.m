@@ -269,6 +269,12 @@ if (isfield(Params, 'beta1') && isfield(Params, 'beta2') && isfield(Params, 'bet
     Params.beta = Params.beta_func(Params.beta1, Params.beta2, Params.beta3, Vol);
 end
 
+if (isfield(Params, 'delta_opt') && isfield(Params, 'sigG') && isfield(Params, 'phi')) && ...
+        ~(isempty(Params.delta_opt) && isempty(Params.sigG) && isempty(Params.phi))
+    Params.phi = exp(-log(FixedParams.delta ./ Params.delta_opt) .^ 2 ./ (2 .* Params.sigG .^ 2));
+    Params.phi(:,1:end-1) = Params.phi(:,1:end-1) ./ max(Params.phi(:,1:end-1));
+    Params.phi(:,end) = Params.phi(:,end) .* (Params.phi(end-1,end-1) ./ Params.phi(end,end));
+end
 
 % Aggregate some parameters into matrices/arrays
 
