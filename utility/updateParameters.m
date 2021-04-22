@@ -16,7 +16,12 @@ if ~isempty(varargin)
                 Name = pn(1:end-2);
                 param_a = Params.([Name '_a']);
                 param_b = Params.([Name '_b']);
-                Params.(Name) = Params.([Name '_func'])(param_a, param_b, Vol);
+                if ~any(strcmp(Name, 'm'))
+                    Params.(Name) = Params.([Name '_func'])(param_a, param_b, Vol);
+                else
+                    Params.(Name) = Params.([Name '_func'])(param_a, param_b, FixedParams.m_min, Vol);
+                end
+                
 %                 if ~(any(strcmp(Name, {'Qmax_delQ'})) || any(strcmp(Name, {'wp'})))
 %                     Params.(Name) = powerFunction(param_a, param_b, Vol);
 %                 else
@@ -111,7 +116,11 @@ if ~isempty(varargin)
                     Name = name(1:length(name)-2);
                     param_a = Params.([Name '_a']);
                     param_b = Params.([Name '_b']);
-                    Params.(Name) = Params.([Name '_func'])(param_a, param_b, Vol);
+                    if ~strcmp(Name, 'm')
+                        Params.(Name) = Params.([Name '_func'])(param_a, param_b, Vol);
+                    else
+                        Params.(Name) = Params.([Name '_func'])(param_a, param_b, FixedParams.m_min, Vol);
+                    end
                 end                
                 if any(strcmp(name, {'beta1','beta2','beta3'}))
                     Name = name(1:length(name)-1);

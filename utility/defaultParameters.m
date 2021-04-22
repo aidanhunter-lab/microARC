@@ -51,52 +51,11 @@ FixedParams.PPdia_intervals = 10 .^ [logPPdia - 0.5 .* d; ...
     logPPdia(end) + 0.5 .* d];   % edges of size class intervals
 FixedParams.PPsize = d2vol(FixedParams.PPdia); % cell volumes [mu m^3]
 
-% if isempty(nsizes)
-%     % Default size classes for autotrophs -- each successive size class is
-%     % twice the diameter of the previous class
-%     FixedParams.nPP_size = 9;                                         % number of phytoplankton size classes
-%     FixedParams.PPdia = 2 .^ (0:FixedParams.nPP_size-1);
-% else
-%     % Number of phytoplankton size classes is selected in varargin    
-%     FixedParams.nPP_size = nsizes;
-%     % If varargin also contains the maximum and minimum sizes (ESDmax, ESDmin)
-%     % then we can define a good-fitting size scale. Otherwise repeat the
-%     % above...
-%     if isempty(ESDmin) && isempty(ESDmax)
-%         PPdia = 2 .^ (0:FixedParams.nPP_size-1);
-%         logPPdia = log10(PPdia);
-%         d = diff(logPPdia(1:2));
-%         FixedParams.PPdia_intervals = 10 .^ [logPPdia - 0.5 * d, logPPdia(end) + 0.5 * d];
-%         FixedParams.PPdia = PPdia;
-%     else
-%         % Create size class intervals that are evenly spaced on log-scale
-%         lim = log10([ESDmin, ESDmax]);
-%         edges = linspace(lim(1), lim(2), nsizes + 1);
-%         FixedParams.PPdia_intervals = 10 .^ edges; % edges of each size class
-%         FixedParams.PPdia = 10 .^ (0.5 .* (edges(1:end-1) + edges(2:end)));
-%     end
-% end
-% FixedParams.PPsize = d2vol(FixedParams.PPdia);    % cell volume [mu m^3]
-
 % Use the same size interval grid for heterotrophs
 FixedParams.nZP_size = FixedParams.nPP_size;
 FixedParams.ZPdia_intervals = FixedParams.PPdia_intervals;
 FixedParams.ZPdia = FixedParams.PPdia;
 FixedParams.ZPsize = FixedParams.PPsize;
-
-% FixedParams.nZP_size = FixedParams.nPP_size;
-% switch bioModel
-%     case 'singlePredatorClass'
-%         % Assume predator cell size is equal to largest autotroph cell size (if
-%         % using the model with a single predator class then the actual size
-%         % is 'somewhat' arbitrary as all prey are made equally available)
-%         FixedParams.ZPdia = max(FixedParams.PPdia);
-%         FixedParams.ZPsize = d2vol(FixedParams.ZPdia);
-%     case 'multiplePredatorClasses'
-%         FixedParams.ZPdia_intervals = FixedParams.PPdia_intervals;
-%         FixedParams.ZPdia = FixedParams.PPdia;
-%         FixedParams.ZPsize = FixedParams.PPsize;
-% end
 
 FixedParams.nPP           = [];                                       % number of phytoplankton classes
 FixedParams.nZP           = [];                                       % number of heterotroph classes
@@ -128,13 +87,14 @@ FixedParams.nEquations = [];                                          % total nu
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % All other fixed quantities
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~
-FixedParams.attSW        = 0.04;   % light attenuation by sea water (1 / m)
-FixedParams.attP         = 0.0149; % light attenuation by chlorophyll (m^2 / mg Chl), Krause-Jensen & Sand-Jensen, Limnol. Oceanogr. 43(3):396-407(1998)
-FixedParams.maxSinkSpeed_POM = 10; % maximum sinking speed (m / day) of POM (this determines max integration time step)
-maxDepthLayerClearRate = 0.1;      % max rate at which depth layer can by cleared of plankton via sinking -- max sink speed of plankton is specified like this for model-stability purposes
+FixedParams.m_min = 0.01;
+FixedParams.attSW = 0.04;                                  % light attenuation by sea water (1 / m)
+FixedParams.attP = 0.0149;                                 % light attenuation by chlorophyll (m^2 / mg Chl), Krause-Jensen & Sand-Jensen, Limnol. Oceanogr. 43(3):396-407(1998)
+FixedParams.maxSinkSpeed_POM = 10;                         % maximum sinking speed (m / day) of POM (this determines max integration time step)
+maxDepthLayerClearRate = 0.1;                              % max rate at which depth layer can by cleared of plankton via sinking -- max sink speed of plankton is specified like this for model-stability purposes
 FixedParams.maxSinkSpeed_P = maxDepthLayerClearRate .* ...
-    min(FixedParams.zwidth);       % max sinking speed of plankton (when this is too great the model becomes unstable because cells clear from depth layers too quickly)
-FixedParams.POM_is_lost  = true;   % is POM lost from the system by sinking below bottom modelled depth layer
+    min(FixedParams.zwidth);                               % max sinking speed of plankton (when this is too great the model becomes unstable because cells clear from depth layers too quickly)
+FixedParams.POM_is_lost  = true;                           % is POM lost from the system by sinking below bottom modelled depth layer
 
 
 %% Variable parameters
@@ -144,7 +104,7 @@ Params.scalars = {
     'Tref'
     'A'
     'h'
-    'm'
+%     'm'
     'aP'
     'theta'
     'xi'
@@ -175,6 +135,8 @@ Params.sizeDependent = {
     'pmax_b'
     'Gmax_a'
     'Gmax_b'
+    'm_a'
+    'm_b'
     'wp_a'
     'wp_b'
     'beta1'
@@ -248,6 +210,11 @@ Params.Gmax = [];
 % Params.k_G_b = 0.18;
 % Params.k_G = [];
 
+% background mortality
+Params.m_func = @(a,b,m_min,V) m_min + (a - m_min) .* V .^ b;
+Params.m_a = 0.05; % mortality for cell volume = 1 mu m ^ 3
+Params.m_b = -0.15; % mortality size-exponent
+Params.m = [];
 
 % sinking plankton
 Params.wp_func = @(a,b,V) a .* (V') .^ b;
@@ -315,7 +282,7 @@ Params.wPOM = 2;
 Bounds.Tref       = [20, 20];
 Bounds.A          = [0.01, 0.2];
 Bounds.h          = [5, 15];
-Bounds.m          = [0.005, 0.1];
+% Bounds.m          = [0.005, 0.1];
 Bounds.aP         = [0, 0.5];
 % Bounds.aP         = [0.001, 0.5];
 Bounds.theta      = [3, 5];
@@ -378,6 +345,9 @@ Bounds.Gmax_a = [0, 100];
 Bounds.Gmax_b = [-3, 0];
 % Bounds.k_G_a = [0, 10];
 % Bounds.k_G_b = [0, 1];
+
+Bounds.m_a = [FixedParams.m_min, 0.1];
+Bounds.m_b = [-1, 0]; % negativity ensures that mortality rate decreases with size
 
 Bounds.beta1 = [0.5, 1];
 Bounds.beta2 = [0, 0.9];
