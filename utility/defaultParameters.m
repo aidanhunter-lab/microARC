@@ -210,6 +210,9 @@ Params.Gmax = [];
 % Params.k_G_b = 0.18;
 % Params.k_G = [];
 
+% prey size preferences
+Params.phi = [];
+
 % background mortality
 Params.m_func = @(a,b,m_min,V) m_min + (a - m_min) .* V .^ b;
 Params.m_a = 0.05; % mortality for cell volume = 1 mu m ^ 3
