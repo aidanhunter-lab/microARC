@@ -1,5 +1,8 @@
 %% Size-structured 1D NPZD model
-% Generate model output using default or saved parameters
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% Generate model output from default or saved parameters
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 %% Set up model
 
@@ -9,14 +12,17 @@ clear; clc; close all; delete(gcp('nocreate'))
 addpath(genpath(fileparts(which('run_model2'))))
 
 % Store folders/filenames of data and saved parameters
-Directories = setDirectories('bioModel', 'multiplePredatorClasses');
+% Directories = setDirectories('bioModel', 'multiplePredatorClasses');
+Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
+    'parFile', []);
 display(Directories)
 
 % Use default set-up to load and organise data and initialise model parameters.
 % Set-up may be modified here by passing some extra arguments as name-value
 % pairs (preferable), or directly modified within modelSetUp.m
 [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
-    'displayAllOutputs', true); % default set-up -- no plots
+    'displayAllOutputs', true, ... 
+    'AbsTol', 1e-3, 'RelTol', 1e-2); % default set-up -- no plots
 
 % Useful name-value pairs for modelSetUp.m include: useTraj, numTraj, ESDmin, ESDmax, nsizes
 
@@ -31,7 +37,6 @@ display(Directories)
 
 % Parameters may be modified using name-value pairs in updateParameters.m
 % Params = updateParameters(Params, FixedParams, 'pmax_a', 20, 'aP', 0.01);
-
 
 %% Integrate
 
@@ -50,9 +55,17 @@ v0 = initialiseVariables(FixedParams, Params, Forc);
 %                      organic matter      [type, depth, nutrient]
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+Forc.integrateFullTrajectory = false
+
 % Run the model
+tic; disp('.. started at'); disp(datetime('now'))
 [out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, ... 
     FixedParams.odeIntegrator, FixedParams.odeOptions);
+toc
+
+compare times and outputs
+
+FixedParams.odeOptions
 
 display(out)
 display(auxVars)

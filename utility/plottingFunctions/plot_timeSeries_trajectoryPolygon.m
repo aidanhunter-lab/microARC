@@ -33,8 +33,8 @@ end
 
 nt = fixedParams.nt;
 nz = fixedParams.nz;
-nPP_size = fixedParams.nPP_size;
-nZP_size = fixedParams.nZP_size;
+nPP_size = double(fixedParams.nPP_size);
+nZP_size = double(fixedParams.nZP_size);
 
 % Extract times
 x = yearday(forcing.t(:,1)); % yearday on x-axis

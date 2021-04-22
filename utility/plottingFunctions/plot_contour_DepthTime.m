@@ -10,6 +10,9 @@ if ~isempty(varargin)
     end
 end
 
+fixedParams.nPP_size = double(fixedParams.nPP_size);
+fixedParams.nZP_size = double(fixedParams.nZP_size);
+
 
 % Extract outputs
 N = squeeze(out.N(:,:,:,traj));

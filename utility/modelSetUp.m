@@ -270,8 +270,15 @@ FixedParams.odeIntegrator = integratorChoices{2};
 odeMaxTime = FixedParams.dt_max; % max timestep (days)
 odeInitTime = 0.5 * odeMaxTime; % initial integration timestep (solver will
                                 % automatically reduce this if required)
+% Integration tolerences
+if ~exist('RelTol', 'var')
+    RelTol = 1e-2; % RelTol = 1e-2 => results accurate to 1%
+end
+if ~exist('AbsTol', 'var')
+    AbsTol = 1e-3;
+end
 
-FixedParams.odeOptions=odeset('AbsTol', 1e-6, 'RelTol', 1e-4,...
+FixedParams.odeOptions=odeset('AbsTol', AbsTol, 'RelTol', RelTol,...
     'InitialStep', odeInitTime, 'MaxStep', odeMaxTime);
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

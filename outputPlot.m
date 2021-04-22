@@ -11,6 +11,9 @@ switch type
         auxVars = varargin{6};
         smooth = varargin{7};
         
+        fixedParams.nPP_size = double(fixedParams.nPP_size);
+        fixedParams.nZP_size = double(fixedParams.nZP_size);
+
         % Extract outputs
         N = squeeze(out.N(:,:,:,itraj));
         P = squeeze(out.P(:,:,:,:,itraj));
@@ -354,6 +357,9 @@ switch type
         dat = varargin{8};
         alpha = varargin{9};
         
+        fixedParams.nPP_size = double(fixedParams.nPP_size);
+        fixedParams.nZP_size = double(fixedParams.nZP_size);
+
         % Extract positions and times
         lon = forcing.x(:,itraj);
         lat = forcing.y(:,itraj);
@@ -593,26 +599,66 @@ switch type
                 
                 %----------------------------------------------------------
                 
-            case 'zooplankton'                
-                plt = figure;
-                plt.Units = 'inches';
-                plt.Position = [0 0 6 4];
-                col = squeeze(max(Z));
-                if length(itraj) == 1, col = col'; end
-                col = [nan(1,size(col,2)); col; nan(1,size(col,2))];
-                col = reshape(col, [1 numel(col)]);
-                s = surface([x;x],[y;y],[z;z],[col;col], ...
-                    'facecol', 'no', 'edgecol', 'interp', 'linew', 1);
-                s.EdgeAlpha = alpha;
-                cb = colorbar;
-                cb.Label.String = 'mmol C / m^3';
-                title('zooplankton abundance')
-                xlabel([char(176) 'E'])
-                ylabel([char(176) 'N'])
-                hold on
-                scatter(elon,elat,'pr','filled')
-                hold off
-                colormap plasma
+            case 'zooplankton'
+                
+                if fixedParams.nZP_size > 1
+                    plt = figure;
+                    nTraj = length(itraj);
+                    ind_nut = fixedParams.ZP_N_index;
+                    Col = squeeze(max(Z(:,:,ind_nut,:,:),[],2));
+                    nc = floor(sqrt(fixedParams.nZP_size));
+                    nr = ceil(fixedParams.nZP_size / nc);
+                    plt.Units = 'inches';
+                    plt.Position = [0 0 6*nc 4*nr];
+                    index = reshape([1:fixedParams.nZP_size, ...
+                        zeros(1, nc * nr - fixedParams.nZP_size)], [nc nr])';
+                    for ii = 1:fixedParams.nZP_size
+                        subplot(nr,nc,index(ii))
+                        col = squeeze(Col(ii,:,:));
+                        if nTraj == 1, col=col'; end
+                        col = [nan(1,nTraj); col; nan(1,nTraj)];
+                        col = reshape(col, [1 numel(col)]);
+                        s = surface([x;x],[y;y],[z;z],[col;col], ...
+                            'facecol', 'no', 'edgecol', 'interp', 'linew', 1);
+                        s.EdgeAlpha = alpha;
+                        cb = colorbar;
+                        cb.Label.String = 'mmol N / m^3';
+                        title([num2str(round(fixedParams.ZPdia(ii),2,'significant')) ' \mum'])
+                        if ismember(index(ii),index(end,:)), xlabel([char(176) 'E']); else, xlabel([]); end
+                        if ismember(index(ii),index(:,1)), ylabel([char(176) 'N']); else, ylabel([]); end
+                        hold on
+                        scatter(elon,elat,'pr','filled')
+                        hold off
+                    end
+                    sgtitle('zooplankton abundance / cell diameter')
+                    colormap plasma
+                    
+                else
+                    plt = figure;
+                    plt.Units = 'inches';
+                    plt.Position = [0 0 6 4];
+                    col = squeeze(max(Z));
+                    if length(itraj) == 1, col = col'; end
+                    col = [nan(1,size(col,2)); col; nan(1,size(col,2))];
+                    col = reshape(col, [1 numel(col)]);
+                    s = surface([x;x],[y;y],[z;z],[col;col], ...
+                        'facecol', 'no', 'edgecol', 'interp', 'linew', 1);
+                    s.EdgeAlpha = alpha;
+                    cb = colorbar;
+                    cb.Label.String = 'mmol C / m^3';
+                    title('zooplankton abundance')
+                    xlabel([char(176) 'E'])
+                    ylabel([char(176) 'N'])
+                    hold on
+                    scatter(elon,elat,'pr','filled')
+                    hold off
+                    colormap plasma
+
+                end
+                
+                
+                
+                
 
         end
         
@@ -631,6 +677,9 @@ switch type
         dat = varargin{8};
         alpha = varargin{9};
         
+        fixedParams.nPP_size = double(fixedParams.nPP_size);
+        fixedParams.nZP_size = double(fixedParams.nZP_size);
+
         nt = fixedParams.nt;
         nz = fixedParams.nz;
         nPP_size = fixedParams.nPP_size;
@@ -986,6 +1035,9 @@ switch type
         auxVars = varargin{7};
         dat = varargin{8};
         alpha = varargin{9};
+        
+        fixedParams.nPP_size = double(fixedParams.nPP_size);
+        fixedParams.nZP_size = double(fixedParams.nZP_size);
 
         nt = fixedParams.nt;
         nz = fixedParams.nz;
@@ -1059,6 +1111,9 @@ switch type
         FixedParams = varargin{4};
         plotStd = varargin{5}; % index [0, 1, 2] controlling whether raw or standardised data are plotted
         
+        FixedParams.nPP_size = double(FixedParams.nPP_size);
+        FixedParams.nZP_size = double(FixedParams.nZP_size);
+
         switch var
             case 'DIN'
                 ind = strcmp('N', Data.scalar.Variable); % index data
@@ -1229,6 +1284,9 @@ switch type
         FixedParams = varargin{4};
         plotStd = varargin{5}; % index [0, 1, 2] controlling whether raw or standardised data are plotted
         
+        FixedParams.nPP_size = double(FixedParams.nPP_size);
+        FixedParams.nZP_size = double(FixedParams.nZP_size);
+
         switch var
             case 'DIN'
                 ind = strcmp('N', Data.scalar.Variable); % index data
@@ -1405,6 +1463,9 @@ switch type
         logPlot = varargin{5};
         costfun = FixedParams.costFunction;
         
+        FixedParams.nPP_size = double(FixedParams.nPP_size);
+        FixedParams.nZP_size = double(FixedParams.nZP_size);
+
         % Different selection of plots for different cost functions
         switch costfun
             

@@ -1,5 +1,8 @@
 %% Size-structured 1D NPZD model
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % Numerically optimise model parameters
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 %% Set up model
 
@@ -46,35 +49,27 @@ display(Directories)
 poolObj = gcp('nocreate');
 if isempty(poolObj), poolObj = parpool('SpmdEnabled', false); end
 
-% In the run_model.m script this is where state variables are initialised.
-% However, as calculation of some initial values depends upon parameters,
-% state variable initialisation (initialiseVariables.m) is moved within the
-% cost function (costFunction.m).
-% If state variable initialisation is made entirely independent of variable
-% model parameters then uncomment the below lines to calculate 'v0' here, 
-% then pass it as an argument to the cost function.
-
-% % Store state variables in array v0: 1st dimension = variable
-% %                                    2nd dimension = location (trajectory)
-% v0 = initialiseVariables(FixedParams, Params, Forc);
-% %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-% % Order of variables = inorganic nutrients [depth]
-% %                      phytoplankton       [size, depth, nutrient]
-% %                      zooplankton         [size, depth, nutrient]
-% %                      organic matter      [type, depth, nutrient]
-% %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% Store state variables in array v0: 1st dimension = variable
+%                                    2nd dimension = location (trajectory)
+v0 = initialiseVariables(FixedParams, Params, Forc);
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% Order of variables = inorganic nutrients [depth]
+%                      phytoplankton       [size, depth, nutrient]
+%                      zooplankton         [size, depth, nutrient]
+%                      organic matter      [type, depth, nutrient]
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 % Choose which parameters to tune, the cost function, and numerical tuning algorithm
-[FixedParams, Params, Forc] = optimisationOptions(FixedParams, Params, Forc);
+[FixedParams, Params, Forc] = optimisationOptions(FixedParams, Params, Forc); % extra arguments (e.g. 'niter') may be included as name-value pairs
 
-restartRun = false; % restart algorithm from a saved prior run?
+restartRun = true; % restart algorithm from a saved prior run?
 switch restartRun, case true
     fileName_results = 'fittedParameters';  % saved parameters file name
     tag = '1';                              % and identifying tag
 %     tag = FixedParams.costFunction;
     fileName_results = fullfile(Directories.resultsDir, ...
         [fileName_results '_' tag]);
-    % Load stored results
+    % Load stored results    
     [~, results, ~, ~, boundsLower, boundsUpper, Data, Forc, FixedParams, Params, v0] = ...
         loadOptimisationRun(fileName_results);    
     populationOld = results.populationHistory(:,:,end);
@@ -88,7 +83,7 @@ end
 % Call optimiser
 tic; disp('.. started at'); disp(datetime('now'))
 [optPar, fval, exitflag, output, population, scores] = optimise(@(x) ... 
-    costFunction(x, FixedParams, Params, Forc, Data, FixedParams.odeIntegrator, ...
+    costFunction(x, FixedParams, Params, Forc, Data, v0, FixedParams.odeIntegrator, ...
     FixedParams.odeOptions, 'selectFunction', costFunctionLabel), ... 
     npars, [], [], [], [], boundsLower, boundsUpper, [], optimiserOptions);
 optimisationTime = toc / 60 / 60; disp('.. finished at'); disp(datetime('now')); fprintf('\n')
@@ -105,8 +100,22 @@ disp(['Optimisation time: ' num2str(floor(optimisationTime)) ' hrs, ' ...
 stoppedEarly = ~exist('fval', 'var');
 
 % Store results
-results = storeTunedOutput(FixedParams.optimiser, gapopulationhistory, ... 
+results_ = storeTunedOutput(FixedParams.optimiser, gapopulationhistory, ... 
     gacosthistory, optimiserOptions, FixedParams, 'stoppedEarly', stoppedEarly);
+
+% Was optimisation continued from a prior run? If so, then append the fresh
+% results into the loaded 'results' struct.
+appendResults = exist('results', 'var');
+if appendResults
+    results.optPar = results_.optPar;
+    results.optPar_summary = results_.optPar_summary;
+    results.populationHistory = cat(3, results.populationHistory, ... 
+        results_.populationHistory(:,:,2:end));
+    results.scoreHistory = [results.scoreHistory, results_.scoreHistory(:,2:end)];
+    results.optimiserOptions = results_.optimiserOptions;
+else
+    results = results_;
+end
 
 displayFittedParameters(results)
 
@@ -122,6 +131,7 @@ fileName_results = fullfile(Directories.resultsDir, ...
 switch saveParams, case true
     % Fitted parameters are saved as the 'results' struct, and the 
     % associated model set-up is saved within each subsequent struct
+    if ~exist('v0', 'var'), v0 = []; end
     saveOptimisationRun(fileName_results, results, Data, Forc, FixedParams, Params, v0);
 end
 

@@ -32,23 +32,6 @@ assignin('caller', 'npars', npars)
 assignin('caller', 'boundsLower', lb)
 assignin('caller', 'boundsUpper', ub)
 
-
-% npars = length(parnames);
-% par0 = nan(1,npars); % initial (default) values of tuning parameters
-% lb = nan(1,npars); % lower and upper bounds on tuning parameters
-% ub = nan(1,npars);
-% for i = 1:npars
-%     par0(i) = Params.(parnames{i});
-%     lb(i) = Params.bounds.(parnames{i})(1);
-%     ub(i) = Params.bounds.(parnames{i})(2);
-% end
-% % Store tuning parameter names and their bounding values
-% FixedParams.tunePars = parnames;
-% FixedParams.tunePars_lb = lb;
-% FixedParams.tunePars_ub = ub;
-
-
-
 % Select optimising algorithm (so far only ga is available)
 optimiserChoices = {'ga','muga'};
 if ~exist('optimiser', 'var')

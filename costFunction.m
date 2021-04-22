@@ -1,5 +1,5 @@
 function [cost, costComponents, modData, out, auxVars] = costFunction(pars, ... 
-    FixedParams, Params, Forc, Data, odeIntegrator, odeOptions, varargin)
+    FixedParams, Params, Forc, Data, v0, odeIntegrator, odeOptions, varargin)
 % Returns a scalar 'cost' quantifying model misfit to data, given parameters
 % 'pars'.
 % May optionally return a struct 'costComponents' containing the cost 
@@ -33,11 +33,11 @@ VarsSize = Data.size.obsInCostFunction;
 % Set parameter values
 Params = updateParameters(Params, FixedParams, pars);
 
-% Some initial state variables are specified as functions of parameter
-% values => should be recalculated for each parameter set. If v0 were totally
-% independent of parameter values then it would be absolutely fixed and, to 
-% avoid wasted computation, should be passed as an argument to costFunction.m.
-v0 = initialiseVariables(FixedParams, Params, Forc);
+% % Some initial state variables are specified as functions of parameter
+% % values => should be recalculated for each parameter set. If v0 were totally
+% % independent of parameter values then it would be absolutely fixed and, to 
+% % avoid wasted computation, should be passed as an argument to costFunction.m.
+% v0 = initialiseVariables(FixedParams, Params, Forc);
 
 % Integrate
 [out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, ...
@@ -540,5 +540,3 @@ if ~exist('auxVars', 'var')
     auxVars = nan;
 end
 
-
-disp(cost)
