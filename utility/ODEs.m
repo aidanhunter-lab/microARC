@@ -73,10 +73,7 @@ out.Qstat = 1 - out.gammaN .^ params.h;
 out.gammaT = exp(params.A .* (T - params.Tref));
 
 % Background mortality
-% B_C_mortality = params.m .* B_C; % linear mortality
-% B_C_mortality = params.m .* B_C .^ 2; % non-linear mortality
 out.mortality = params.m .* B;
-
 
 %~~~~~~~~~~~
 % Autotrophy
@@ -108,14 +105,9 @@ out.N_uptake_losses = sum(out.uptake(:,:,fixedParams.PP_N_index));
 % Heterotrophy
 %~~~~~~~~~~~~~
 
-% phi = exp(-log(fixedParams.delta ./ params.delta_opt) .^ 2 ./ (2 .* params.sigG .^ 2)); % phi could be moved outside of ODEs if delta_opt and sigG are not tuned
-% phi_BC = exp(-log(fixedParams.delta ./ params.delta_opt) .^ 2 ./ (2 .* params.sigG .^ 2)) .* ... 
-%     reshape(B_C, [1 size(B_C)]);
-
 phi_BC = params.phi .* reshape(B_C, [1 size(B_C)]);
 F = sum(phi_BC, 2);
 phi_BC2 = phi_BC .^ 2;
-% phi_BC2 = (phi .* reshape(B_C, [1 size(B_C)])) .^ 2;
 Phi = phi_BC2 ./ sum(phi_BC2, 2); % prey preference
 
 out.G = (reshape(out.gammaT, [1 size(out.gammaT)]) .* ...
