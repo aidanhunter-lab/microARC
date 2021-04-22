@@ -77,6 +77,7 @@ out.gammaT = exp(params.A .* (T - params.Tref));
 % B_C_mortality = params.m .* B_C .^ 2; % non-linear mortality
 out.mortality = params.m .* B;
 
+
 %~~~~~~~~~~~
 % Autotrophy
 %~~~~~~~~~~~

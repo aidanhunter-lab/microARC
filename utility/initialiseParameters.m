@@ -254,6 +254,11 @@ end
 %     Params.k_G = powerFunction(Params.k_G_a, Params.k_G_b, VolZ);
 % end
 
+if (isfield(Params, 'm_a') && isfield(Params, 'm_b')) && ...
+        ~(isempty(Params.m_a) || isempty(Params.m_b))
+    Params.m = Params.m_func(Params.m_a, Params.m_b, FixedParams.m_min, Vol);
+end
+
 if (isfield(Params, 'wp_a') && isfield(Params, 'wp_b')) && ...
         ~(isempty(Params.wp_a) || isempty(Params.wp_b))
     Params.wp = Params.wp_func(Params.wp_a, Params.wp_b, Vol);
