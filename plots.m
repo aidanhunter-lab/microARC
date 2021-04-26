@@ -21,7 +21,9 @@ display(Directories)
 % Load saved outputs from optimisation runs or choose default set-up
 loadFittedParams = true; % use output saved from optimisation run?
 fileName = 'fittedParameters';  % saved parameters file name
-tag = '1';                      % and identifying tag
+% tag = '1';                      % and identifying tag
+tag = 'N_LN-Dir_groupWaterOrigin';
+
 fileName = fullfile(Directories.resultsDir, ...
     [fileName '_' tag]);
 
@@ -81,7 +83,7 @@ modData = matchModOutput2Data(out, auxVars, Data, FixedParams);
 % The above outputs are now used as arguments to various plotting 
 % functions stored in utility/plottingFunctions/...
 
-folder =Directories.plotDir; % save plots here
+folder = Directories.plotDir; % save plots here
 
 %% Model fit to data
 
@@ -108,6 +110,26 @@ plot_rawData('sizeSpectra', 'CellConc', Data)
 subplot(2,1,2)
 plot_rawData('sizeSpectra', 'BioVol', Data)
 
+% Plot measured abundance-at-size grouped by water origin
+plt3 = figure;
+plt3.Units = 'inches';
+plt3.Position = [0 0 16 6];
+subplot(2,2,1)
+plot_rawData('sizeSpectra', 'CellConc', Data, 'waterOrigin', 'Arctic', ...
+    'matchScales', true, 'drawXlabel', false)
+subplot(2,2,2)
+plot_rawData('sizeSpectra', 'CellConc', Data, 'waterOrigin', 'Atlantic', ...
+    'drawLegend', false, 'matchScales', true, 'drawXlabel', false, ... 
+    'drawYlabel', false)
+subplot(2,2,3)
+plot_rawData('sizeSpectra', 'BioVol', Data, 'waterOrigin', 'Arctic', ...
+    'drawLegend', false, 'plotTitle', [], 'matchScales', true)
+subplot(2,2,4)
+plot_rawData('sizeSpectra', 'BioVol', Data, 'waterOrigin', 'Atlantic', ...
+    'drawLegend', false, 'plotTitle', [], 'matchScales', true, ... 
+    'drawYlabel', false)
+
+
 
 % Summary plots displaying model fit to data
 logPlot = true; % for scalar data choose logPlot = true or false
@@ -118,12 +140,26 @@ logPlot = false;
 pltN = plot_fitToData('N', Data, modData, logPlot); pause(0.25)
 
 logPlot = 'loglog'; % for size spectra data choose logPlot = 'loglog' or 'semilogx'
-pltCellConc_P = plot_fitToData('CellConc', Data, modData, logPlot, 'trophicGroup', 'autotroph'); pause(0.25)
-pltCellConc_Z = plot_fitToData('CellConc', Data, modData, logPlot, 'trophicGroup', 'heterotroph'); pause(0.25)
-pltBioVol_P = plot_fitToData('BioVol', Data, modData, logPlot, 'trophicGroup', 'autotroph'); pause(0.25)
-pltBioVol_Z = plot_fitToData('BioVol', Data, modData, logPlot, 'trophicGroup', 'heterotroph'); pause(0.25)
-% pltNConc_P = plot_fitToData('NConc', Data, modData, logPlot, 'trophicGroup', 'autotroph'); pause(0.25)
-% pltNConc_Z = plot_fitToData('NConc', Data, modData, logPlot, 'trophicGroup', 'heterotroph'); pause(0.25)
+
+pltCellConc_Arc_P = plot_fitToData('CellConc', Data, modData, logPlot, ... 
+    'trophicGroup', 'autotroph', 'waterOrigin', 'Arctic'); pause(0.25)
+pltCellConc_Atl_P = plot_fitToData('CellConc', Data, modData, logPlot, ... 
+    'trophicGroup', 'autotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
+pltCellConc_Arc_Z = plot_fitToData('CellConc', Data, modData, logPlot, ... 
+    'trophicGroup', 'heterotroph', 'waterOrigin', 'Arctic'); pause(0.25)
+pltCellConc_Atl_Z = plot_fitToData('CellConc', Data, modData, logPlot, ... 
+    'trophicGroup', 'heterotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
+
+pltBioVol_Arc_P = plot_fitToData('BioVol', Data, modData, logPlot, ... 
+    'trophicGroup', 'autotroph', 'waterOrigin', 'Arctic'); pause(0.25)
+pltBioVol_Atl_P = plot_fitToData('BioVol', Data, modData, logPlot, ... 
+    'trophicGroup', 'autotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
+pltBioVol_Arc_Z = plot_fitToData('BioVol', Data, modData, logPlot, ... 
+    'trophicGroup', 'heterotroph', 'waterOrigin', 'Arctic'); pause(0.25)
+pltBioVol_Atl_Z = plot_fitToData('BioVol', Data, modData, logPlot, ... 
+    'trophicGroup', 'heterotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
+
+
 
 switch save, case true
     % scalar data
@@ -145,30 +181,41 @@ switch save, case true
     end
     
     % size data
-    if exist('pltCellConc_P', 'var') && isvalid(pltCellConc_P)
-        filename = 'fitToData_CellConcSpectra_P.png';
-        print(pltCellConc_P, fullfile(folder, filename), '-r300', '-dpng');
+    if exist('pltCellConc_Arc_P', 'var') && isvalid(pltCellConc_Arc_P)
+        filename = 'fitToData_CellConcSpectra_Arc_P.png';
+        print(pltCellConc_Arc_P, fullfile(folder, filename), '-r300', '-dpng');
     end
-    if exist('pltCellConc_Z', 'var') && isvalid(pltCellConc_Z)
-        filename = 'fitToData_CellConcSpectra_Z.png';
-        print(pltCellConc_Z, fullfile(folder, filename), '-r300', '-dpng');
+    if exist('pltCellConc_Arc_Z', 'var') && isvalid(pltCellConc_Arc_Z)
+        filename = 'fitToData_CellConcSpectra_Arc_Z.png';
+        print(pltCellConc_Arc_Z, fullfile(folder, filename), '-r300', '-dpng');
     end
-    if exist('pltBioVol_P', 'var') && isvalid(pltBioVol_P)
-        filename = 'fitToData_BioVolSpectra_P.png';
-        print(pltBioVol_P, fullfile(folder, filename), '-r300', '-dpng');
+    if exist('pltCellConc_Atl_P', 'var') && isvalid(pltCellConc_Atl_P)
+        filename = 'fitToData_CellConcSpectra_Atl_P.png';
+        print(pltCellConc_Atl_P, fullfile(folder, filename), '-r300', '-dpng');
     end
-    if exist('pltBioVol_Z', 'var') && isvalid(pltBioVol_Z)
-        filename = 'fitToData_BioVolSpectra_Z.png';
-        print(pltBioVol_Z, fullfile(folder, filename), '-r300', '-dpng');
-    end    
-%     if exist('pltNConc_P', 'var') && isvalid(pltNConc_P)
-%         filename = 'fitToData_NConcSpectra_P.png';
-%         print(pltNConc_P, fullfile(folder, filename), '-r300', '-dpng');
-%     end
-%     if exist('pltNConc_Z', 'var') && isvalid(pltNConc_Z)
-%         filename = 'fitToData_NConcSpectra_Z.png';
-%         print(pltNConc_Z, fullfile(folder, filename), '-r300', '-dpng');
-%     end
+    if exist('pltCellConc_Atl_Z', 'var') && isvalid(pltCellConc_Atl_Z)
+        filename = 'fitToData_CellConcSpectra_Atl_Z.png';
+        print(pltCellConc_Atl_Z, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    
+    if exist('pltBioVol_Arc_P', 'var') && isvalid(pltBioVol_Arc_P)
+        filename = 'fitToData_BioVolSpectra_Arc_P.png';
+        print(pltBioVol_Arc_P, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('pltBioVol_Arc_Z', 'var') && isvalid(pltBioVol_Arc_Z)
+        filename = 'fitToData_BioVolSpectra_Arc_Z.png';
+        print(pltBioVol_Arc_Z, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('pltBioVol_Atl_P', 'var') && isvalid(pltBioVol_Atl_P)
+        filename = 'fitToData_BioVolSpectra_Atl_P.png';
+        print(pltBioVol_Atl_P, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('pltBioVol_Atl_Z', 'var') && isvalid(pltBioVol_Atl_Z)
+        filename = 'fitToData_BioVolSpectra_Atl_Z.png';
+        print(pltBioVol_Atl_Z, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    
+    
 end
 
 

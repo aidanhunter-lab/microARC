@@ -206,10 +206,10 @@ Forc = Forc_; clear Forc_
 Data = omitUnmatchedEvents(Data, eventTraj, Forc);
 % [Data, eventTraj] = omitUnmatchedEvents(Data, eventTraj, Forc);
 
-% For each trajectory, find the time of the latest sampling event.
-% Integrations along trajectories can then be stopped at these events to
-% reduce model run-times during parameter optimisation.
-Forc = latestSampleTime(Forc, Data);
+% % For each trajectory, find the time of the latest sampling event.
+% % Integrations along trajectories can then be stopped at these events to
+% % reduce model run-times during parameter optimisation.
+% Forc = latestSampleTime(Forc, Data);
 
 % Group sampling events by origin of particles: Arctic or Atlantic.
 % Each individual trajectory is either of Atlantic or Arctic origin
@@ -224,8 +224,22 @@ if ~exist('dendrogramPlot', 'var')
     dendrogramPlot = false;
 end
 
-[Forc, Data.scalar] = particleOrigin(Forc, Data.scalar, ...
+% [Forc, Data.scalar] = particleOrigin(Forc, Data.scalar, ...
+%     'trajectoryPlot', trajectoryPlot, 'dendrogramPlot', dendrogramPlot); pause(0.25)
+[Forc, Data] = particleOrigin(Forc, Data, ...
     'trajectoryPlot', trajectoryPlot, 'dendrogramPlot', dendrogramPlot); pause(0.25)
+
+
+% Group size data by water origin -- find average spectra using
+% measurements from events whose trajectories all orginate from either the
+% Arctic or the Atlantic
+Data = sizeDataOrigin(Data);
+
+% For each trajectory, find the time of the latest sampling event.
+% Integrations along trajectories can then be stopped at these events to
+% reduce model run-times during parameter optimisation.
+Forc = latestSampleTime(Forc, Data);
+
 
 % Standardise the fitting data using linear mixed models to adjust for
 % variability due to depth and sampling event.

@@ -518,6 +518,96 @@ switch selectFunction
 %         cost = sum(struct2array(costComponents));
 
 
+    case 'N_LN-Dir_groupWaterOrigin'
+        % Synthetic likelihoods where variability parameters are estimated
+        % using variability in model outputs from the various trajectories.
+        % Normal distributions for scalar data points.
+        % Size spectra vectors decomposed into totals and simplexes --
+        % lognormal distributions for the totals, Dirichlet distributions
+        % for the simplexes.
+        % Size spectra data for autotrophs and heterotrophs, and for water 
+        % of Arctic and of Atlantic origin -- 4 separate data vectors.
+        
+        % Scalar data
+        log2pi = log(2*pi);
+        for i = 1:length(Vars)
+            varLabel = Vars{i};
+            yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+            ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+            mu = mean(ymod, 2); % expectation of each data point
+            sig2 = var(ymod, 0, 2); % variance of model output
+            sig2(sig2 == 0) = min(sig2(sig2 > 0)); % include for robustness (we only see zero variability when using single trajectories for any sampling event)
+            n = length(yobs); % sample size
+            %             L = prod(1 ./ ((2*pi*sig2) .^ 0.5) .* exp(-0.5 ./ sig2 .* (yobs - mu) .^ 2)) .^ (1/n);
+            negLogLik = 0.5 .* (log2pi + 1/n .* sum(log(sig2) + (yobs - mu) .^ 2 ./ sig2));
+            L.(varLabel) = negLogLik;
+        end
+        
+        % Vector (size) data
+        for i = 1:length(VarsSize)
+            varLabel = VarsSize{i};
+            ind0 = strcmp(Data.sizeFull.dataBinned.groupedByOrigin.Variable, varLabel);
+            waterMasses = unique(Data.sizeFull.dataBinned.groupedByOrigin.waterMass);
+            
+            for w = 1:length(waterMasses)
+                wm = waterMasses{w};
+                ind1 = ind0 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.waterMass, wm);
+                
+                % autotrophs
+                ind = ind1 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.trophicLevel, 'autotroph');
+                yobs = Data.sizeFull.dataBinned.groupedByOrigin.Value(ind);
+                ymod = modData.sizeFull.(['Value_' wm])(ind,:);
+                % Derive Dirichlet distribution parameters from model output.
+                yobsTot = sum(yobs);
+                ymodTot = sum(ymod);
+                pobs = yobs ./ yobsTot; % observed relative abundance -- simplex
+                pmod = ymod ./ ymodTot;
+                alpha = fitDirichlet(pmod); % estimate concentration parameter
+                % Dirichlet likelihood for simplex
+                negLogLik = sum(gammaln(alpha)) - gammaln(sum(alpha)) - sum((alpha - 1) .* log(pobs));
+
+                % Lognormal likelihood for total
+                yobsTot_log = log(yobsTot);
+                ymodTot_log = log(ymodTot);
+                mu = mean(ymodTot_log);
+                sig2 = var(ymodTot_log);
+                negLogLik2 = 0.5 .* (log2pi + sum(log(sig2) + 1 ./ sig2 .* (yobsTot_log - mu) .^ 2));
+                
+                L.([varLabel '_' wm '_autotroph_Rel']) = negLogLik;
+                L.([varLabel '_' wm '_autotroph_Tot']) = negLogLik2;
+                
+                % heterotrophs
+                ind = ind1 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.trophicLevel, 'heterotroph');
+                yobs = Data.sizeFull.dataBinned.groupedByOrigin.Value(ind);
+                ymod = modData.sizeFull.(['Value_' wm])(ind,:);
+                
+                % Derive Dirichlet distribution parameters from model output.
+                yobsTot = sum(yobs);
+                ymodTot = sum(ymod);
+                pobs = yobs ./ yobsTot; % observed relative abundance -- simplex
+                pmod = ymod ./ ymodTot;
+                alpha = fitDirichlet(pmod); % estimate concentration parameter
+                % Dirichlet likelihood for simplex
+                negLogLik = sum(gammaln(alpha)) - gammaln(sum(alpha)) - sum((alpha - 1) .* log(pobs));
+                
+                % Lognormal likelihood for total
+                yobsTot_log = log(yobsTot);
+                ymodTot_log = log(ymodTot);
+                mu = mean(ymodTot_log);
+                sig2 = var(ymodTot_log);
+                negLogLik2 = 0.5 .* (log2pi + sum(log(sig2) + 1 ./ sig2 .* (yobsTot_log - mu) .^ 2));
+                
+                L.([varLabel '_' wm '_heterotroph_Rel']) = negLogLik;
+                L.([varLabel '_' wm '_heterotroph_Tot']) = negLogLik2;
+            end
+        end
+        
+        costComponents = L;
+        
+        % Apply any weightings to data types here, before summing
+        % costComponents to find total cost...
+        cost = sum(struct2array(costComponents));
+
 end
 
 
