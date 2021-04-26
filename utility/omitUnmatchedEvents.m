@@ -110,3 +110,9 @@ sizeData = table2struct(sizeData, 'ToScalar', true);
 
 Data.sizeFull.dataBinned = sizeData;
 
+
+uevents = unique(Data.sizeFull.Event);
+Data.sizeFull.EventTraj = Data.scalar.EventTraj(uevents,:);
+Data.sizeFull.evTraj = Data.scalar.evTraj(:,uevents);
+
+

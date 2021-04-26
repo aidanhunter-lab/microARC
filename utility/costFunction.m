@@ -518,6 +518,210 @@ switch selectFunction
 %         cost = sum(struct2array(costComponents));
 
 
+    case 'N_LN-Dir_groupWaterOrigin'
+        % Synthetic likelihoods where variability parameters are estimated
+        % using variability in model outputs from the various trajectories.
+        % Normal distributions for scalar data points.
+        % Size spectra vectors decomposed into totals and simplexes --
+        % lognormal distributions for the totals, Dirichlet distributions
+        % for the simplexes.
+        % Size spectra data for autotrophs and heterotrophs, and for water 
+        % of Arctic and of Atlantic origin -- 4 separate data vectors.
+        
+        % Scalar data
+        log2pi = log(2*pi);
+        for i = 1:length(Vars)
+            varLabel = Vars{i};
+            yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+            ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+            mu = mean(ymod, 2); % expectation of each data point
+            sig2 = var(ymod, 0, 2); % variance of model output
+            sig2(sig2 == 0) = min(sig2(sig2 > 0)); % include for robustness (we only see zero variability when using single trajectories for any sampling event)
+            n = length(yobs); % sample size
+            %             L = prod(1 ./ ((2*pi*sig2) .^ 0.5) .* exp(-0.5 ./ sig2 .* (yobs - mu) .^ 2)) .^ (1/n);
+            negLogLik = 0.5 .* (log2pi + 1/n .* sum(log(sig2) + (yobs - mu) .^ 2 ./ sig2));
+            L.(varLabel) = negLogLik;
+        end
+        
+        % Vector (size) data
+        for i = 1:length(VarsSize)
+            varLabel = VarsSize{i};
+            ind0 = strcmp(Data.sizeFull.dataBinned.groupedByOrigin.Variable, varLabel);
+            waterMasses = unique(Data.sizeFull.dataBinned.groupedByOrigin.waterMass);
+            
+            for w = 1:length(waterMasses)
+                wm = waterMasses{w};
+                ind1 = ind0 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.waterMass, wm);
+                
+                % autotrophs
+                ind = ind1 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.trophicLevel, 'autotroph');
+                yobs = Data.sizeFull.dataBinned.groupedByOrigin.Value(ind);
+                ymod = modData.sizeFull.(['Value_' wm])(ind,:);
+                % Derive Dirichlet distribution parameters from model output.
+                yobsTot = sum(yobs);
+                ymodTot = sum(ymod);
+                pobs = yobs ./ yobsTot; % observed relative abundance -- simplex
+                pmod = ymod ./ ymodTot;
+                alpha = fitDirichlet(pmod); % estimate concentration parameter
+                % Dirichlet likelihood for simplex
+                negLogLik = sum(gammaln(alpha)) - gammaln(sum(alpha)) - sum((alpha - 1) .* log(pobs));
+
+                % Lognormal likelihood for total
+                yobsTot_log = log(yobsTot);
+                ymodTot_log = log(ymodTot);
+                mu = mean(ymodTot_log);
+                sig2 = var(ymodTot_log);
+                negLogLik2 = 0.5 .* (log2pi + sum(log(sig2) + 1 ./ sig2 .* (yobsTot_log - mu) .^ 2));
+                
+                L.([varLabel '_' wm '_autotroph_Rel']) = negLogLik;
+                L.([varLabel '_' wm '_autotroph_Tot']) = negLogLik2;
+                
+                % heterotrophs
+                ind = ind1 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.trophicLevel, 'heterotroph');
+                yobs = Data.sizeFull.dataBinned.groupedByOrigin.Value(ind);
+                ymod = modData.sizeFull.(['Value_' wm])(ind,:);
+                
+                % Derive Dirichlet distribution parameters from model output.
+                yobsTot = sum(yobs);
+                ymodTot = sum(ymod);
+                pobs = yobs ./ yobsTot; % observed relative abundance -- simplex
+                pmod = ymod ./ ymodTot;
+                alpha = fitDirichlet(pmod); % estimate concentration parameter
+                % Dirichlet likelihood for simplex
+                negLogLik = sum(gammaln(alpha)) - gammaln(sum(alpha)) - sum((alpha - 1) .* log(pobs));
+                
+                % Lognormal likelihood for total
+                yobsTot_log = log(yobsTot);
+                ymodTot_log = log(ymodTot);
+                mu = mean(ymodTot_log);
+                sig2 = var(ymodTot_log);
+                negLogLik2 = 0.5 .* (log2pi + sum(log(sig2) + 1 ./ sig2 .* (yobsTot_log - mu) .^ 2));
+                
+                L.([varLabel '_' wm '_heterotroph_Rel']) = negLogLik;
+                L.([varLabel '_' wm '_heterotroph_Tot']) = negLogLik2;
+            end
+        end
+        
+        costComponents = L;
+        
+        % Apply any weightings to data types here, before summing
+        % costComponents to find total cost...
+        cost = sum(struct2array(costComponents));
+
+    
+    case 'Hellinger_groupWaterOrigin'
+        % Calulate Hellinger distances between observations and their 
+        % equivalent model outputs.
+        % For consistency, use this metric for all data types.
+        
+        % Scalar data
+        iroot2 = (1 ./ 2) .^ 0.5;
+        for i = 1:length(Vars)
+            varLabel = Vars{i};
+            yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+            ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+            n = length(yobs);
+            % The standardised data should be approximately (mu=0, sig=1)
+            mu = mean(yobs);
+            sig = std(yobs);
+            yobsc = normcdf(yobs, mu, sig); % probability (cdf) values
+            % Modelled values should match observed distribution
+            ymodc = normcdf(ymod, mu, sig);
+            
+            hellingerDistance = iroot2 .* sum((yobsc .^ 0.5 - ymodc .^ 0.5) .^ 2) .^ 0.5;
+            % Scale by number of observations
+            hellingerDistance = n .^ (-0.5) .* hellingerDistance;
+           
+            costComponents.(varLabel) = mean(hellingerDistance); % average over trajectory selections
+            
+%             % An alternative method calculates hellingerDistances
+%             % parameterically using the means and variances of modelled
+%             % output.
+%             % Here there is no need to scale by the number of observations
+%             % because the distributions are compared by summary statistics mu & sig.
+%             muMod = mean(ymod);
+%             sigMod = std(ymod);
+%             Sig = sig .^ 2 + sigMod .^ 2;            
+%             hellingerDistance = (1 - (2 .* sig .* sigMod ./ Sig) .^ 0.5 .* ... 
+%                 exp(-0.25 .* (mu - muMod) .^ 2 ./ Sig)) .^ 0.5;
+%             
+%             costComponents.(varLabel) = mean(hellingerDistance); % average over trajectory selections
+
+        end
+        
+        
+        % Vector (size) data
+        % If the Hellinger distance metric is used for the size data, and
+        % if it requires probabilities (cdf-values) as input, then I'm not
+        % sure how to include magnitudes in the cost function. Is this
+        % metric only appropriate for comparing the relative
+        % abundance-at-size?
+        for i = 1:length(VarsSize)
+            varLabel = VarsSize{i};
+            ind0 = strcmp(Data.sizeFull.dataBinned.groupedByOrigin.Variable, varLabel);
+            waterMasses = unique(Data.sizeFull.dataBinned.groupedByOrigin.waterMass);
+            
+            for w = 1:length(waterMasses)
+                wm = waterMasses{w};
+                ind1 = ind0 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.waterMass, wm);
+                
+                % autotrophs
+                ind = ind1 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.trophicLevel, 'autotroph');
+                yobs = Data.sizeFull.dataBinned.groupedByOrigin.Value(ind);
+                ymod = modData.sizeFull.(['Value_' wm])(ind,:);
+                n = length(yobs);                
+                % The size data were not standardised and do not follow a
+                % known distribution... generate distributions with cumsum
+                yobsc = cumsum(yobs) ./ sum(yobs);
+                % I don't know whether to scale by sum(yobs) or sum(ymod).
+                % The Hellinger metric should take probabilities as the
+                % arguments, suggesting  we should scale by sum(ymod),
+                % however, scaling by sum(yobs) allows the cost to account
+                % for differeneces in magnitudes instead of just relative
+                % abundance-at-size...
+%                 ymodc = cumsum(ymod) ./ sum(ymod);                
+                ymodc = cumsum(ymod) ./ sum(yobs);                
+                hellingerDistance = iroot2 .* sum((yobsc .^ 0.5 - ymodc .^ 0.5) .^ 2) .^ 0.5;
+                % Scale by number of observations
+                hellingerDistance = n .^ (-0.5) .* hellingerDistance;
+                costComponents.([varLabel '_' wm '_autotroph']) = mean(hellingerDistance); % average over trajectory selections
+
+                % heterotrophs
+                ind = ind1 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.trophicLevel, 'heterotroph');
+                yobs = Data.sizeFull.dataBinned.groupedByOrigin.Value(ind);
+                ymod = modData.sizeFull.(['Value_' wm])(ind,:);                
+                n = length(yobs);
+                yobsc = cumsum(yobs) ./ sum(yobs);
+                ymodc = cumsum(ymod) ./ sum(yobs);                
+                hellingerDistance = iroot2 .* sum((yobsc .^ 0.5 - ymodc .^ 0.5) .^ 2) .^ 0.5;
+                % Scale by number of observations
+                hellingerDistance = n .^ (-0.5) .* hellingerDistance;                
+                costComponents.([varLabel '_' wm '_heterotroph']) = mean(hellingerDistance);
+
+            end
+        end
+        
+        % Assign equal weightings to the scalar data and size data
+        cost = zeros(1,2);
+        fields = fieldnames(costComponents);
+        for i = 1:length(fields)
+            if ismember(fields{i}, Vars)
+                % scalar data
+               cost(1) = cost(1) + costComponents.(fields{i});
+            else
+                % size data
+                cost(2) = cost(2) + costComponents.(fields{i});
+            end
+        end
+        cost(1) = cost(1) ./ length(Vars);
+        cost(2) = cost(2) ./ (length(fields) - length(Vars));
+        cost = sum(cost);
+        
+%         cost = sum(struct2array(costComponents));
+
+%         disp(costComponents)
+%         disp(cost)
+        
 end
 
 

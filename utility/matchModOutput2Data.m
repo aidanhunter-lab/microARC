@@ -159,3 +159,72 @@ for i = 1:length(allVarsSize)
 end
 
 
+% Full size data -- grouped by origin then averaged over depths & events.
+% Factors are Variable, trophicLeevel, and waterMass
+
+waterMasses = unique(Data.sizeFull.dataBinned.groupedByOrigin.waterMass);
+
+atl = strcmp(Data.sizeFull.waterMass, 'Atlantic');
+arc = strcmp(Data.sizeFull.waterMass, 'Arctic');
+
+trajAtl = Data.sizeFull.evTraj(:,atl);
+trajArc = Data.sizeFull.evTraj(:,arc);
+trajAtl = trajAtl(:); % All trajectories used for size spectra measurements
+trajArc = trajArc(:);
+
+timeAtl = unique(Data.sizeFull.dataBinned.groupedByOrigin.Yearday( ...
+    strcmp(Data.sizeFull.dataBinned.groupedByOrigin.waterMass, 'Atlantic')));
+timeArc = unique(Data.sizeFull.dataBinned.groupedByOrigin.Yearday( ...
+    strcmp(Data.sizeFull.dataBinned.groupedByOrigin.waterMass, 'Arctic')));
+
+depthAtl = unique(Data.sizeFull.dataBinned.groupedByOrigin.Depth( ...
+    strcmp(Data.sizeFull.dataBinned.groupedByOrigin.waterMass, 'Atlantic')));
+depthArc = unique(Data.sizeFull.dataBinned.groupedByOrigin.Depth( ...
+    strcmp(Data.sizeFull.dataBinned.groupedByOrigin.waterMass, 'Arctic')));
+
+% VarsSize = Data.size.obsInCostFunction;
+allVarsSize = unique(Data.sizeFull.dataBinned.groupedByOrigin.Variable);
+
+n = size(Data.sizeFull.dataBinned.groupedByOrigin.Year, 1);
+modData.sizeFull.Variable = cell(n,1);
+modData.sizeFull.trophicLevel = cell(n,1);
+modData.sizeFull.waterMass = cell(n,1);
+modData.sizeFull.Value_Atlantic = nan(n,length(trajAtl));
+modData.sizeFull.Value_Arctic = nan(n,length(trajArc));
+
+for i = 1:length(allVarsSize)
+    vs = allVarsSize{i};
+    ind0 = strcmp(Data.sizeFull.dataBinned.groupedByOrigin.Variable, vs); % index variable
+    modData.sizeFull.Variable(ind0,:) = Data.sizeFull.dataBinned.groupedByOrigin.Variable(ind0);
+    modData.sizeFull.trophicLevel(ind0,:) = Data.sizeFull.dataBinned.groupedByOrigin.trophicLevel(ind0);
+    modData.sizeFull.waterMass(ind0,:) = Data.sizeFull.dataBinned.groupedByOrigin.waterMass(ind0);
+
+    for w = 1:length(waterMasses)
+        wm = waterMasses{w};
+        traj = eval(['traj' wm(1:3)]);
+        time = eval(['time' wm(1:3)]);
+        ind1 = ind0 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.waterMass, wm); % index variable and waterMass
+        switch vs
+            case 'CellConc'
+                ymod = auxVars.cellDensity(:,:,time,traj);
+            case 'BioVol'
+                ymod = auxVars.biovolume(:,:,time,traj);
+        end
+        ymod = permute(ymod, [2 1 3 4]); % move depth dimension to front [depth, size, ntraj]
+        ymodi = interp1(FixedParams.z , ymod, -eval(['depth' wm(1:3)])); % interpolate model output to match observed depth
+        ymodi = squeeze(ymodi); % dimension: [size, trajectories]
+
+        % autotrophs
+        ind = ind1 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.trophicLevel, 'autotroph');
+        modData.sizeFull.(['Value_' wm])(ind,:) = ymodi(FixedParams.phytoplankton,:);
+
+        % heterotrophs
+        ind = ind1 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.trophicLevel, 'heterotroph');
+        if FixedParams.nZP_size > 1
+            modData.sizeFull.(['Value_' wm])(ind,:) = ymodi(FixedParams.zooplankton,:);
+        else
+            modData.sizeFull.(['Value_' wm])(ind,:) = repmat(ymodi(FixedParams.zooplankton,:), [sum(ind), 1]);
+        end
+    end
+end
+
