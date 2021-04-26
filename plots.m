@@ -130,7 +130,6 @@ plot_rawData('sizeSpectra', 'BioVol', Data, 'waterOrigin', 'Atlantic', ...
     'drawYlabel', false)
 
 
-
 % Summary plots displaying model fit to data
 logPlot = true; % for scalar data choose logPlot = true or false
 pltChl = plot_fitToData('chl_a', Data, modData, logPlot); pause(0.25)
