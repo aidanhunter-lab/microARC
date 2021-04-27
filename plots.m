@@ -22,7 +22,8 @@ display(Directories)
 loadFittedParams = true; % use output saved from optimisation run?
 fileName = 'fittedParameters';  % saved parameters file name
 % tag = '1';                      % and identifying tag
-tag = 'N_LN-Dir_groupWaterOrigin';
+% tag = 'N_LN-Dir_groupWaterOrigin';
+tag = 'Hellinger_groupWaterOrigin';
 
 fileName = fullfile(Directories.resultsDir, ...
     [fileName '_' tag]);
