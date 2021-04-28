@@ -62,9 +62,9 @@ v0 = initialiseVariables(FixedParams, Params, Forc);
 % Choose which parameters to tune, the cost function, and numerical tuning algorithm
 [FixedParams, Params, Forc] = optimisationOptions(FixedParams, Params, Forc, ... 
     'niter', 10, ... 
-    'costFunctionType', 'Hellinger_groupWaterOrigin'); % extra arguments (e.g. 'niter') may be included as name-value pairs
+    'costFunctionType', 'Hellinger_groupWaterOrigin'); % extra arguments (e.g. 'niter') may be included as name-value pairs, or omitted for default values
 
-restartRun = false; % restart algorithm from a saved prior run?
+restartRun = true; % restart algorithm from a saved prior run?
 switch restartRun, case true
     fileName_results = 'fittedParameters';  % saved parameters file name
 %     tag = '1';                              % and identifying tag

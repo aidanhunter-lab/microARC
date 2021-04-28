@@ -612,50 +612,87 @@ switch selectFunction
     case 'Hellinger_groupWaterOrigin'
         % Calulate Hellinger distances between observations and their 
         % equivalent model outputs.
-        % For consistency, use this metric for all data types.
+        % For consistency/comparability use this metric for all data types.
         
         % Scalar data
-        iroot2 = (1 ./ 2) .^ 0.5;
         for i = 1:length(Vars)
             varLabel = Vars{i};
             yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
             ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
-            n = length(yobs);
-            % The standardised data should be approximately (mu=0, sig=1)
-            mu = mean(yobs);
-            sig = std(yobs);
-            yobsc = normcdf(yobs, mu, sig); % probability (cdf) values
-            % Modelled values should match observed distribution
-            ymodc = normcdf(ymod, mu, sig);
+            n = size(ymod, 1);
+            m = size(ymod, 2);
+            % As the standardised data are approximately normally distributed,
+            % we could assume that identically transformed model outputs
+            % are also normally distributed, then find their means and
+            % variances to calculate Hellinger distances analytically.
+            % However, assuming normality of transformed model output is
+            % inappropriate because it could be any shape...
+            % Thus, derive cdfs and pdfs directly without assuming that
+            % transformed model outputs follow normal distributions.
+            % To compare observed and modelled distributions, the pdfs will
+            % need to be evaluated across identical domains.
+            cdf = (1:n)' ./ n;
+            yobsc = sort(yobs);                        
+            ymodc = sort(ymod);            
+            % remove any duplicate values (more likely in model output than
+            % in data), retaining the largest probability values
+            keep = ~[diff(yobsc) == 0; false];
+            cdfobs = cdf(keep);
+            yobsc = yobsc(keep);
+            % store cdfmod as cell-array because vector lengths may differ
+            % after removing duplicates
+            keep = ~[diff(ymodc) == 0; false(1, m)];
+            cdfmod = cell(1, m);
+            ymodc_ = cell(1, m);
+            for ij = 1:m
+                cdfmod{:,ij} = cdf(keep(:,ij));
+                ymodc_{:,ij} = ymodc(keep(:,ij),ij);
+            end
+            % define regular grid across measurement space -- define number
+            % of grid nodes using the number of observations
+            vrange = [min([yobsc(:); ymodc(:)]), max([yobsc(:); ymodc(:)])];
+            grid = nan(n, 1);
+            grid(2:end) = linspace(vrange(1), vrange(2), n-1)';
+            sp = diff(grid(2:3));
+            grid(1) = grid(2) - sp;
+            % interpolate cdfs and derive pdfs
+            cdfobsi = interp1(yobsc, cdfobs, grid, 'linear', 'extrap');
+            cdfobsi(cdfobsi < min(cdfobs)) = 0;
+            cdfobsi(cdfobsi > 1) = 1;
+            pdfobsi = diff(cdfobsi);            
+            cdfmodi = nan(n, m);
+            pdfmodi = nan(n-1, m);
+            for ij = 1:m
+                cdfmodi(:,ij) = interp1(ymodc_{ij}, cdfmod{ij}, grid, 'linear', 'extrap');
+                cdfmodi(cdfmodi(:,ij) < min(cdfmod{ij}), ij) = 0;
+                cdfmodi(cdfmodi(:,ij) > 1, ij) = 1;
+                pdfmodi(:,ij) = diff(cdfmodi(:,ij));
+            end
+                        
+            hellingerDistance = (1 - sum((pdfobsi .* pdfmodi) .^ 0.5)) .^ 0.5;
             
-            hellingerDistance = iroot2 .* sum((yobsc .^ 0.5 - ymodc .^ 0.5) .^ 2) .^ 0.5;
-            % Scale by number of observations
-            hellingerDistance = n .^ (-0.5) .* hellingerDistance;
-           
             costComponents.(varLabel) = mean(hellingerDistance); % average over trajectory selections
             
-%             % An alternative method calculates hellingerDistances
-%             % parameterically using the means and variances of modelled
-%             % output.
-%             % Here there is no need to scale by the number of observations
-%             % because the distributions are compared by summary statistics mu & sig.
-%             muMod = mean(ymod);
-%             sigMod = std(ymod);
-%             Sig = sig .^ 2 + sigMod .^ 2;            
-%             hellingerDistance = (1 - (2 .* sig .* sigMod ./ Sig) .^ 0.5 .* ... 
-%                 exp(-0.25 .* (mu - muMod) .^ 2 ./ Sig)) .^ 0.5;
-%             
-%             costComponents.(varLabel) = mean(hellingerDistance); % average over trajectory selections
-
         end
         
-        
         % Vector (size) data
-        % If the Hellinger distance metric is used for the size data, and
-        % if it requires probabilities (cdf-values) as input, then I'm not
-        % sure how to include magnitudes in the cost function. Is this
-        % metric only appropriate for comparing the relative
-        % abundance-at-size?
+        % Hellinger distance is appropriate for relative abundance-at-size,
+        % but I'm not sure that it can easily be used for absolute 
+        % abundance at size...
+        % The pmf (probability mass function) for relative abundance is
+        % simply a vector equalling the relative abundances.
+        % However, a pmf for absolute abundance at size would need to be
+        % derived by assuming the data follow some distribution (e.g.
+        % multivariate-normal). This complicates using Hellinger distance
+        % for absolute abundance-at-size because the necessary(?)
+        % distributional assumptions require estimation of variability
+        % parameters for BOTH the observed AND modelled values...
+        % We could calculate measured abundance-at-size variability in
+        % Arctic and Atlantic waters using data from all sampling events,
+        % and variability in modelled values could be calculated across
+        % trajectories... then, by assuming that abundance-at-size is
+        % multivariate normal, we could derive probabilities for absolute
+        % values.        
         for i = 1:length(VarsSize)
             varLabel = VarsSize{i};
             ind0 = strcmp(Data.sizeFull.dataBinned.groupedByOrigin.Variable, varLabel);
@@ -669,39 +706,33 @@ switch selectFunction
                 ind = ind1 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.trophicLevel, 'autotroph');
                 yobs = Data.sizeFull.dataBinned.groupedByOrigin.Value(ind);
                 ymod = modData.sizeFull.(['Value_' wm])(ind,:);
-                n = length(yobs);                
-                % The size data were not standardised and do not follow a
-                % known distribution... generate distributions with cumsum
-                yobsc = cumsum(yobs) ./ sum(yobs);
-                % I don't know whether to scale by sum(yobs) or sum(ymod).
-                % The Hellinger metric should take probabilities as the
-                % arguments, suggesting  we should scale by sum(ymod),
-                % however, scaling by sum(yobs) allows the cost to account
-                % for differeneces in magnitudes instead of just relative
-                % abundance-at-size...
-%                 ymodc = cumsum(ymod) ./ sum(ymod);                
-                ymodc = cumsum(ymod) ./ sum(yobs);                
-                hellingerDistance = iroot2 .* sum((yobsc .^ 0.5 - ymodc .^ 0.5) .^ 2) .^ 0.5;
-                % Scale by number of observations
-                hellingerDistance = n .^ (-0.5) .* hellingerDistance;
+%                 n = size(ymod, 1);
+                m = size(ymod, 2);
+                cdfobs = cumsum(yobs) ./ sum(yobs);
+                pdfobs = diff([0; cdfobs]);
+                cdfmod = cumsum(ymod) ./ sum(ymod);
+                pdfmod = diff([zeros(1, m); cdfmod]);
+                hellingerDistance = (1 - sum((pdfobs .* pdfmod) .^ 0.5)) .^ 0.5;
                 costComponents.([varLabel '_' wm '_autotroph']) = mean(hellingerDistance); % average over trajectory selections
 
                 % heterotrophs
                 ind = ind1 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.trophicLevel, 'heterotroph');
                 yobs = Data.sizeFull.dataBinned.groupedByOrigin.Value(ind);
                 ymod = modData.sizeFull.(['Value_' wm])(ind,:);                
-                n = length(yobs);
-                yobsc = cumsum(yobs) ./ sum(yobs);
-                ymodc = cumsum(ymod) ./ sum(yobs);                
-                hellingerDistance = iroot2 .* sum((yobsc .^ 0.5 - ymodc .^ 0.5) .^ 2) .^ 0.5;
-                % Scale by number of observations
-                hellingerDistance = n .^ (-0.5) .* hellingerDistance;                
+%                 n = size(ymod, 1);
+                m = size(ymod, 2);
+                cdfobs = cumsum(yobs) ./ sum(yobs);
+                pdfobs = diff([0; cdfobs]);
+                cdfmod = cumsum(ymod) ./ sum(ymod);
+                pdfmod = diff([zeros(1, m); cdfmod]);
+                hellingerDistance = (1 - sum((pdfobs .* pdfmod) .^ 0.5)) .^ 0.5;
                 costComponents.([varLabel '_' wm '_heterotroph']) = mean(hellingerDistance);
 
             end
         end
         
-        % Assign equal weightings to the scalar data and size data
+        % Take averages across data-types to assign equal weightings to the
+        % scalar data and size data.
         cost = zeros(1,2);
         fields = fieldnames(costComponents);
         for i = 1:length(fields)
@@ -715,7 +746,7 @@ switch selectFunction
         end
         cost(1) = cost(1) ./ length(Vars);
         cost(2) = cost(2) ./ (length(fields) - length(Vars));
-        cost = sum(cost);
+        cost = mean(cost);
         
 %         cost = sum(struct2array(costComponents));
 
