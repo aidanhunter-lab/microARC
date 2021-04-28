@@ -612,9 +612,7 @@ switch selectFunction
     case 'Hellinger_groupWaterOrigin'
         % Calulate Hellinger distances between observations and their 
         % equivalent model outputs.
-        % For consistency, use this metric for all data types.
-        
-        % second attempt
+        % For consistency/comparability use this metric for all data types.
         
         % Scalar data
         for i = 1:length(Vars)
@@ -623,8 +621,14 @@ switch selectFunction
             ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
             n = size(ymod, 1);
             m = size(ymod, 2);
-            % Try calculating cdfs and pdfs directly without assuming
-            % normality of model output distributions.
+            % As the standardised data are approximately normally distributed,
+            % we could assume that identically transformed model outputs
+            % are also normally distributed, then find their means and
+            % variances to calculate Hellinger distances analytically.
+            % However, assuming normality of transformed model output is
+            % inappropriate because it could be any shape...
+            % Thus, derive cdfs and pdfs directly without assuming that
+            % transformed model outputs follow normal distributions.
             % To compare observed and modelled distributions, the pdfs will
             % need to be evaluated across identical domains.
             cdf = (1:n)' ./ n;
@@ -644,7 +648,8 @@ switch selectFunction
                 cdfmod{:,ij} = cdf(keep(:,ij));
                 ymodc_{:,ij} = ymodc(keep(:,ij),ij);
             end
-            % define regular grid across measurement space
+            % define regular grid across measurement space -- define number
+            % of grid nodes using the number of observations
             vrange = [min([yobsc(:); ymodc(:)]), max([yobsc(:); ymodc(:)])];
             grid = nan(n, 1);
             grid(2:end) = linspace(vrange(1), vrange(2), n-1)';
@@ -671,11 +676,23 @@ switch selectFunction
         end
         
         % Vector (size) data
-        % If the Hellinger distance metric is used for the size data, and
-        % if it requires probabilities as input, then I don't know how to
-        % include magnitudes in the cost function. Is this Hellinger
-        % distance metric only appropriate for comparing the relative
-        % abundance-at-size?
+        % Hellinger distance is appropriate for relative abundance-at-size,
+        % but I'm not sure that it can easily be used for absolute 
+        % abundance at size...
+        % The pmf (probability mass function) for relative abundance is
+        % simply a vector equalling the relative abundances.
+        % However, a pmf for absolute abundance at size would need to be
+        % derived by assuming the data follow some distribution (e.g.
+        % multivariate-normal). This complicates using Hellinger distance
+        % for absolute abundance-at-size because the necessary(?)
+        % distributional assumptions require estimation of variability
+        % parameters for BOTH the observed AND modelled values...
+        % We could calculate measured abundance-at-size variability in
+        % Arctic and Atlantic waters using data from all sampling events,
+        % and variability in modelled values could be calculated across
+        % trajectories... then, by assuming that abundance-at-size is
+        % multivariate normal, we could derive probabilities for absolute
+        % values.        
         for i = 1:length(VarsSize)
             varLabel = VarsSize{i};
             ind0 = strcmp(Data.sizeFull.dataBinned.groupedByOrigin.Variable, varLabel);
@@ -689,7 +706,7 @@ switch selectFunction
                 ind = ind1 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.trophicLevel, 'autotroph');
                 yobs = Data.sizeFull.dataBinned.groupedByOrigin.Value(ind);
                 ymod = modData.sizeFull.(['Value_' wm])(ind,:);
-                n = size(ymod, 1);
+%                 n = size(ymod, 1);
                 m = size(ymod, 2);
                 cdfobs = cumsum(yobs) ./ sum(yobs);
                 pdfobs = diff([0; cdfobs]);
@@ -702,7 +719,7 @@ switch selectFunction
                 ind = ind1 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.trophicLevel, 'heterotroph');
                 yobs = Data.sizeFull.dataBinned.groupedByOrigin.Value(ind);
                 ymod = modData.sizeFull.(['Value_' wm])(ind,:);                
-                n = size(ymod, 1);
+%                 n = size(ymod, 1);
                 m = size(ymod, 2);
                 cdfobs = cumsum(yobs) ./ sum(yobs);
                 pdfobs = diff([0; cdfobs]);
