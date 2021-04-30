@@ -4,6 +4,8 @@ function [FixedParams, Params, Bounds] = defaultParameters(bioModel)
 
 %% Fixed parameters
 
+FixedParams.bioModel = bioModel;
+
 %~~~~~~~~
 % Timings
 %~~~~~~~~
@@ -104,7 +106,6 @@ Params.scalars = {
     'Tref'
     'A'
     'h'
-%     'm'
     'aP'
     'theta'
     'xi'
@@ -153,13 +154,13 @@ Params.sizeDependent = {
 % (mostly power functions y=aV^b)
 
 % carbon quota [mmol C / cell], Maranon et al. (2013)
-Params.Q_C_func = @(a,b,V) a .* V .^ b;
+Params.Q_C_func = @(a,b,V) powerFunction(a,b,V);
 Params.Q_C_a = (1/12) * 1e-9 * 10^-0.69;
 Params.Q_C_b = 0.88;
 Params.Q_C = [];
 
 % min and max cellular nitrogen quota [mmol N / cell], scaled by C quota [mmol N / mmol C], Maranon et al. (2013)
-Params.Qmin_QC_func = @(a,b,V) a .* V .^ b;
+Params.Qmin_QC_func = @(a,b,V) powerFunction(a,b,V);
 Params.Qmin_QC_a = (1/14) * 1e-9 * 10^-1.47 / Params.Q_C_a;
 Params.Qmin_QC_b = 0.84 - Params.Q_C_b;
 Params.Qmin_QC = [];
@@ -178,13 +179,13 @@ Params.Qmax_delQ_b = 0.84 - 0.93;
 Params.Qmax_delQ = [];
 
 % maximum nitrogen uptake rate Vmax [mmol N/cell/day] scaled by C quota, Vmax_over_QC [mmol N / mmol C / day], Maranon et al. (2013)
-Params.Vmax_QC_func = @(a,b,V) a .* V .^ b;
+Params.Vmax_QC_func = @(a,b,V) powerFunction(a,b,V);
 Params.Vmax_QC_a = 24 / 14 * 1e-9 * 10^-3 / Params.Q_C_a;
 Params.Vmax_QC_b = 0.97 - Params.Q_C_b;
 Params.Vmax_QC = [];
 
 % cellular affinity for nitrogen scaled by QC [m^3 / mmol C / day], derived using half saturation from Litchmann et al. (2007)
-Params.aN_QC_func = @(a,b,V) a .* V .^ b;
+Params.aN_QC_func = @(a,b,V) powerFunction(a,b,V);
 Params.aN_QC_a = Params.Vmax_QC_a / 10^-0.77;
 Params.aN_QC_b = Params.Vmax_QC_b -0.27;
 Params.aN_QC = [];
@@ -194,13 +195,13 @@ Params.kN_func = @(Vmax_QC, aN_QC) Vmax_QC ./ aN_QC;
 Params.kN = [];
 
 % maximum photosynthetic rate [1/day]
-Params.pmax_func = @(a,b,V) a .* V .^ b;
+Params.pmax_func = @(a,b,V) powerFunction(a,b,V);
 Params.pmax_a = 50;
 Params.pmax_b = -0.15;
 Params.pmax = [];
 
 % maximum grazing rate
-Params.Gmax_func = @(a,b,V) a .* V .^ b;
+Params.Gmax_func = @(a,b,V) powerFunction(a,b,V);
 Params.Gmax_a = 25;
 Params.Gmax_b = -0.2;
 Params.Gmax = [];
@@ -214,13 +215,13 @@ Params.Gmax = [];
 Params.phi = [];
 
 % background mortality
-Params.m_func = @(a,b,m_min,V) m_min + (a - m_min) .* V .^ b;
+Params.m_func = @(a,b,V) powerFunction(a,b,V);
 Params.m_a = 0.05; % mortality for cell volume = 1 mu m ^ 3
 Params.m_b = -0.15; % mortality size-exponent
 Params.m = [];
 
 % sinking plankton
-Params.wp_func = @(a,b,V) a .* (V') .^ b;
+Params.wp_func = @(a,b,V) powerFunction(a,b,V);
 Params.wp_a = 1e-5; % intercept = 0 => no sinking at any size
 Params.wp_b = 0.33;
 Params.wp = [];
@@ -269,6 +270,7 @@ Params.rDOC = 0.02;         % dissolved organic carbon remineralisation rate (1/
 Params.rPON = 0.04;         % particulate organic nitrogen remineralisation rate (1/day)
 Params.rPOC = 0.04;         % particulate organic nitrogen remineralisation rate (1/day)
 
+Params.wk_func = @(wDOM, wPOM, DOM_i, POM_i) wDOM .* DOM_i + wPOM .* POM_i; % OM sinking rate (m / day)
 
 Params.wk_func = @(wDOM, wPOM, DOM_i, POM_i) wDOM .* DOM_i + wPOM .* POM_i; % OM sinking rate (m / day)
 Params.wk = [];
@@ -392,3 +394,7 @@ end
 % function d = vol2d(vol)
 % d = 2 .* (vol .* (3 ./ 4 ./ pi)) .^ (1/3);
 % end
+
+function y = powerFunction(a,b,x)
+y = a .* x .^ b;
+end

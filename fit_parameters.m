@@ -92,6 +92,13 @@ optimisationTime = toc / 60 / 60; disp('.. finished at'); disp(datetime('now'));
 disp(['Optimisation time: ' num2str(floor(optimisationTime)) ' hrs, ' ...
     num2str(floor(mod(60*optimisationTime,60))) ' mins'])
 
+
+Params.Gmax
+Params.pmax
+
+Params = updateParameters(Params, FixedParams, ...
+    'pmax_a', 15, 'Gmax_a', 10);
+
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 % Examine and store results.

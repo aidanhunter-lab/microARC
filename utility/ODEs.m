@@ -181,9 +181,12 @@ OM_diffuse = permute(reshape( ...
 % Sinking
 %~~~~~~~~
 
-wk = repmat(params.wk, [1 nOM_nut]);
+% wk = reshape(params.wk, [1, nOM_type * nOM_nut]);
+% wk = repmat(params.wk, [1 nOM_nut]);
 
-v_sink = sinking([B_C_t, OM_], [params.wp, wk], fixedParams.zwidth);
+v_sink = sinking([B_C_t, OM_], ...
+    [params.wp, reshape(params.wk, [1, nOM_type * nOM_nut])], ...
+    fixedParams.zwidth);
 
 B_sink = out.Q .* v_sink(:,1:nsize)';
 OM_sink = permute(reshape(v_sink(:,nsize+1:end), ... 
@@ -263,30 +266,4 @@ function v = MichaelisMenton(m,k,u)
 u(u<0) = 0; % include for robustness... there shouldn't be any negatives
 v = m .* u ./ (u + k);
 end
-
-% function [out1, out2, out3, out4] = groupByDimension(v)
-% % Organises extra output structs
-% fields = fieldnames(v);
-% out1 = struct();
-% out2 = struct();
-% out3 = struct();
-% out4 = struct();
-% for i = 1:length(fields)
-%     x = v.(fields{i});
-%     if isvector(x)
-%         out1.(fields{i}) = x;
-%     end
-%     if ~isvector(x) && ismatrix(x)
-%         out2.(fields{i}) = x;
-%     end
-% %     if size(x, 1) > 1 && ndims(x) == 3
-%     if ndims(x) == 3
-%         out3.(fields{i}) = x;
-%     end
-% %     if size(x, 1) > 1 && ndims(x) == 4
-%     if ndims(x) == 4
-%         out4.(fields{i}) = x;
-%     end
-% end
-% end
 
