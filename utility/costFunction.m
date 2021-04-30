@@ -923,6 +923,9 @@ switch selectFunction
         cost(1) = cost(1) ./ length(Vars);
         cost(2) = cost(2) ./ (length(fields) - length(Vars));
         cost = mean(cost);
+        
+        disp(costComponents)
+        disp(cost)
 
 end
 
