@@ -82,6 +82,7 @@ switch restartRun, case true
     optimiserOptions.InitialScoresMatrix = scoresOld;
 end
 
+
 % Call optimiser
 tic; disp('.. started at'); disp(datetime('now'))
 [optPar, fval, exitflag, output, population, scores] = optimise(@(x) ... 
@@ -92,12 +93,6 @@ optimisationTime = toc / 60 / 60; disp('.. finished at'); disp(datetime('now'));
 disp(['Optimisation time: ' num2str(floor(optimisationTime)) ' hrs, ' ...
     num2str(floor(mod(60*optimisationTime,60))) ' mins'])
 
-
-Params.Gmax
-Params.pmax
-
-Params = updateParameters(Params, FixedParams, ...
-    'pmax_a', 15, 'Gmax_a', 10);
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
