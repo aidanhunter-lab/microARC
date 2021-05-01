@@ -22,11 +22,10 @@ nsize = nPP_size + nZP_size;
 N = v_in(fixedParams.IN_index)';
 
 % Plankton
-B = cat(1, ...
-    reshape(v_in(fixedParams.PP_index), [nPP_size nz nPP_nut]), ... % autotrophs
+B = [reshape(v_in(fixedParams.PP_index), [nPP_size nz nPP_nut]); ... % autotrophs
     cat(3, ...
     reshape(v_in(fixedParams.ZP_index), [nZP_size nz nZP_nut]), ... % heterotrophs (include extra zeros for chl-a)
-    zeros(nZP_size, nz, 1))); % all plankton
+    zeros(nZP_size, nz, nPP_nut - nZP_nut))];
 
 B_C = B(:,:,fixedParams.PP_C_index); % all planktonic carbon
 
@@ -48,8 +47,7 @@ Isurf = (Isurf(:,1) + diff(Isurf,1,2) .* t)';
 % Calculate light levels at depth -- within each depth layer light
 % attenuates over half the layer width plus the combined widths of all
 % shallower layers.
-att = (fixedParams.attSW + fixedParams.attP .* sum(B(phyto,:,fixedParams.PP_Chl_index))) .* fixedParams.zwidth';
-% att = (fixedParams.attSW + fixedParams.attP .* sum(PP(:,:,fixedParams.PP_Chl_index))) .* fixedParams.zwidth';
+att = (fixedParams.attSW + fixedParams.attP .* sum(B(:,:,fixedParams.PP_Chl_index))) .* fixedParams.zwidth';
 att = 0.5 * att + [0 cumsum(att(1:nz-1))];
 out.I = Isurf * exp(-att);
 
@@ -84,18 +82,22 @@ out.V = zeros(nsize, nz, nPP_nut); % all uptake rates
 % Nutrient uptake
 out.V(:,:,fixedParams.PP_N_index) = ... 
     MichaelisMenton(params.Vmax_QC, params.kN, N) .* out.gammaT .* out.Qstat;
-out.V(zoo,:,fixedParams.PP_N_index) = 0;
 
 % Photosynthesis
-zeroLight = all(out.I == 0);
+zeroLight = out.I(1) == 0;
 if ~zeroLight
     out.psat = params.pmax .* out.gammaT .* out.gammaN; % light saturated photosynthetic rate
     aP_Q_I = (params.aP .* out.I) .* out.Q(:,:,fixedParams.PP_Chl_index);
-    out.pc = out.psat .* (1 - exp(-aP_Q_I ./ out.psat )); % photosynthetic (carbon production) rate (1 / day)
-    out.rho = params.theta .* out.pc ./ aP_Q_I;  % proportion of new nitrogen prodcution allocated to chlorophyll (mg Chl / mmol N)
+    out.pc = out.psat .* (1 - exp(-aP_Q_I ./ out.psat)); % photosynthetic (carbon production) rate (1 / day)    
+    % Maximum chl synthesis rate, theta, is down-regulated when I > Ik (Ik = psat / (aP Qchl))
+    % by fraction 0 < Ik / I < 1
+    out.rho = params.theta .* min(1, out.psat ./ aP_Q_I); % proportion of new nitrogen prodcution diverted to chlorophyll (mg Chl / mmol N)
+    out.V(:,:,fixedParams.PP_C_index) = max(0, ... 
+        out.pc - params.xi .* out.V(:,:,fixedParams.PP_N_index)); % photosynthesis minus metabolic cost
     out.V(:,:,fixedParams.PP_Chl_index) = out.rho .* out.V(:,:,fixedParams.PP_N_index); % chlorophyll production rate (mg Chl / mmol C / day)
-    out.V(:,:,fixedParams.PP_C_index) = max(0, out.pc - params.xi .* out.V(:,:,fixedParams.PP_N_index));
 end
+
+out.V(isnan(out.V)) = 0;
 
 out.uptake = B_C .* out.V;
 out.N_uptake_losses = sum(out.uptake(:,:,fixedParams.PP_N_index));
@@ -180,9 +182,6 @@ OM_diffuse = permute(reshape( ...
 %~~~~~~~~
 % Sinking
 %~~~~~~~~
-
-% wk = reshape(params.wk, [1, nOM_type * nOM_nut]);
-% wk = repmat(params.wk, [1 nOM_nut]);
 
 v_sink = sinking([B_C_t, OM_], ...
     [params.wp, reshape(params.wk, [1, nOM_type * nOM_nut])], ...
