@@ -265,10 +265,15 @@ Params.rOM_func = @(rDOC, rDON, rPOC, rPON, DOM_ind, POM_ind, C_ind, N_ind) ...
     [length(DOM_ind), 1 , length(C_ind)]);
 Params.rOM = []; % remineralisation rates (1 / day)
 
+% Assume that remineralisation rates are identical for all nutrients within
+% each OM type, i.e., choose values for N, then values for C are identical
+Params.rDOC_func = @(rDON) rDON;
 Params.rDON = 0.02;         % dissolved organic nitrogen remineralisation rate (1/day)
-Params.rDOC = 0.02;         % dissolved organic carbon remineralisation rate (1/day)
+% Params.rDOC = 0.02;         % dissolved organic carbon remineralisation rate (1/day)
+Params.rDOC = [];           % dissolved organic carbon remineralisation rate (1/day)
+Params.rPOC_func = @(rPON) rPON;
 Params.rPON = 0.04;         % particulate organic nitrogen remineralisation rate (1/day)
-Params.rPOC = 0.04;         % particulate organic nitrogen remineralisation rate (1/day)
+Params.rPOC = [];           % particulate organic nitrogen remineralisation rate (1/day)
 
 Params.wk_func = @(wDOM, wPOM, DOM_i, POM_i) wDOM .* DOM_i + wPOM .* POM_i; % OM sinking rate (m / day)
 

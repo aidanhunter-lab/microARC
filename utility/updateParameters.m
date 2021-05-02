@@ -41,6 +41,12 @@ if ~isempty(varargin)
         
         if any(strcmp('rDOC', parnames)) || any(strcmp('rDON', parnames)) || ...
                 any(strcmp('rPOC', parnames)) || any(strcmp('rPON', parnames))
+            if isfield(Params, 'rDOC_func')
+                Params.rDOC = Params.rDOC_func(Params.rDON);
+            end
+            if isfield(Params, 'rPOC_func')
+                Params.rPOC = Params.rPOC_func(Params.rPON);
+            end
             Params.rOM = Params.rOM_func(Params.rDOC, Params.rDON, ... 
                 Params.rPOC, Params.rPON);
         end
@@ -113,6 +119,12 @@ if ~isempty(varargin)
         
         if exist('rDOC', 'var') || exist('rDON', 'var') || ... 
                 exist('rPOC', 'var') || exist('rPON', 'var')
+            if isfield(Params, 'rDOC_func')
+                Params.rDOC = Params.rDOC_func(Params.rDON);
+            end
+            if isfield(Params, 'rPOC_func')
+                Params.rPOC = Params.rPOC_func(Params.rPON);
+            end
             Params.rOM = Params.rOM_func(Params.rDOC, Params.rDON, ... 
                 Params.rPOC, Params.rPON);
         end
