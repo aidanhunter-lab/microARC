@@ -195,7 +195,7 @@ FixedParams.dt_max = 1 /tx;
 % Size-dependent
 Vol = FixedParams.sizeAll;
 % VolP = FixedParams.PPsize;
-VolZ = FixedParams.ZPsize;
+% VolZ = FixedParams.ZPsize;
 phytoplankton = FixedParams.phytoplankton;
 zooplankton = FixedParams.zooplankton;
 
@@ -275,6 +275,13 @@ if (isfield(Params, 'beta1') && isfield(Params, 'beta2') && isfield(Params, 'bet
     Params.beta = Params.beta_func(Params.beta1, Params.beta2, Params.beta3, Vol);
 end
 
+if isfield(Params, 'rDOC') && isfield(Params, 'rDOC_func')
+    Params.rDOC = Params.rDOC_func(Params.rDON);
+end
+if isfield(Params, 'rPOC') && isfield(Params, 'rPOC_func')
+    Params.rPOC = Params.rPOC_func(Params.rPON);
+end
+
 if (isfield(Params, 'delta_opt') && isfield(Params, 'sigG') && isfield(Params, 'phi')) && ...
         ~(isempty(Params.delta_opt) && isempty(Params.sigG) && isempty(Params.phi))
     Params.phi = exp(-log(FixedParams.delta ./ Params.delta_opt) .^ 2 ./ (2 .* Params.sigG .^ 2));
@@ -293,15 +300,6 @@ if (isfield(Params, 'wDOM') && isfield(Params, 'wPOM')) && ...
     Params.wk_func = @(wDOM,wPOM) makeVector(wDOM, wPOM, DOM_i, POM_i)*ones(1,nOM_nut);
     Params.wk = Params.wk_func(Params.wDOM, Params.wPOM);
 end
-
-% if (isfield(Params, 'wDOM') && isfield(Params, 'wPOM')) && ...
-%         ~(isempty(Params.wDOM) || isempty(Params.wPOM))
-%     makeVector = Params.wk_func;
-%     DOM_i = FixedParams.DOM_index;
-%     POM_i = FixedParams.POM_index;
-%     Params.wk_func = @(wDOM,wPOM) makeVector(wDOM, wPOM, DOM_i, POM_i);
-%     Params.wk = Params.wk_func(Params.wDOM, Params.wPOM);
-% end
 
 if (isfield(Params, 'rDOC') && isfield(Params, 'rDON') && isfield(Params, 'rPOC') && isfield(Params, 'rPON')   ) && ...
         ~(isempty(Params.rDOC) || isempty(Params.rDON) || isempty(Params.rPOC) || isempty(Params.rPON) )
