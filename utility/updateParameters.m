@@ -113,11 +113,12 @@ if ~isempty(varargin)
         
         if exist('rDOC', 'var') || exist('rDON', 'var') || ... 
                 exist('rPOC', 'var') || exist('rPON', 'var')
-            Params.rOM = Params.rOM_func(rDOC, rDON, rPOC, rPON);
+            Params.rOM = Params.rOM_func(Params.rDOC, Params.rDON, ... 
+                Params.rPOC, Params.rPON);
         end
         
         if exist('wDOM', 'var') || exist('wPOM', 'var')
-            Params.wk = Params.wk_func(wDOM, wPOM);
+            Params.wk = Params.wk_func(Params.wDOM, Params.wPOM);
         end
         
     end
