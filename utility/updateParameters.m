@@ -24,6 +24,11 @@ if ~isempty(varargin)
                 param3 = Params.([Name '3']);
                 Params.(Name) = Params.([Name '_func'])(param1, param2, param3, Vol);
             end
+            if strcmp(pn, 'wDOM1') || strcmp(pn, 'wPOM1')
+                Name = pn(1:end-1);
+                param1 = Params.([Name '1']);
+                Params.(Name) = Params.([Name '_func'])(param1);
+            end
         end
         
         % Functions of parameters
@@ -51,7 +56,7 @@ if ~isempty(varargin)
                 Params.rPOC, Params.rPON);
         end
         
-        if any(strcmp('wDOM', parnames)) || any(strcmp('wPOM', parnames))
+        if any(strcmp('wDOM1', parnames)) || any(strcmp('wPOM1', parnames))
             Params.wk = Params.wk_func(Params.wDOM, Params.wPOM);
         end
         
@@ -61,7 +66,7 @@ if ~isempty(varargin)
         extractVarargin(varargin)
         
         % Scalar parameters
-        parNames = Params.scalars;
+        parNames = Params.scalarParams;
         for i = 1:length(parNames)
             if exist(parNames{i}, 'var')
                 name = parNames{i};
@@ -70,9 +75,9 @@ if ~isempty(varargin)
             end
         end
         
-        % Size-dependent parameters
+        % Vector parameters
         Vol = FixedParams.sizeAll(:);
-        parNames = Params.sizeDependent;
+        parNames = Params.vectorParams;
         suf = {'_a', '_b'};
         
         for i = 1:length(parNames)
@@ -99,6 +104,11 @@ if ~isempty(varargin)
                     b2 = Params.([Name '2']);
                     b3 = Params.([Name '3']);
                     Params.(Name) = Params.([Name '_func'])(b1, b2, b3, Vol);
+                end                
+                if any(strcmp(name, {'wDOM1','wPOM1'}))
+                    Name = name(1:length(name)-1);
+                    param1 = Params.([Name '1']);
+                    Params.(Name) = Params.([Name '_func'])(param1);
                 end                
             end
         end
@@ -129,7 +139,7 @@ if ~isempty(varargin)
                 Params.rPOC, Params.rPON);
         end
         
-        if exist('wDOM', 'var') || exist('wPOM', 'var')
+        if exist('wDOM1', 'var') || exist('wPOM1', 'var')
             Params.wk = Params.wk_func(Params.wDOM, Params.wPOM);
         end
         

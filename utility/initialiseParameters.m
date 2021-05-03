@@ -30,8 +30,6 @@ end
 
 % Create FixedParams and Params structs by calling default values
 [FixedParams, Params, Bounds] = defaultParameters(bioModel);
-% [FixedParams, Params, Bounds] = defaultParameters(bioModel, 'Data', Data, ... 
-%     'load', parFile);
 
 % Replace default Params if using saved values
 if useSavedPars
@@ -194,8 +192,6 @@ FixedParams.dt_max = 1 /tx;
 
 % Size-dependent
 Vol = FixedParams.sizeAll;
-% VolP = FixedParams.PPsize;
-% VolZ = FixedParams.ZPsize;
 phytoplankton = FixedParams.phytoplankton;
 zooplankton = FixedParams.zooplankton;
 
@@ -265,9 +261,10 @@ end
 
 if (isfield(Params, 'wp_a') && isfield(Params, 'wp_b')) && ...
         ~(isempty(Params.wp_a) || isempty(Params.wp_b))
+    nz = FixedParams.nz;
     powerFunction = Params.wp_func;
-    Params.wp_func = @(a,b,V) powerFunction(a,b,V');
-    Params.wp = Params.wp_func(Params.wp_a, Params.wp_b, Vol);
+    Params.wp_func = @(a,b,V) ones(nz, 1) * powerFunction(a,b,V');
+    Params.wp = Params.wp_func(Params.wp_a, Params.wp_b, Vol); % dimension [depth, size]
 end
 
 if (isfield(Params, 'beta1') && isfield(Params, 'beta2') && isfield(Params, 'beta3')) && ...
@@ -289,16 +286,42 @@ if (isfield(Params, 'delta_opt') && isfield(Params, 'sigG') && isfield(Params, '
     Params.phi(:,end) = Params.phi(:,end) .* (Params.phi(end-1,end-1) ./ Params.phi(end,end));
 end
 
-% Aggregate some parameters into matrices/arrays
+if isfield(Params, 'wPOM_func') && isfield(Params, 'wPOM1') && ~isempty(Params.wPOM1)
+    switch FixedParams.depthDependentPOMsinkSpeed
+        case false
+            nz = FixedParams.nz;
+            atDepth = Params.wPOM_func;
+            Params.wPOM_func = @(wPOM1) atDepth(wPOM1, nz);
+            Params.wPOM = Params.wPOM_func(Params.wPOM1);
+        case true
+            wmin = FixedParams.minSinkSpeed_POM;
+            wmax = FixedParams.maxSinkSpeed_POM;
+            z = abs(FixedParams.z);
+            atDepth = Params.wPOM_func;
+            Params.wPOM_func = @(wPOM1) atDepth(wPOM1, wmin, wmax, z);
+            Params.wPOM = Params.wPOM_func(Params.wPOM1);
+    end
+end
+if isfield(Params, 'wDOM_func') && isfield(Params, 'wDOM1') && ~isempty(Params.wDOM1)
+    nz = FixedParams.nz;
+    atDepth = Params.wDOM_func;
+    Params.wDOM_func = @(wDOM1) atDepth(wDOM1, nz);
+    Params.wDOM = Params.wDOM_func(Params.wDOM1);
+end
 
+
+% Aggregate some parameters into matrices/arrays
 if (isfield(Params, 'wDOM') && isfield(Params, 'wPOM')) && ...
         ~(isempty(Params.wDOM) || isempty(Params.wPOM))
-    makeVector = Params.wk_func;
-    DOM_i = FixedParams.DOM_index(:);
-    POM_i = FixedParams.POM_index(:);
+    makeArray = Params.wk_func;
+    DOM_i = FixedParams.DOM_index;
+    POM_i = FixedParams.POM_index;
     nOM_nut = FixedParams.nOM_nut;
-    Params.wk_func = @(wDOM,wPOM) makeVector(wDOM, wPOM, DOM_i, POM_i)*ones(1,nOM_nut);
-    Params.wk = Params.wk_func(Params.wDOM, Params.wPOM);
+    nOM_type = FixedParams.nOM_type;
+    nz = FixedParams.nz;    
+    reduceDim = @(x) x(1:end,:); % combines trailing array dimensions creating a 2D matrix
+    Params.wk_func = @(wDOM,wPOM) reduceDim(makeArray(wDOM, wPOM, DOM_i, POM_i) .* ones(nz, nOM_type, nOM_nut));
+    Params.wk = Params.wk_func(Params.wDOM, Params.wPOM); % Dimension [depth, OM type * nutrient]
 end
 
 if (isfield(Params, 'rDOC') && isfield(Params, 'rDON') && isfield(Params, 'rPOC') && isfield(Params, 'rPON')   ) && ...
