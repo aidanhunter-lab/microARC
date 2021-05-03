@@ -6,15 +6,15 @@ extractVarargin(varargin)
 
 % Select which parameters to optimise.
 % Choose from the lists: Params.scalars & Params.sizeDependent.
-parnames = {'wPOM', 'wp_a', 'wp_b', 'rDON', 'rPON', ...
+parnames = {'wPOM1', 'wp_a', 'wp_b', 'rDON', 'rPON', ...
     'aP', 'm_b', 'Gmax_a', 'Gmax_b', 'k_G', 'pmax_a', 'pmax_b', ... 
     'Qmin_QC_a', 'Qmin_QC_b', 'Qmax_delQ_a', 'Qmax_delQ_b', ... 
     'Vmax_QC_a', 'Vmax_QC_b', 'aN_QC_a', 'aN_QC_b'};
 
 % Check that all chosen parameters exist -- error if not
-if ~all(ismember(parnames, Params.scalars) | ... 
-        ismember(parnames, Params.sizeDependent))
-    error('Error in "optimisationOptions.m". Invalid choice for "parnames": all tuning parameter names must appear in "Params.scalars" or "Params.sizeDependent".')
+if ~all(ismember(parnames, Params.scalarParams) | ... 
+        ismember(parnames, Params.vectorParams))
+    error('Error in "optimisationOptions.m". Invalid choice for "parnames": all tuning parameter names must appear in "Params.scalarParams" or "Params.vectorParams".')
 end
 
 % Extract tuning parameter initial values and bounds

@@ -92,7 +92,9 @@ FixedParams.nEquations = [];                                          % total nu
 FixedParams.m_min = 0.01;
 FixedParams.attSW = 0.04;                                  % light attenuation by sea water (1 / m)
 FixedParams.attP = 0.0149;                                 % light attenuation by chlorophyll (m^2 / mg Chl), Krause-Jensen & Sand-Jensen, Limnol. Oceanogr. 43(3):396-407(1998)
+FixedParams.minSinkSpeed_POM = 1;                          % minimum sinking speed (m / day) of POM (this is used to constrain POM sink speed if it's assumed to be depth dependent -- slower speeds near the surface fit the data better and may be justified if choppyness near the surface increases POM hang-time)
 FixedParams.maxSinkSpeed_POM = 10;                         % maximum sinking speed (m / day) of POM (this determines max integration time step)
+FixedParams.depthDependentPOMsinkSpeed = false;            % can set to true to model POM sink speed as depth-dependent, with lower speeds near the surface
 maxDepthLayerClearRate = 0.1;                              % max rate at which depth layer can by cleared of plankton via sinking -- max sink speed of plankton is specified like this for model-stability purposes
 FixedParams.maxSinkSpeed_P = maxDepthLayerClearRate .* ...
     min(FixedParams.zwidth);                               % max sinking speed of plankton (when this is too great the model becomes unstable because cells clear from depth layers too quickly)
@@ -102,7 +104,7 @@ FixedParams.POM_is_lost  = true;                           % is POM lost from th
 %% Variable parameters
 
 % List names of all parameters that may be numerically optimised
-Params.scalars = {
+Params.scalarParams = {
     'Tref'
     'A'
     'h'
@@ -114,14 +116,13 @@ Params.scalars = {
     'sigG'
     'Lambda'
     'lambda_max'
-    'wDOM'
-    'wPOM'
     'rDON'
     'rDOC'
     'rPON'
     'rPOC'
     };
-Params.sizeDependent = {
+Params.vectorParams = {
+    % These are scalar parameters that are combined in functions to create vectors
     'Q_C_a'
     'Q_C_b'
     'Qmin_QC_a'
@@ -138,11 +139,13 @@ Params.sizeDependent = {
     'Gmax_b'
     'm_a'
     'm_b'
-    'wp_a'
-    'wp_b'
     'beta1'
     'beta2'
     'beta3'
+    'wp_a'
+    'wp_b'
+    'wDOM1'
+    'wPOM1'
     };
 
 
@@ -266,7 +269,7 @@ Params.rOM_func = @(rDOC, rDON, rPOC, rPON, DOM_ind, POM_ind, C_ind, N_ind) ...
 Params.rOM = []; % remineralisation rates (1 / day)
 
 % Assume that remineralisation rates are identical for all nutrients within
-% each OM type, i.e., choose values for N, then values for C are identical
+% each OM type, i.e., choose values for N, then set values for C identically
 Params.rDOC_func = @(rDON) rDON;
 Params.rDON = 0.02;         % dissolved organic nitrogen remineralisation rate (1/day)
 % Params.rDOC = 0.02;         % dissolved organic carbon remineralisation rate (1/day)
@@ -275,12 +278,34 @@ Params.rPOC_func = @(rPON) rPON;
 Params.rPON = 0.04;         % particulate organic nitrogen remineralisation rate (1/day)
 Params.rPOC = [];           % particulate organic nitrogen remineralisation rate (1/day)
 
-Params.wk_func = @(wDOM, wPOM, DOM_i, POM_i) wDOM .* DOM_i + wPOM .* POM_i; % OM sinking rate (m / day)
+% Sinking: parameters wDOM1 and wPOM1 are scalars that, together with
+% functions wDOM_func and wPOM_func, produce vectors of sinking speeds at
+% depth. Depending on the function definitions, sink speeds may be constant
+% with depth, or have a functional relationship specified by a single
+% parameter.
+Params.wDOM_func = @(wDOM1, nz) wDOM1 .* ones(nz,1);
+Params.wDOM1 = 0; % DOM does not sink so wDOM1 should equal 0 and wDOM is constant
+Params.wDOM = [];
+switch FixedParams.depthDependentPOMsinkSpeed
+    case false
+        % POM sink speed is constant over depth
+        Params.wPOM_func = @(wPOM1, nz) wPOM1 .* ones(nz,1);
+        Params.wPOM1 = 4;
+        Params.wPOM = [];
+    case true
+        % Allow reduction of POM sinking speed near surface for low values of
+        % wPOM1. At large wPOM1 the sink speed is maximal throughout water column.
+        % Setting values of wPOM1 on log-scale will improve numerical optimsation
+        % of this parameter (the log-scale is smoother across the relevant range),
+        % just exponentiate it in wPOM_func.
+        Params.wPOM_func = @(wPOM1, wmin, wmax, z) wmax - (wmax - wmin) .* exp(-exp(wPOM1) .* z); % curvature parameter, min and max sink speeds, and depth
+        Params.wPOM1 = log(0.15); % curvature of sinking speed-depth curve (log(1/m))
+        Params.wPOM = [];
+end
 
-Params.wk_func = @(wDOM, wPOM, DOM_i, POM_i) wDOM .* DOM_i + wPOM .* POM_i; % OM sinking rate (m / day)
+Params.wk_func = @(wDOM, wPOM, DOM_i, POM_i) wDOM * DOM_i + wPOM * POM_i; % OM sinking rate (m / day)
 Params.wk = [];
-Params.wDOM = 0; % sinking rates of DOM and POM
-Params.wPOM = 2;
+
 
 %% Parameter bounds
 
@@ -292,22 +317,26 @@ Params.wPOM = 2;
 Bounds.Tref       = [20, 20];
 Bounds.A          = [0.01, 0.2];
 Bounds.h          = [5, 15];
-% Bounds.m          = [0.005, 0.1];
 Bounds.aP         = [0, 0.5];
-% Bounds.aP         = [0.001, 0.5];
 Bounds.theta      = [3, 5];
 Bounds.xi         = [1.5, 5];
-% Bounds.Gmax       = [0, 50];
 Bounds.k_G        = [0.01, 10];
 Bounds.sigG        = [0.01, 4];
 Bounds.delta_opt  = [0.01, 20];
 Bounds.Lambda     = [-1.5, -0.5];
 Bounds.lambda_max = [0.5, 0.9];
-Bounds.wDOM       = [0, 0];
-Bounds.wPOM       = [0, FixedParams.maxSinkSpeed_POM];
+Bounds.wDOM1       = [0, 0];
+switch FixedParams.depthDependentPOMsinkSpeed
+    case false
+        Bounds.wPOM1 = [1, FixedParams.maxSinkSpeed_POM];
+    case true
+        x = log(2 * (FixedParams.maxSinkSpeed_POM - FixedParams.minSinkSpeed_POM) ./ ...
+            FixedParams.maxSinkSpeed_POM);
+        Bounds.wPOM1 = log([1 / 30, 1 / 1] .* x); % assume 30m is max depth at which wPOM <= max(wPOM)
+end
 Bounds.rDOC       = [0.005, 0.06];
 Bounds.rDON       = [0.005, 0.06];
-Bounds.rPOC       = [0.005, 0.06];
+Bounds.rPOC       = [0.01, 0.12];
 Bounds.rPON       = [0.01, 0.12];
 
 % size dependent
@@ -363,21 +392,8 @@ Bounds.beta1 = [0.5, 1];
 Bounds.beta2 = [0, 0.9];
 Bounds.beta3 = [min(log10(FixedParams.PPsize)), max(log10(FixedParams.PPsize))];
 
-
-% Bounds.wp_a = min(FixedParams.zwidth) .* [0.02 ./ 365, 0.05 ./ 1]; % wp_a_range restricts sinking speed of V=1 cells. Lower - some minimal fraction of narrowest depth layer must sink away during 1 year: Upper - some maximum fraction of narrowest depth that sink away in a single day
-% % r = 2; % choose r>1. assume sinking speed of largest modelled cells is at least r * that of the smallest
-% % Bounds.wp_b = [log(r) ./ (log(max(FixedParams.PPsize)) - log(min(FixedParams.PPsize))), ...
-% %     log10(FixedParams.maxSinkSpeed ./ Bounds.wp_a(2)) ./ log10(FixedParams.PPsize(2))];
-% % Bounds.wp_b(2) = min(2/3, Bounds.wp_b(2)); % speed freely sinking spheres is proportional to D^2, so limit wp_b upper bound
-% 
-% % Assume sinking speed of largest modelled cells is at least 'r' that of
-% % cells of volume = 1, and bound sinking speed of largest modelled cells to
-% % maxSinkSpeed.
-% r = 1; % choose r>=1
-% Bounds.wp_b = [log10(r) ./ log10(max(FixedParams.PPsize)), ...
-%     (log10(FixedParams.maxSinkSpeed) - log10(Bounds.wp_a(2))) ./ log10(max(FixedParams.PPsize))];
-% Bounds.wp_b(2) = min(2/3, Bounds.wp_b(2)); % speed freely sinking spheres is proportional to D^2, so limit wp_b upper bound
-
+% These bounds ensure that wp never exceeds maxSinkSpeed_P and that
+% wp(i)<wp(j) for cell sizes j>i.
 Bounds.wp_a = [0, FixedParams.PPsize(end) .^ (-2/3) .* FixedParams.maxSinkSpeed_P];
 Bounds.wp_b = [0, log(FixedParams.maxSinkSpeed_P ./ Bounds.wp_a(2)) ./ log(max(FixedParams.PPsize))];
 
