@@ -85,13 +85,14 @@ out.V(:,:,fixedParams.PP_N_index) = ...
 
 % Photosynthesis
 zeroLight = out.I(1) == 0;
+
 if ~zeroLight
-    out.psat = params.pmax .* out.gammaT .* out.gammaN; % light saturated photosynthetic rate
-    aP_Q_I = (params.aP .* out.I) .* out.Q(:,:,fixedParams.PP_Chl_index);
+    out.psat = params.pmax .* out.gammaT .* out.gammaN; % light saturated photosynthetic rate (N-dependent)
+    aP_Q_I = (params.aP .* out.I) .* out.Q(:,:,fixedParams.PP_Chl_index); % photon capture rate (Chl-dependent)
     out.pc = out.psat .* (1 - exp(-aP_Q_I ./ out.psat)); % photosynthetic (carbon production) rate (1 / day)    
-    % Maximum chl synthesis rate, theta, is down-regulated when I > Ik (Ik = psat / (aP Qchl))
-    % by fraction 0 < Ik / I < 1
-    out.rho = params.theta .* min(1, out.psat ./ aP_Q_I); % proportion of new nitrogen prodcution diverted to chlorophyll (mg Chl / mmol N)
+    out.rho = params.theta .* min(1, out.pc ./ aP_Q_I, 'includenan'); % proportion of new nitrogen prodcution diverted to chlorophyll (mg Chl / mmol N)
+    % The min function in rho should only be required to adjust numerical
+    % inaccuracies when I -> 0.
     out.V(:,:,fixedParams.PP_C_index) = max(0, ... 
         out.pc - params.xi .* out.V(:,:,fixedParams.PP_N_index)); % photosynthesis minus metabolic cost
     out.V(:,:,fixedParams.PP_Chl_index) = out.rho .* out.V(:,:,fixedParams.PP_N_index); % chlorophyll production rate (mg Chl / mmol C / day)
@@ -219,8 +220,8 @@ if (islogical(returnExtra) && returnExtra) || ...
     % Extra output variables retained by default when return = true or 'all'.
     keepVars = {'I', 'Q', 'V', 'G', 'lambda', 'cellDensity', 'biovolume'};
     % Any term can be included in keepVars, but it's useful to be sparing
-    % with memory by only on returning some terms then deriving extra output
-    % outside the ODEs.m script.
+    % with memory by only returning a few terms then deriving more extra
+    % output outside this ODEs.m function.
     
     if ~islogical(returnExtra) && ~all(strcmp(returnExtra, 'all'))
         % if extra output variables have been specified explicitly...

@@ -199,14 +199,14 @@ Params.kN = [];
 
 % maximum photosynthetic rate [1/day]
 Params.pmax_func = @(a,b,V) powerFunction(a,b,V);
-Params.pmax_a = 50;
-Params.pmax_b = -0.15;
+Params.pmax_a = 15;
+Params.pmax_b = -0.19;
 Params.pmax = [];
 
 % maximum grazing rate
 Params.Gmax_func = @(a,b,V) powerFunction(a,b,V);
-Params.Gmax_a = 25;
-Params.Gmax_b = -0.2;
+Params.Gmax_a = 10;
+Params.Gmax_b = -0.16;
 Params.Gmax = [];
 
 % % half-saturation prey concentration (mmol N / m^3) for grazing uptake
@@ -220,7 +220,7 @@ Params.phi = [];
 % background mortality
 Params.m_func = @(a,b,V) powerFunction(a,b,V);
 Params.m_a = 0.05; % mortality for cell volume = 1 mu m ^ 3
-Params.m_b = -0.15; % mortality size-exponent
+Params.m_b = -0.1; % mortality size-exponent
 Params.m = [];
 
 % sinking plankton
@@ -244,8 +244,8 @@ Params.xi = 2.33;           % cost of photosynthesis (mmol C / mmol N)
 Params.Tref = 20;           % reference temperature (degrees C)
 Params.A = 0.05;            % temperature dependence (unitless)
 Params.h = 10;              % curvature on quota uptake limitation
-Params.m = 0.05;            % linear plankton mortality (1/day)
-Params.k_G = 1;             % half-saturation prey concentration (mmol C / m^3) for grazing uptake
+% Params.m = 0.05;            % linear plankton mortality (1/day)
+Params.k_G = 5;             % half-saturation prey concentration (mmol C / m^3) for grazing uptake
 % Params.Gmax = 5;            % maximum grazing rate
 Params.delta_opt = 10;      % optimal predator:prey size ratio maximising feeding fluxes
 if strcmp(bioModel, 'singlePredatorClass')
@@ -320,7 +320,7 @@ Bounds.h          = [5, 15];
 Bounds.aP         = [0, 0.5];
 Bounds.theta      = [3, 5];
 Bounds.xi         = [1.5, 5];
-Bounds.k_G        = [0.01, 10];
+Bounds.k_G        = [0.1, 10];
 Bounds.sigG        = [0.01, 4];
 Bounds.delta_opt  = [0.01, 20];
 Bounds.Lambda     = [-1.5, -0.5];

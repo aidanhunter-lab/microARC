@@ -121,10 +121,15 @@ FixedParams.ZPdia_intervals = FixedParams.PPdia_intervals;
 FixedParams.ZPdia = FixedParams.PPdia;
 FixedParams.ZPsize = FixedParams.PPsize;
 
-delta_pred = reshape(FixedParams.ZPsize, [FixedParams.nZP_size, 1]);
-delta_prey = [reshape(FixedParams.PPsize, [1 FixedParams.nPP_size]), ... 
-    reshape(FixedParams.ZPsize, [1 FixedParams.nZP_size])];
-FixedParams.delta = delta_pred ./ delta_prey; % predator:prey size ratios
+delta_pred = reshape(0.5 * FixedParams.ZPdia, [FixedParams.nZP_size, 1]);
+delta_prey = [reshape(0.5 * FixedParams.PPdia, [1 FixedParams.nPP_size]), ... 
+    reshape(0.5 * FixedParams.ZPdia, [1 FixedParams.nZP_size])];
+FixedParams.delta = delta_pred ./ delta_prey; % predator:prey size (radii) ratios
+
+% delta_pred = reshape(FixedParams.ZPsize, [FixedParams.nZP_size, 1]);
+% delta_prey = [reshape(FixedParams.PPsize, [1 FixedParams.nPP_size]), ... 
+%     reshape(FixedParams.ZPsize, [1 FixedParams.nZP_size])];
+% FixedParams.delta = delta_pred ./ delta_prey; % predator:prey size ratios
 
 if isempty(FixedParams.nPP)
     FixedParams.nPP = FixedParams.nPP_size * FixedParams.nPP_nut;  % number of phytoplankton classes
