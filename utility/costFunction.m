@@ -869,11 +869,12 @@ switch selectFunction
                 hellingerDistance = (1 - (2 .* vobs .^ 0.5 .* vmod .^ 0.5 ./ vsum) .^ 0.5 .* ... 
                     exp(-0.25 .* (yobs - ymod) .^ 2 ./ vsum)) .^ 0.5;
                 costComponents.([varLabel '_' wm '_autotroph']) = mean(hellingerDistance(:)); % average over sizes and trajectory selections                
-                % The multivariate expression is perhaps more appropriate
-                % than averaging over Hellinger distances over size
-                % classes. Although, treating treating size classes as
-                % independently normal is fine if covariances are omitted.
-                % Calculate on log-scale for stability
+                % The multivariate expression (commented out below) may
+                % seem more appropriate than separately calculating 
+                % Hellinger distances for each size class then averaging.
+                % However, treating size classes as independently normal is
+                % fine if covariances are omitted.
+                % Multivariate-normal version -- use log-scale for stability
 %                 hellingerDistance = (1 - exp(0.25 .* (sum(log(vobs)) + ... 
 %                     sum(log(vmod)) - 2 .* sum(log(0.5 .* vsum)) - ...
 %                     0.5 .* sum(2 .* (yobs - ymod) .^ 2 ./ vsum)))) .^ 0.5;

@@ -67,6 +67,7 @@ if ~exist('v0', 'var') || ~isnumeric(v0)
     v0 = initialiseVariables(FixedParams, Params, Forc);
 end
 
+
 % Generate model outputs
 tic; disp('.. started at'); disp(datetime('now'))
 [out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, ... 
@@ -129,7 +130,6 @@ subplot(2,2,4)
 plot_rawData('sizeSpectra', 'BioVol', Data, 'waterOrigin', 'Atlantic', ...
     'drawLegend', false, 'plotTitle', [], 'matchScales', true, ... 
     'drawYlabel', false)
-
 
 % Summary plots displaying model fit to data
 logPlot = true; % for scalar data choose logPlot = true or false
