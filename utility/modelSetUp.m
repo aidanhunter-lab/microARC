@@ -55,7 +55,7 @@ Data = prepareFittingData(obsDir, ...
     'plotBioVolSpectra', plotBioVolSpectra);
 
 % Choose number of modelled size class intervals using function
-% chooseSizeClassIntervals.m
+% setSizeClassIntervals.m
 % min/max sizes to retain from the data
 if ~exist('ESDmin', 'var')
     ESDmin = 1;
@@ -85,10 +85,15 @@ if ~exist('plotSizeClassIntervals', 'var')
 end
 
 % Choose number of modelled size classes
-% setVariable('nsizes', 8)
 if ~exist('nsizes', 'var')
-   nsizes = 8;
+   nsizes = 9;
 end
+% And cell diameter of smallest class
+if ~exist('ESD1', 'var')
+    ESD1 = 1.5;
+end
+
+
 % Use the same size classes for autotrophs and heterotrophs to ensure that
 % grazing pressure is unbiased across sizes
 
@@ -102,8 +107,9 @@ if ~exist('initialParamDir', 'var')
     initialParamDir = [];
 end
 [FixedParams, Params] = initialiseParameters(F, bioModel, ... 
-    'ESDmin', ESDmin, 'ESDmax', ESDmax, 'nsizes', nsizes,  ...
+    'ESDmin', ESDmin, 'ESDmax', ESDmax, 'ESD1', ESD1, 'nsizes', nsizes,  ...
     'parFile', initialParamDir);
+nsizes = FixedParams.nPP_size;
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % Parameter values should not be changed by directly modifying Params

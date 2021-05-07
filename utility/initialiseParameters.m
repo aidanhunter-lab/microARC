@@ -27,6 +27,10 @@ end
 if ~exist('ESDmax', 'var')
     ESDmax = []; % max cell size
 end
+if ~exist('ESD1', 'var')
+    ESD1 = []; % Cell diameter of smallest class
+end
+
 
 % Create FixedParams and Params structs by calling default values
 [FixedParams, Params, Bounds] = defaultParameters(bioModel);
@@ -98,32 +102,57 @@ if isempty(FixedParams.nZP_nut)
 end
 
 
-% Set plankton cell sizes using the size-spectra data, if these data were
-% passed as an argument in varargin.
-
+% Set plankton cell sizes.
+% Method depends on constraints (nsizes, ESDmin, ESDmax, ESD1) which may 
+% have been passed as optional (varargin) arguments -- passing all these
+% constraints is best.
 if ~isempty(nsizes)
     FixedParams.nPP_size = nsizes;
-    if ~isempty(ESDmin) && ~isempty(ESDmax)
-        lim = log10([ESDmin; ESDmax]);
-        edges = linspace(lim(1), lim(2), nsizes + 1)';
-        FixedParams.PPdia_intervals = 10 .^ edges;
-        FixedParams.PPdia = 10 .^ (0.5 .* (edges(1:end-1) + edges(2:end)));
+    if ~(isempty(ESDmin) || isempty(ESDmax))
+        if isempty(ESD1)
+            % Create size classes evenly spaced between ESDmin and ESDmax
+            % -- this spacing does not align with optimal pred:prey
+            % diameter ratio deltaOpt
+            lim = log10([ESDmin; ESDmax]);
+            edges = linspace(lim(1), lim(2), nsizes + 1)';
+            FixedParams.PPdia_intervals = 10 .^ edges;
+            FixedParams.PPdia = 10 .^ (0.5 .* (edges(1:end-1) + edges(2:end)));
+        else
+            % Size classes align with optimal pred:prey diameter ratios
+            [ESDP, ESDZ, VolP, VolZ, ESDPedges, ESDZedges] = ...
+                createSizeClasses(nsizes, ESDmin, ESDmax, ESD1, Params.delta_opt);
+            FixedParams.nPP_size = length(ESDP); % createSizeClasses.m may not return the requested number of size classes, but it will be close to nsizes.
+            FixedParams.PPdia = ESDP;
+            FixedParams.PPdia_intervals = ESDPedges;
+            FixedParams.PPsize = VolP;
+        end
     else
         FixedParams.PPdia = 2 .^ (0:nsizes-1);
         FixedParams.PPdia = FixedParams.PPdia(:);
     end
-    FixedParams.PPsize = d2vol(FixedParams.PPdia);
+    if ~exist('VolP', 'var')
+        FixedParams.PPsize = d2vol(FixedParams.PPdia);
+    end
 end
 
-% Set predator size classes equal to phytoplankton sizes
-FixedParams.nZP_size = FixedParams.nPP_size;
-FixedParams.ZPdia_intervals = FixedParams.PPdia_intervals;
-FixedParams.ZPdia = FixedParams.PPdia;
-FixedParams.ZPsize = FixedParams.PPsize;
+% Predator sizes may have already been set by createSizeClasses.m,
+% otherwise set equal to prey sizes -- result may be identical depending on
+% inards of createSizeClasses.m
+if exist('ESDZ','var') && exist('VolZ','var') && exist('ESDZedges','var')
+    FixedParams.nZP_size = length(ESDZ);
+    FixedParams.ZPdia = ESDZ;
+    FixedParams.ZPdia_intervals = ESDZedges;
+    FixedParams.ZPsize = VolZ;
+else
+    FixedParams.nZP_size = FixedParams.nPP_size;
+    FixedParams.ZPdia_intervals = FixedParams.PPdia_intervals;
+    FixedParams.ZPdia = FixedParams.PPdia;
+    FixedParams.ZPsize = FixedParams.PPsize;
+end
 
-delta_pred = reshape(0.5 * FixedParams.ZPdia, [FixedParams.nZP_size, 1]);
-delta_prey = [reshape(0.5 * FixedParams.PPdia, [1 FixedParams.nPP_size]), ... 
-    reshape(0.5 * FixedParams.ZPdia, [1 FixedParams.nZP_size])];
+delta_pred = reshape(FixedParams.ZPdia, [FixedParams.nZP_size, 1]);
+delta_prey = [reshape(FixedParams.PPdia, [1 FixedParams.nPP_size]), ...
+    reshape(FixedParams.ZPdia, [1 FixedParams.nZP_size])];
 FixedParams.delta = delta_pred ./ delta_prey; % predator:prey size (radii) ratios
 
 % delta_pred = reshape(FixedParams.ZPsize, [FixedParams.nZP_size, 1]);
@@ -287,8 +316,7 @@ end
 if (isfield(Params, 'delta_opt') && isfield(Params, 'sigG') && isfield(Params, 'phi')) && ...
         ~(isempty(Params.delta_opt) && isempty(Params.sigG) && isempty(Params.phi))
     Params.phi = exp(-log(FixedParams.delta ./ Params.delta_opt) .^ 2 ./ (2 .* Params.sigG .^ 2));
-    Params.phi(:,1:end-1) = Params.phi(:,1:end-1) ./ max(Params.phi(:,1:end-1));
-    Params.phi(:,end) = Params.phi(:,end) .* (Params.phi(end-1,end-1) ./ Params.phi(end,end));
+%     Params.phi = Params.phi ./ max(Params.phi, [], 2); % standardise so each predator may optimally graze some prey -- this messes up pred:prey size ratio effect
 end
 
 if isfield(Params, 'wPOM_func') && isfield(Params, 'wPOM1') && ~isempty(Params.wPOM1)

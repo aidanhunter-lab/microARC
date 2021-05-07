@@ -290,7 +290,7 @@ switch FixedParams.depthDependentPOMsinkSpeed
     case false
         % POM sink speed is constant over depth
         Params.wPOM_func = @(wPOM1, nz) wPOM1 .* ones(nz,1);
-        Params.wPOM1 = 4;
+        Params.wPOM1 = 2;
         Params.wPOM = [];
     case true
         % Allow reduction of POM sinking speed near surface for low values of
@@ -328,7 +328,7 @@ Bounds.lambda_max = [0.5, 0.9];
 Bounds.wDOM1       = [0, 0];
 switch FixedParams.depthDependentPOMsinkSpeed
     case false
-        Bounds.wPOM1 = [1, FixedParams.maxSinkSpeed_POM];
+        Bounds.wPOM1 = [0.5, FixedParams.maxSinkSpeed_POM];
     case true
         x = log(2 * (FixedParams.maxSinkSpeed_POM - FixedParams.minSinkSpeed_POM) ./ ...
             FixedParams.maxSinkSpeed_POM);

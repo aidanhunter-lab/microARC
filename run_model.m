@@ -12,7 +12,6 @@ clear; clc; close all; delete(gcp('nocreate'))
 addpath(genpath(fileparts(which('run_model'))))
 
 % Store folders/filenames of data and saved parameters
-% Directories = setDirectories('bioModel', 'multiplePredatorClasses');
 Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
     'parFile', []);
 display(Directories)
