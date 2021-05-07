@@ -752,6 +752,184 @@ switch selectFunction
 
 %         disp(costComponents)
 %         disp(cost)
+
+
+    case 'Hellinger_MVN_groupWaterOrigin'
+        % Same cost function as 'Hellinger_groupWaterOrigin' except that
+        % information on absolute abundances-at-size is included in the
+        % cost function by assuming that abundance-at-size is normally
+        % distributed and using generic variability parameters (from the
+        % Gaussian approximation to the multinomial distribution) to derive
+        % the probability density functions used as arguments in the
+        % Hellinger distance metric.
+        % In short: this fits to abundance-at-size rather than merely
+        % fitting to relative abundance-at-size.
+        
+        % Scalar data
+        for i = 1:length(Vars)
+            varLabel = Vars{i};
+            yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+            ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+            n = size(ymod, 1);
+            m = size(ymod, 2);
+            % As the standardised data are approximately normally distributed,
+            % we could assume that identically transformed model outputs
+            % are also normally distributed, then find their means and
+            % variances to calculate Hellinger distances analytically.
+            % However, assuming normality of transformed model output is
+            % inappropriate because it could be any shape...
+            % Thus, derive cdfs and pdfs directly without assuming that
+            % transformed model outputs follow normal distributions.
+            % To compare observed and modelled distributions, the pdfs will
+            % need to be evaluated across identical domains.
+            cdf = (1:n)' ./ n;
+            yobsc = sort(yobs);
+            ymodc = sort(ymod);
+            % remove any duplicate values (more likely in model output than
+            % in data), retaining the largest probability values
+            keep = ~[diff(yobsc) == 0; false];
+            cdfobs = cdf(keep);
+            yobsc = yobsc(keep);
+            % store cdfmod as cell-array because vector lengths may differ
+            % after removing duplicates
+            keep = ~[diff(ymodc) == 0; false(1, m)];
+            cdfmod = cell(1, m);
+            ymodc_ = cell(1, m);
+            for ij = 1:m
+                cdfmod{:,ij} = cdf(keep(:,ij));
+                ymodc_{:,ij} = ymodc(keep(:,ij),ij);
+            end
+            % define regular grid across measurement space -- define number
+            % of grid nodes using the number of observations
+            vrange = [min([yobsc(:); ymodc(:)]), max([yobsc(:); ymodc(:)])];
+            grid = nan(n, 1);
+            grid(2:end) = linspace(vrange(1), vrange(2), n-1)';
+            sp = diff(grid(2:3));
+            grid(1) = grid(2) - sp;
+            % interpolate cdfs and derive pdfs
+            cdfobsi = interp1(yobsc, cdfobs, grid, 'linear', 'extrap');
+            cdfobsi(cdfobsi < min(cdfobs)) = 0;
+            cdfobsi(cdfobsi > 1) = 1;
+            pdfobsi = diff(cdfobsi);
+            cdfmodi = nan(n, m);
+            pdfmodi = nan(n-1, m);
+            for ij = 1:m
+                cdfmodi(:,ij) = interp1(ymodc_{ij}, cdfmod{ij}, grid, 'linear', 'extrap');
+                cdfmodi(cdfmodi(:,ij) < min(cdfmod{ij}), ij) = 0;
+                cdfmodi(cdfmodi(:,ij) > 1, ij) = 1;
+                pdfmodi(:,ij) = diff(cdfmodi(:,ij));
+            end
+            
+            hellingerDistance = (1 - sum((pdfobsi .* pdfmodi) .^ 0.5)) .^ 0.5;
+            
+            costComponents.(varLabel) = mean(hellingerDistance); % average over trajectory selections
+            
+        end
+        
+        % Vector (size) data
+        for i = 1:length(VarsSize)
+            varLabel = VarsSize{i};
+            ind0 = strcmp(Data.sizeFull.dataBinned.groupedByOrigin.Variable, varLabel);
+            waterMasses = unique(Data.sizeFull.dataBinned.groupedByOrigin.waterMass);
+            
+            for w = 1:length(waterMasses)
+                wm = waterMasses{w};
+                ind1 = ind0 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.waterMass, wm);
+                
+                % autotrophs
+                ind = ind1 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.trophicLevel, 'autotroph');
+                yobs = Data.sizeFull.dataBinned.groupedByOrigin.Value(ind);
+                ymod = modData.sizeFull.(['Value_' wm])(ind,:);
+                % Derive generic variabilities using normal approximation
+                % to multinomial distribution...
+                % This approximation is only valid for large multinomial
+                % samples. This should be OK for cell-conc data, but maybe
+                % not for the bio-volume data because the chosen units are
+                % m^3 / m^3... we can just rescale the units here, although
+                % it will be cleaner to alter the units before arranging
+                % the data..                
+                switch varLabel, case 'BioVol'
+                    % Alter bio-volume units from m^3/m^3 to (mm)^3/m^3
+                    yobs = 1e9 .* yobs;
+                    ymod = 1e9 .* ymod;
+                end
+                Nobs = sum(yobs); % totals
+                Nmod = sum(ymod);                
+                pobs = yobs ./ Nobs; % size-class probabilities
+                pmod = ymod ./ Nmod;                
+                vobs = Nobs .* pobs .* (1 - pobs); % multinomial variabilities
+                vmod = Nmod .* pmod .* (1 - pmod);
+                
+                % Use analytical formula for Hellinger distance between two
+                % normal distributions. Note that since we are omitting
+                % covariances, determinants of covariance matrices equal
+                % the products of the variance vectors, and matrix
+                % inversions are not necessary.
+                vsum = vobs + vmod;
+                hellingerDistance = (1 - (2 .* vobs .^ 0.5 .* vmod .^ 0.5 ./ vsum) .^ 0.5 .* ... 
+                    exp(-0.25 .* (yobs - ymod) .^ 2 ./ vsum)) .^ 0.5;
+                costComponents.([varLabel '_' wm '_autotroph']) = mean(hellingerDistance(:)); % average over sizes and trajectory selections                
+                % The multivariate expression (commented out below) may
+                % seem more appropriate than separately calculating 
+                % Hellinger distances for each size class then averaging.
+                % However, treating size classes as independently normal is
+                % fine if covariances are omitted.
+                % Multivariate-normal version -- use log-scale for stability
+%                 hellingerDistance = (1 - exp(0.25 .* (sum(log(vobs)) + ... 
+%                     sum(log(vmod)) - 2 .* sum(log(0.5 .* vsum)) - ...
+%                     0.5 .* sum(2 .* (yobs - ymod) .^ 2 ./ vsum)))) .^ 0.5;
+%                 costComponents.([varLabel '_' wm '_autotroph']) = mean(hellingerDistance); % average over trajectory selections
+                
+                % heterotrophs
+                ind = ind1 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.trophicLevel, 'heterotroph');
+                yobs = Data.sizeFull.dataBinned.groupedByOrigin.Value(ind);
+                ymod = modData.sizeFull.(['Value_' wm])(ind,:);
+
+                switch varLabel, case 'BioVol'
+                    % Alter bio-volume units from m^3/m^3 to (mm)^3/m^3
+                    yobs = 1e9 .* yobs;
+                    ymod = 1e9 .* ymod;
+                end
+                Nobs = sum(yobs); % totals
+                Nmod = sum(ymod);                
+                pobs = yobs ./ Nobs; % size-class probabilities
+                pmod = ymod ./ Nmod;                
+                vobs = Nobs .* pobs .* (1 - pobs); % multinomial variabilities
+                vmod = Nmod .* pmod .* (1 - pmod);
+                vsum = vobs + vmod;
+                hellingerDistance = (1 - (2 .* vobs .^ 0.5 .* vmod .^ 0.5 ./ vsum) .^ 0.5 .* ... 
+                    exp(-0.25 .* (yobs - ymod) .^ 2 ./ vsum)) .^ 0.5;
+                costComponents.([varLabel '_' wm '_heterotroph']) = mean(hellingerDistance(:)); % average over sizes and trajectory selections
+%                 % Multivariate version
+%                 hellingerDistance = (1 - exp(0.25 .* (sum(log(vobs)) + ... 
+%                     sum(log(vmod)) - 2 .* sum(log(0.5 .* vsum)) - ...
+%                     0.5 .* sum(2 .* (yobs - ymod) .^ 2 ./ vsum)))) .^ 0.5;
+%                 costComponents.([varLabel '_' wm '_heterotroph']) = mean(hellingerDistance); % average over trajectory selections
+            end
+        end
+        
+        % Take averages across data-types to assign equal weightings to the
+        % scalar data and size data.
+        cost = zeros(1,2);
+        fields = fieldnames(costComponents);
+        for i = 1:length(fields)
+            if ismember(fields{i}, Vars)
+                % scalar data
+                cost(1) = cost(1) + costComponents.(fields{i});
+            else
+                % size data
+                cost(2) = cost(2) + costComponents.(fields{i});
+            end
+        end
+        cost(1) = cost(1) ./ length(Vars);
+        cost(2) = cost(2) ./ (length(fields) - length(Vars));
+        
+%        disp(costComponents)
+%        disp(cost)
+
+        cost = mean(cost);
+
+%        disp(cost)
         
 end
 

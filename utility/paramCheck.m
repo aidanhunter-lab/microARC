@@ -7,7 +7,7 @@ Bounds = bounds;
 
 % Have all parameters listed in scalars and sizeDependent been assigned
 % values? If not then display warning
-allPars = [Params.scalars; Params.sizeDependent];
+allPars = [Params.scalarParams; Params.vectorParams];
 for i = 1:length(allPars)
     n = allPars{i};
     try p = Params.(n);
