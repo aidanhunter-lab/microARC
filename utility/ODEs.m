@@ -91,7 +91,7 @@ if ~zeroLight
     aP_Q_I = (params.aP .* out.I) .* out.Q(:,:,fixedParams.PP_Chl_index); % photon capture rate (Chl-dependent)
     out.pc = out.psat .* (1 - exp(-aP_Q_I ./ out.psat)); % photosynthetic (carbon production) rate (1 / day)    
     out.rho = params.theta .* min(1, out.pc ./ aP_Q_I, 'includenan'); % proportion of new nitrogen prodcution diverted to chlorophyll (mg Chl / mmol N)
-    % The min function in rho should only be required to adjust numerical
+    % The min function in rho should only be required to correct numerical
     % inaccuracies when I -> 0.
     out.V(:,:,fixedParams.PP_C_index) = max(0, ... 
         out.pc - params.xi .* out.V(:,:,fixedParams.PP_N_index)); % photosynthesis minus metabolic cost
