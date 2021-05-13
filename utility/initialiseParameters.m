@@ -244,6 +244,7 @@ if (isfield(Params, 'Qmax_delQ_a') && isfield(Params, 'Qmax_delQ_b')) && ...
     Params.Qmax_delQ = Params.Qmax_delQ_func(Params.Qmax_delQ_a, Params.Qmax_delQ_b, Vol);
 end
 
+
 if (isfield(Params, 'Vmax_QC_a') && isfield(Params, 'Vmax_QC_b')) && ...
         ~(isempty(Params.Vmax_QC_a) || isempty(Params.Vmax_QC_b))
     powerFunction = Params.Vmax_QC_func;

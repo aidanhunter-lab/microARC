@@ -30,12 +30,12 @@ for i = 1:length(allPars)
         catch, b = nan;
         end
         if ~any(isnan(b)) % if bounds have been set
-            if p < b(1)
+            if p < min(b)
                 warning(['Default ' n ' value is less than its lower bound, so ' ...
                     n ' has been reset to the midpoint between its bounds. Choose consistent values in defaultParameters.m'])
                 Params.(n) = 0.5 .* (b(1)+b(2));
             end
-            if p > b(2)
+            if p > max(b)
                 warning(['Default ' n ' value is greater than its upper bound, so ' ...
                     n ' has been reset to the midpoint between its bounds. Choose consistent values in defaultParameters.m'])
                 Params.(n) = 0.5 .* (b(1)+b(2));
