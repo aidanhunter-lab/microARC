@@ -23,7 +23,7 @@ loadFittedParams = true; % use output saved from optimisation run?
 fileName = 'fittedParameters';  % saved parameters file name
 % tag = '1';                      % and identifying tag
 % tag = 'N_LN-Dir_groupWaterOrigin';
-tag = 'Hellinger_groupWaterOrigin';
+tag = 'Hellinger_MVN_groupWaterOrigin';
 
 fileName = fullfile(Directories.resultsDir, ...
     [fileName '_' tag]);
@@ -66,6 +66,7 @@ if ~exist('v0', 'var') || ~isnumeric(v0)
     % those here generated using "best-fitting" quota params...
     v0 = initialiseVariables(FixedParams, Params, Forc);
 end
+
 
 % Generate model outputs
 tic; disp('.. started at'); disp(datetime('now'))
@@ -129,7 +130,6 @@ subplot(2,2,4)
 plot_rawData('sizeSpectra', 'BioVol', Data, 'waterOrigin', 'Atlantic', ...
     'drawLegend', false, 'plotTitle', [], 'matchScales', true, ... 
     'drawYlabel', false)
-
 
 % Summary plots displaying model fit to data
 logPlot = true; % for scalar data choose logPlot = true or false
@@ -726,7 +726,7 @@ close all
 %% Network plots -- fluxes, production
 
 % Feeding fluxes
-plt_feedFlux_C = figure(1);
+plt_feedFlux_C = figure;
 plt_feedFlux_C.Units = 'inches';
 % plt_feedFlux_C.Position = [0 0 16 12];
 plt_feedFlux_C.Position = [0 0 10 7.5];
@@ -735,7 +735,7 @@ plot_network('feedingFluxes', 'carbon', auxVars, FixedParams, Forc, 'Arctic');
 subplot(2,1,2)
 plot_network('feedingFluxes', 'carbon', auxVars, FixedParams, Forc, 'Atlantic');
 
-plt_feedFlux_N = figure(2);
+plt_feedFlux_N = figure;
 plt_feedFlux_N.Units = 'inches';
 plt_feedFlux_N.Position = [0 0 10 7.5];
 subplot(2,1,1)
@@ -744,7 +744,7 @@ subplot(2,1,2)
 plot_network('feedingFluxes', 'nitrogen', auxVars, FixedParams, Forc, 'Atlantic');
 
 % Organic matter
-plt_OM = figure(3);
+plt_OM = figure;
 plt_OM.Units = 'inches';
 plt_OM.Position = [0 0 10 10];
 subplot(2,2,1)

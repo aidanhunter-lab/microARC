@@ -27,11 +27,13 @@ end
 if ~exist('ESDmax', 'var')
     ESDmax = []; % max cell size
 end
+if ~exist('ESD1', 'var')
+    ESD1 = []; % Cell diameter of smallest class
+end
+
 
 % Create FixedParams and Params structs by calling default values
 [FixedParams, Params, Bounds] = defaultParameters(bioModel);
-% [FixedParams, Params, Bounds] = defaultParameters(bioModel, 'Data', Data, ... 
-%     'load', parFile);
 
 % Replace default Params if using saved values
 if useSavedPars
@@ -100,51 +102,68 @@ if isempty(FixedParams.nZP_nut)
 end
 
 
-% Set plankton cell sizes using the size-spectra data, if these data were
-% passed as an argument in varargin.
-
+% Set plankton cell sizes.
+% Method depends on constraints (nsizes, ESDmin, ESDmax, ESD1) which may 
+% have been passed as optional (varargin) arguments -- passing all these
+% constraints is best.
 if ~isempty(nsizes)
     FixedParams.nPP_size = nsizes;
-    if ~isempty(ESDmin) && ~isempty(ESDmax)
-        lim = log10([ESDmin; ESDmax]);
-        edges = linspace(lim(1), lim(2), nsizes + 1)';
-        FixedParams.PPdia_intervals = 10 .^ edges;
-        FixedParams.PPdia = 10 .^ (0.5 .* (edges(1:end-1) + edges(2:end)));
+    if ~(isempty(ESDmin) || isempty(ESDmax))
+        if isempty(ESD1)
+            % Create size classes evenly spaced between ESDmin and ESDmax
+            % -- this spacing does not align with optimal pred:prey
+            % diameter ratio deltaOpt
+            lim = log10([ESDmin; ESDmax]);
+            edges = linspace(lim(1), lim(2), nsizes + 1)';
+            FixedParams.PPdia_intervals = 10 .^ edges;
+            FixedParams.PPdia = 10 .^ (0.5 .* (edges(1:end-1) + edges(2:end)));
+        else
+            % Size classes align with optimal pred:prey diameter ratios
+            [ESDP, ESDZ, VolP, VolZ, ESDPedges, ESDZedges] = ...
+                createSizeClasses(nsizes, ESDmin, ESDmax, ESD1, Params.delta_opt);
+            FixedParams.nPP_size = length(ESDP); % createSizeClasses.m may not return the requested number of size classes, but it will be close to nsizes.
+            FixedParams.PPdia = ESDP;
+            FixedParams.PPdia_intervals = ESDPedges;
+            FixedParams.PPsize = VolP;
+        end
     else
         FixedParams.PPdia = 2 .^ (0:nsizes-1);
         FixedParams.PPdia = FixedParams.PPdia(:);
     end
-    FixedParams.PPsize = d2vol(FixedParams.PPdia);
+    if ~exist('VolP', 'var')
+        FixedParams.PPsize = d2vol(FixedParams.PPdia);
+    end
 end
 
-% Set predator size classes equal to phytoplankton sizes
-FixedParams.nZP_size = FixedParams.nPP_size;
-FixedParams.ZPdia_intervals = FixedParams.PPdia_intervals;
-FixedParams.ZPdia = FixedParams.PPdia;
-FixedParams.ZPsize = FixedParams.PPsize;
+% Predator sizes may have already been set by createSizeClasses.m,
+% otherwise set equal to prey sizes -- result may be identical depending on
+% inards of createSizeClasses.m
+if exist('ESDZ','var') && exist('VolZ','var') && exist('ESDZedges','var')
+    FixedParams.nZP_size = length(ESDZ);
+    FixedParams.ZPdia = ESDZ;
+    FixedParams.ZPdia_intervals = ESDZedges;
+    FixedParams.ZPsize = VolZ;
+else
+    FixedParams.nZP_size = FixedParams.nPP_size;
+    FixedParams.ZPdia_intervals = FixedParams.PPdia_intervals;
+    FixedParams.ZPdia = FixedParams.PPdia;
+    FixedParams.ZPsize = FixedParams.PPsize;
+end
 
-delta_pred = reshape(FixedParams.ZPsize, [FixedParams.nZP_size, 1]);
-delta_prey = [reshape(FixedParams.PPsize, [1 FixedParams.nPP_size]), ... 
-    reshape(FixedParams.ZPsize, [1 FixedParams.nZP_size])];
-FixedParams.delta = delta_pred ./ delta_prey; % predator:prey size ratios
+delta_pred = reshape(FixedParams.ZPdia, [FixedParams.nZP_size, 1]);
+delta_prey = [reshape(FixedParams.PPdia, [1 FixedParams.nPP_size]), ...
+    reshape(FixedParams.ZPdia, [1 FixedParams.nZP_size])];
+FixedParams.delta = delta_pred ./ delta_prey; % predator:prey size (radii) ratios
 
+% delta_pred = reshape(FixedParams.ZPsize, [FixedParams.nZP_size, 1]);
+% delta_prey = [reshape(FixedParams.PPsize, [1 FixedParams.nPP_size]), ... 
+%     reshape(FixedParams.ZPsize, [1 FixedParams.nZP_size])];
+% FixedParams.delta = delta_pred ./ delta_prey; % predator:prey size ratios
 
-% if isempty(FixedParams.PPdia)
-%     FixedParams.PPdia = 2 .^ (0:FixedParams.nPP_size-1);           % cell diameter
-% end
-% if isempty(FixedParams.PPsize)
-%     FixedParams.PPsize = 4/3 * pi * (FixedParams.PPdia ./ 2) .^ 3; % cell volume [mu m^3]
-% end
 if isempty(FixedParams.nPP)
     FixedParams.nPP = FixedParams.nPP_size * FixedParams.nPP_nut;  % number of phytoplankton classes
 end
 
-% if isempty(FixedParams.ZPdia)
-%     FixedParams.ZPdia = 2 .^ (0:FixedParams.nZP_size-1);           % cell diameter
-% end
-% if isempty(FixedParams.ZPsize)
-%     FixedParams.ZPsize = 4/3 * pi * (FixedParams.ZPdia ./ 2) .^ 3; % cell volume [mu m^3]
-% end
 if isempty(FixedParams.nZP)
     FixedParams.nZP = FixedParams.nZP_size * FixedParams.nZP_nut;  % number of zooplankton classes
 end
@@ -207,8 +226,8 @@ FixedParams.dt_max = 1 /tx;
 
 % Size-dependent
 Vol = FixedParams.sizeAll;
-% VolP = FixedParams.PPsize;
-VolZ = FixedParams.ZPsize;
+phytoplankton = FixedParams.phytoplankton;
+zooplankton = FixedParams.zooplankton;
 
 if (isfield(Params, 'Q_C_a') && isfield(Params, 'Q_C_b')) && ...
         ~(isempty(Params.Q_C_a) || isempty(Params.Q_C_b))
@@ -225,18 +244,28 @@ if (isfield(Params, 'Qmax_delQ_a') && isfield(Params, 'Qmax_delQ_b')) && ...
     Params.Qmax_delQ = Params.Qmax_delQ_func(Params.Qmax_delQ_a, Params.Qmax_delQ_b, Vol);
 end
 
+
 if (isfield(Params, 'Vmax_QC_a') && isfield(Params, 'Vmax_QC_b')) && ...
         ~(isempty(Params.Vmax_QC_a) || isempty(Params.Vmax_QC_b))
+    powerFunction = Params.Vmax_QC_func;
+    Params.Vmax_QC_func = @(a,b,V) powerFunction(a,b,V) .* phytoplankton; % heterotrophs Vmax = 0
     Params.Vmax_QC = Params.Vmax_QC_func(Params.Vmax_QC_a, Params.Vmax_QC_b, Vol);
 end
 
 if (isfield(Params, 'aN_QC_a') && isfield(Params, 'aN_QC_b')) && ...
         ~(isempty(Params.aN_QC_a) || isempty(Params.aN_QC_b))
+    powerFunction = Params.aN_QC_func;
+    Params.aN_QC_func = @(a,b,V) powerFunction(a,b,V) .* phytoplankton; % heterotrophs aN = 0
     Params.aN_QC = Params.aN_QC_func(Params.aN_QC_a, Params.aN_QC_b, Vol);
 end
 
 if (isfield(Params, 'pmax_a') && isfield(Params, 'pmax_b')) && ...
         ~(isempty(Params.pmax_a) || isempty(Params.pmax_b))
+    switch bioModel
+        case {'singlePredatorClass','multiplePredatorClasses'}
+            powerFunction = Params.pmax_func;
+            Params.pmax_func = @(a,b,V) powerFunction(a,b,V) .* phytoplankton; % heterotrophs may have positive pmax only when bioModel = 'mixotrophy'
+    end
     Params.pmax = Params.pmax_func(Params.pmax_a, Params.pmax_b, Vol);
 end
 
@@ -244,10 +273,13 @@ if (isfield(Params, 'Gmax_a') && isfield(Params, 'Gmax_b')) && ...
         ~(isempty(Params.Gmax_a) || isempty(Params.Gmax_b))
     switch bioModel
         case 'singlePredatorClass'
-            Params.Gmax = Params.Gmax_func(Params.Gmax_a, Params.Gmax_b, Vol)';
+            powerFunction = Params.Gmax_func;
+            Params.Gmax_func = @(a,b,V) powerFunction(a,b,V');
         case {'multiplePredatorClasses','mixotrophy'}
-            Params.Gmax = Params.Gmax_func(Params.Gmax_a, Params.Gmax_b, VolZ);
+            powerFunction = Params.Gmax_func;
+            Params.Gmax_func = @(a,b,V) powerFunction(a,b,V(zooplankton));
     end
+    Params.Gmax = Params.Gmax_func(Params.Gmax_a, Params.Gmax_b, Vol);
 end
 
 % if isempty(Params.k_G)
@@ -256,12 +288,18 @@ end
 
 if (isfield(Params, 'm_a') && isfield(Params, 'm_b')) && ...
         ~(isempty(Params.m_a) || isempty(Params.m_b))
-    Params.m = Params.m_func(Params.m_a, Params.m_b, FixedParams.m_min, Vol);
+    powerFunction = Params.m_func;
+    m_min = FixedParams.m_min;
+    Params.m_func = @(a,b,V) m_min + powerFunction(a-m_min,b,V);
+    Params.m = Params.m_func(Params.m_a, Params.m_b, Vol);
 end
 
 if (isfield(Params, 'wp_a') && isfield(Params, 'wp_b')) && ...
         ~(isempty(Params.wp_a) || isempty(Params.wp_b))
-    Params.wp = Params.wp_func(Params.wp_a, Params.wp_b, Vol);
+    nz = FixedParams.nz;
+    powerFunction = Params.wp_func;
+    Params.wp_func = @(a,b,V) ones(nz, 1) * powerFunction(a,b,V');
+    Params.wp = Params.wp_func(Params.wp_a, Params.wp_b, Vol); % dimension [depth, size]
 end
 
 if (isfield(Params, 'beta1') && isfield(Params, 'beta2') && isfield(Params, 'beta3')) && ...
@@ -269,25 +307,65 @@ if (isfield(Params, 'beta1') && isfield(Params, 'beta2') && isfield(Params, 'bet
     Params.beta = Params.beta_func(Params.beta1, Params.beta2, Params.beta3, Vol);
 end
 
+if isfield(Params, 'rDOC') && isfield(Params, 'rDOC_func')
+    Params.rDOC = Params.rDOC_func(Params.rDON);
+end
+if isfield(Params, 'rPOC') && isfield(Params, 'rPOC_func')
+    Params.rPOC = Params.rPOC_func(Params.rPON);
+end
+
 if (isfield(Params, 'delta_opt') && isfield(Params, 'sigG') && isfield(Params, 'phi')) && ...
         ~(isempty(Params.delta_opt) && isempty(Params.sigG) && isempty(Params.phi))
     Params.phi = exp(-log(FixedParams.delta ./ Params.delta_opt) .^ 2 ./ (2 .* Params.sigG .^ 2));
-    Params.phi(:,1:end-1) = Params.phi(:,1:end-1) ./ max(Params.phi(:,1:end-1));
-    Params.phi(:,end) = Params.phi(:,end) .* (Params.phi(end-1,end-1) ./ Params.phi(end,end));
+%     Params.phi = Params.phi ./ max(Params.phi, [], 2); % standardise so each predator may optimally graze some prey -- this messes up pred:prey size ratio effect
 end
 
-% Aggregate some parameters into matrices/arrays
+if isfield(Params, 'wPOM_func') && isfield(Params, 'wPOM1') && ~isempty(Params.wPOM1)
+    switch FixedParams.depthDependentPOMsinkSpeed
+        case false
+            nz = FixedParams.nz;
+            atDepth = Params.wPOM_func;
+            Params.wPOM_func = @(wPOM1) atDepth(wPOM1, nz);
+            Params.wPOM = Params.wPOM_func(Params.wPOM1);
+        case true
+            wmin = FixedParams.minSinkSpeed_POM;
+            wmax = FixedParams.maxSinkSpeed_POM;
+            z = abs(FixedParams.z);
+            atDepth = Params.wPOM_func;
+            Params.wPOM_func = @(wPOM1) atDepth(wPOM1, wmin, wmax, z);
+            Params.wPOM = Params.wPOM_func(Params.wPOM1);
+    end
+end
+if isfield(Params, 'wDOM_func') && isfield(Params, 'wDOM1') && ~isempty(Params.wDOM1)
+    nz = FixedParams.nz;
+    atDepth = Params.wDOM_func;
+    Params.wDOM_func = @(wDOM1) atDepth(wDOM1, nz);
+    Params.wDOM = Params.wDOM_func(Params.wDOM1);
+end
 
+
+% Aggregate some parameters into matrices/arrays
 if (isfield(Params, 'wDOM') && isfield(Params, 'wPOM')) && ...
         ~(isempty(Params.wDOM) || isempty(Params.wPOM))
-    Params.wk = Params.wk_func(Params.wDOM, Params.wPOM, ... 
-        FixedParams.DOM_index, FixedParams.POM_index);
+    makeArray = Params.wk_func;
+    DOM_i = FixedParams.DOM_index;
+    POM_i = FixedParams.POM_index;
+    nOM_nut = FixedParams.nOM_nut;
+    nOM_type = FixedParams.nOM_type;
+    nz = FixedParams.nz;    
+    reduceDim = @(x) x(1:end,:); % combines trailing array dimensions creating a 2D matrix
+    Params.wk_func = @(wDOM,wPOM) reduceDim(makeArray(wDOM, wPOM, DOM_i, POM_i) .* ones(nz, nOM_type, nOM_nut));
+    Params.wk = Params.wk_func(Params.wDOM, Params.wPOM); % Dimension [depth, OM type * nutrient]
 end
 
 if (isfield(Params, 'rDOC') && isfield(Params, 'rDON') && isfield(Params, 'rPOC') && isfield(Params, 'rPON')   ) && ...
         ~(isempty(Params.rDOC) || isempty(Params.rDON) || isempty(Params.rPOC) || isempty(Params.rPON) )
-    Params.rOM = Params.rOM_func(Params.rDOC, Params.rDON, Params.rPOC, Params.rPON, ... 
-        FixedParams.DOM_index, FixedParams.POM_index, FixedParams.OM_C_index, FixedParams.OM_N_index);
+    makeArray = Params.rOM_func;
+    DOM_i = FixedParams.DOM_index; POM_i = FixedParams.POM_index;
+    C_i = FixedParams.OM_C_index; N_i = FixedParams.OM_N_index;
+    Params.rOM_func = @(rDOC, rDON, rPOC, rPON) ...
+        makeArray(rDOC, rDON, rPOC, rPON, DOM_i, POM_i, C_i, N_i);
+    Params.rOM = Params.rOM_func(Params.rDOC, Params.rDON, Params.rPOC, Params.rPON);
 end
 
 
@@ -326,18 +404,6 @@ end
 
 
 %% auxiliary functions
-% function y = powerFunction(a, b, x, varargin)
-% y = a .* x .^ b;
-% if ~isempty(varargin)
-%     tr = strcmp(varargin, 'Transpose');
-%     if any(tr) && varargin{find(tr)+1}, y = y'; end
-%     ub = strcmp(varargin, 'UpperBound');
-%     if any(ub)
-%         cap = varargin{find(ub)+1};
-%         y(y>cap) = cap;
-%     end
-% end
-% end
 % 
 % function y = doubleLogisticFunction(a, b, c, x)
 % u = exp(x - c);
