@@ -23,7 +23,11 @@ loadFittedParams = true; % use output saved from optimisation run?
 fileName = 'fittedParameters';  % saved parameters file name
 % tag = '1';                      % and identifying tag
 % tag = 'N_LN-Dir_groupWaterOrigin';
-tag = 'Hellinger_MVN_groupWaterOrigin';
+
+tag = 'Hellinger2_groupWaterOrigin';
+
+% tag = 'Hellinger_MVN_groupWaterOrigin';10
+% tag = 'Hellinger_MVN_groupWaterOrigin_2';
 
 fileName = fullfile(Directories.resultsDir, ...
     [fileName '_' tag]);
@@ -67,8 +71,8 @@ if ~exist('v0', 'var') || ~isnumeric(v0)
     v0 = initialiseVariables(FixedParams, Params, Forc);
 end
 
-
 % Generate model outputs
+clear out auxVars modData
 tic; disp('.. started at'); disp(datetime('now'))
 [out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, ... 
     FixedParams.odeIntegrator, FixedParams.odeOptions);
@@ -214,7 +218,6 @@ switch save, case true
         filename = 'fitToData_BioVolSpectra_Atl_Z.png';
         print(pltBioVol_Atl_Z, fullfile(folder, filename), '-r300', '-dpng');
     end
-    
     
 end
 
