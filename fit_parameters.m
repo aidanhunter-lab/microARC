@@ -62,13 +62,14 @@ v0 = initialiseVariables(FixedParams, Params, Forc);
 % Choose which parameters to tune, the cost function, and numerical tuning algorithm
 [FixedParams, Params, Forc] = optimisationOptions(FixedParams, Params, Forc, ... 
     'niter', 10, ... 
-    'costFunctionType', 'Hellinger_MVN_groupWaterOrigin'); % extra arguments (e.g. 'niter') may be included as name-value pairs, or omitted for default values
+    'costFunctionType', 'Hellinger2_groupWaterOrigin'); % extra arguments (e.g. 'niter') may be included as name-value pairs, or omitted for default values
 
 restartRun = false; % restart algorithm from a saved prior run?
 switch restartRun, case true
     fileName_results = 'fittedParameters';  % saved parameters file name
 %     tag = '1';                              % and identifying tag
     tag = FixedParams.costFunction;
+%     tag = [tag '_2'];
     fileName_results = fullfile(Directories.resultsDir, ...
         [fileName_results '_' tag]);
     % Load stored results    
@@ -82,7 +83,6 @@ switch restartRun, case true
     optimiserOptions.InitialScoresMatrix = scoresOld;
 end
 
-
 % Call optimiser
 tic; disp('.. started at'); disp(datetime('now'))
 [optPar, fval, exitflag, output, population, scores] = optimise(@(x) ... 
@@ -92,7 +92,6 @@ tic; disp('.. started at'); disp(datetime('now'))
 optimisationTime = toc / 60 / 60; disp('.. finished at'); disp(datetime('now')); fprintf('\n')
 disp(['Optimisation time: ' num2str(floor(optimisationTime)) ' hrs, ' ...
     num2str(floor(mod(60*optimisationTime,60))) ' mins'])
-
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -128,7 +127,7 @@ saveParams = true;
 
 fileName_results = 'fittedParameters';  % choose file name
 tag = FixedParams.costFunction;         % and identifying tag
-% tag = '1';
+% tag = [tag '_2'];
 fileName_results = fullfile(Directories.resultsDir, ...
     [fileName_results '_' tag]);
 

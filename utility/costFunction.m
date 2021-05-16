@@ -46,9 +46,10 @@ Params = updateParameters(Params, FixedParams, pars);
 
 %% Match model outputs to data
 
-% Extract output from times and depths matching the data, then transform
-% the output using the same functions that standardised the data. The
-% resulting 'modData' should be comparable to the observations in 'Data'.
+% Extract model output from times and depths matching the data, then 
+% transform it using the same functions that standardised the data. The
+% resulting 'modData' should have the same structure as, and be directly 
+% comparable to, the observations in 'Data'.
 modData = matchModOutput2Data(out, auxVars, Data, FixedParams);
 
 
@@ -753,7 +754,189 @@ switch selectFunction
 %         disp(costComponents)
 %         disp(cost)
 
+    case 'Hellinger2_groupWaterOrigin'
+        % Calculate non-parameteric Hellinger distances for the scalar
+        % (nutrient) data and for size spectra vectors of relative
+        % abundance.
+        % Use a different, but comparable, metric for the total abundance
+        % data contained in the size spectra. This is necessary because
+        % these data do not form distributions so Hellinger distance is not
+        % applicable. Like the Hellinger distance, the metric takes values
+        % in the in the interval [0,1], with 0 represetning a perfect fit 
+        % and 1 being an extremely poor fit.
+        % This method makes zero assumptions about variability -- unlike
+        % the other methods which use variability across particle
+        % trajectories to create distributions. The Hellinger distances are
+        % calculated numerically instead of using formulas based on
+        % assumptions of Gaussian distributions. The scalar data are
+        % continuous and approximately Gaussian whereas the size spectra
+        % data are discrete, so Hellinger distance calculations are
+        % different for each...
+        
+        % Scalar data
+        for i = 1:length(Vars)
+            varLabel = Vars{i};
+            yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+            ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+            n = size(ymod, 1);
+            m = size(ymod, 2);
+            % As the standardised data are approximately normally distributed,
+            % we could assume that identically transformed model outputs
+            % are also normally distributed, then find their means and
+            % variances to calculate Hellinger distances analytically.
+            % However, assuming normality of transformed model output is
+            % inappropriate because it could be any shape...
+            % Thus, derive cdfs and pdfs directly without assuming that
+            % transformed model outputs follow normal distributions.
+            % To compare observed and modelled distributions, the pdfs will
+            % need to be evaluated across identical domains.
+            cdf = (1:n)' ./ n;
+            yobsc = sort(yobs); % sort observations
+            ymodc = sort(ymod);
+            % remove any duplicate values (more likely in model output than
+            % in data), retaining the largest probability values
+            keep = ~[diff(yobsc) == 0; false];
+            cdfobs = cdf(keep);
+            yobsc = yobsc(keep);
+            % store cdfmod as cell-array because vector lengths may differ
+            % after removing duplicates
+            keep = ~[diff(ymodc) == 0; false(1, m)];
+            cdfmod = cell(1, m);
+            ymodc_ = cell(1, m);
+            for ij = 1:m
+                cdfmod{:,ij} = cdf(keep(:,ij));
+                ymodc_{:,ij} = ymodc(keep(:,ij),ij);
+            end
+            % define regular grid across measurement space -- define number
+            % of grid nodes using the number of observations
+            vrange = [min([yobsc(:); ymodc(:)]), max([yobsc(:); ymodc(:)])];
+            grid = nan(n, 1);
+            grid(2:end) = linspace(vrange(1), vrange(2), n-1)';
+            sp = diff(grid(2:3));
+            grid(1) = grid(2) - sp;
+            % interpolate cdfs and derive pdfs
+            cdfobsi = interp1(yobsc, cdfobs, grid, 'linear', 'extrap');
+            cdfobsi(cdfobsi < min(cdfobs)) = 0;
+            cdfobsi(cdfobsi > 1) = 1;
+            pdfobsi = diff(cdfobsi);
+            cdfmodi = nan(n, m);
+            pdfmodi = nan(n-1, m);
+            for ij = 1:m
+                cdfmodi(:,ij) = interp1(ymodc_{ij}, cdfmod{ij}, grid, 'linear', 'extrap');
+                cdfmodi(cdfmodi(:,ij) < min(cdfmod{ij}), ij) = 0;
+                cdfmodi(cdfmodi(:,ij) > 1, ij) = 1;
+                pdfmodi(:,ij) = diff(cdfmodi(:,ij));
+            end
+            
+            hellingerDistance = (1 - sum((pdfobsi .* pdfmodi) .^ 0.5)) .^ 0.5;
+            
+            costComponents.(varLabel) = mean(hellingerDistance); % average over trajectory selections
+                        
+        end
+        
+        % Vector (size) data
+        a = log(3) / log(2); % steepness of cost metric for totl abudance
+        for i = 1:length(VarsSize)
+            varLabel = VarsSize{i};
+            ind0 = strcmp(Data.sizeFull.dataBinned.groupedByOrigin.Variable, varLabel);
+            waterMasses = unique(Data.sizeFull.dataBinned.groupedByOrigin.waterMass);
+            
+            for w = 1:length(waterMasses)
+                wm = waterMasses{w};
+                ind1 = ind0 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.waterMass, wm);
+                
+                % autotrophs
+                ind = ind1 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.trophicLevel, 'autotroph');
+                yobs = Data.sizeFull.dataBinned.groupedByOrigin.Value(ind);
+                ymod = modData.sizeFull.(['Value_' wm])(ind,:);
+                yobsTot = sum(yobs);
+                ymodTot = sum(ymod);
+                m = size(ymod, 2);
+                % Cost metric for relative abundance (vector)
+                cdfobs = cumsum(yobs) ./ yobsTot;
+                pdfobs = diff([0; cdfobs]);
+                cdfmod = cumsum(ymod) ./ ymodTot;
+                pdfmod = diff([zeros(1, m); cdfmod]);
+                hellingerDistance = (1 - sum((pdfobs .* pdfmod) .^ 0.5)) .^ 0.5;
+                costComponents.([varLabel '_' wm '_autotroph_Rel']) = mean(hellingerDistance); % average over trajectory selections
+                % Cost metric for total abundance (scalar)
+                u = abs(log(ymodTot / yobsTot));
+                u = exp(-a .* u);
+                z = (1 - u) ./ (1 + u);
+                costComponents.([varLabel '_' wm '_autotroph_Tot']) = mean(z); % average over trajectory selections
 
+                % heterotrophs
+                ind = ind1 & strcmp(Data.sizeFull.dataBinned.groupedByOrigin.trophicLevel, 'heterotroph');
+                yobs = Data.sizeFull.dataBinned.groupedByOrigin.Value(ind);
+                ymod = modData.sizeFull.(['Value_' wm])(ind,:);
+                yobsTot = sum(yobs);
+                ymodTot = sum(ymod);
+                m = size(ymod, 2);
+                % Cost metric for relative abundance (vector)
+                cdfobs = cumsum(yobs) ./ yobsTot;
+                pdfobs = diff([0; cdfobs]);
+                cdfmod = cumsum(ymod) ./ ymodTot;
+                pdfmod = diff([zeros(1, m); cdfmod]);
+                hellingerDistance = (1 - sum((pdfobs .* pdfmod) .^ 0.5)) .^ 0.5;
+                costComponents.([varLabel '_' wm '_heterotroph_Rel']) = mean(hellingerDistance);
+                % Cost metric for total abundance (scalar)
+                u = abs(log(ymodTot / yobsTot));
+                u = exp(-a .* u);
+                z = (1 - u) ./ (1 + u);
+                costComponents.([varLabel '_' wm '_heterotroph_Tot']) = mean(z); % average over trajectory selections
+                
+            end
+        end
+        
+        % Take averages across data-types to assign equal weightings to the
+        % scalar data and size data... Hmmm, this may down-weight size data
+%         cost = zeros(1,2);
+%         fields = fieldnames(costComponents);
+%         for i = 1:length(fields)
+%             if ismember(fields{i}, Vars)
+%                 % scalar data
+%                 cost(1) = cost(1) + costComponents.(fields{i});
+%             else
+%                 % size data
+%                 cost(2) = cost(2) + costComponents.(fields{i});
+%             end
+%         end
+%         cost(1) = cost(1) ./ length(Vars);
+%         cost(2) = cost(2) ./ (length(fields) - length(Vars));
+%         cost = mean(cost);
+        
+        cost = mean(struct2array(costComponents)); % all cost components equally weighted
+        
+        % Weight all data equally -- each complete size data (total & 
+        % relative) and nutrient data group gets equal weight.
+        % Within each size data group, upweight relative abundance-at-size
+        % relative to total abundance.
+        weight_relVsTot = 4; % weighting factor of relative vs total abundance
+        cost_ = zeros(2,length(waterMasses)); % store weighted costs for all size data groups
+        for i = 1:length(waterMasses)
+            wm = waterMasses{i};
+            ct = costComponents.([varLabel '_' wm '_autotroph_Tot']);
+            cr = costComponents.([varLabel '_' wm '_autotroph_Rel']);
+            cost_(1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [ct, cr]);
+            ct = costComponents.([varLabel '_' wm '_heterotroph_Tot']);
+            cr = costComponents.([varLabel '_' wm '_heterotroph_Rel']);
+            cost_(2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [ct, cr]);
+        end
+        
+        cost = zeros(1,length(Vars));
+        fields = fieldnames(costComponents);
+        for i = 1:length(Vars)
+            cost(i) = costComponents.(Vars{i});
+        end
+        
+        weight_sizeVsNutrient = 1; % weighting factor of size vs nutrient data
+        weights = 2 .* [1, weight_sizeVsNutrient] ./ (weight_sizeVsNutrient+1);
+        
+        cost = weights(1) .* cost;
+        cost_ = weights(2) .* cost_;
+        
+        cost = mean([cost(:); cost_(:)]);
+        
     case 'Hellinger_MVN_groupWaterOrigin'
         % Same cost function as 'Hellinger_groupWaterOrigin' except that
         % information on absolute abundances-at-size is included in the
