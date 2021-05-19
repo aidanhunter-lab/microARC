@@ -27,6 +27,9 @@ display(Directories)
 % pairs (preferable), or directly modified within modelSetUp.m
 [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
     'displayAllOutputs', true); % default set-up -- no plots
+% [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
+%     'displayAllOutputs', true, ...
+%     'useTraj', 1:50:5000); % default set-up -- no plots
 
 % Useful name-value pairs for modelSetUp.m include: useTraj, ESDmin, ESDmax, nsizes
 
@@ -76,12 +79,12 @@ v0 = initialiseVariables(FixedParams, Params, Forc);
 %                      organic matter      [type, depth, nutrient]
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-restartRun = false; % restart algorithm from a saved prior run?
+restartRun = true; % restart algorithm from a saved prior run?
 switch restartRun, case true
     fileName_results = 'fittedParameters';  % saved parameters file name
 %     tag = '1';                              % and identifying tag
     tag = FixedParams.costFunction;
-%     tag = [tag '_2'];
+    tag = [tag '_Atlantic'];
     fileName_results = fullfile(Directories.resultsDir, ...
         [fileName_results '_' tag]);
     % Load stored results    
@@ -143,7 +146,7 @@ saveParams = true;
 
 fileName_results = 'fittedParameters';  % choose file name
 tag = FixedParams.costFunction;         % and identifying tag
-% tag = [tag '_2'];
+tag = [tag '_Atlantic'];
 fileName_results = fullfile(Directories.resultsDir, ...
     [fileName_results '_' tag]);
 

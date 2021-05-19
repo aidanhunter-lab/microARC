@@ -184,8 +184,8 @@ if ~default
         end
     end
     Data.scalar.nSamples = length(Data.scalar.t);
-    Data.scalar = sortOrderData(Data.scalar);
-    
+%     Data.scalar = sortOrderData(Data.scalar);
+
     % Size data
     sizeData = Data.sizeFull;
     ev = unique(sizeData.Event);
@@ -236,7 +236,7 @@ if ~default
     % Simplify the size data struct
     Data = rmfield(Data, {'size','sizeFull'});
     Data.size = sizeData;
-    
+        
     %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     
     % Renumber sample events -- starting at 1
@@ -252,6 +252,14 @@ if ~default
     et = table(eventsOld);
     et = innerjoin(et, et_);
     Data.size.Event = et.eventsNew;
+    
+    %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
+    % If data, not needed for optimisation, has been discarded then
+    % re-standardise the remaining data
+    Data = standardiseFittingData(Data);
+    Data.scalar = sortOrderData(Data.scalar);
+
     
 else
     % Default - fitTrajectories either empty or not specified => use all

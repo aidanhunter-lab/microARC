@@ -94,9 +94,6 @@ if ~exist('ESD1', 'var')
 end
 
 
-% Use the same size classes for autotrophs and heterotrophs to ensure that
-% grazing pressure is unbiased across sizes
-
 % Initialise model parameters.
 % Values can be modified in defaultParameters.m, which is called from
 % within initialiseParameters.m.

@@ -24,7 +24,7 @@ fileName = 'fittedParameters';  % saved parameters file name
 % tag = '1';                      % and identifying tag
 % tag = 'N_LN-Dir_groupWaterOrigin';
 
-tag = 'Hellinger2_groupWaterOrigin';
+tag = 'Hellinger2_groupWaterOrigin_Atlantic';
 
 % tag = 'Hellinger_MVN_groupWaterOrigin';10
 % tag = 'Hellinger_MVN_groupWaterOrigin_2';
@@ -70,6 +70,11 @@ if ~exist('v0', 'var') || ~isnumeric(v0)
     % those here generated using "best-fitting" quota params...
     v0 = initialiseVariables(FixedParams, Params, Forc);
 end
+
+% % Try to manually improve fit to size data shape by adjusting some params
+% Params = updateParameters(Params, FixedParams, ... 
+%     'pmax_a', 1.5, 'pmax_b', -1.3863, ...
+%     'aN_QC_a', 0.3, 'Vmax_QC_b', 0.14);
 
 % Generate model outputs
 clear out auxVars modData

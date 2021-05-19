@@ -6,6 +6,10 @@ function x = setDirectories(varargin)
 % this setDirectories.m script.
 extractVarargin(varargin)
 
+% Main directory
+baseDir = fileparts(which('run_model'));
+x.baseDir = baseDir;
+
 % Choose model type
 if ~exist('bioModel', 'var')
     bioModelOptions = {'singlePredatorClass', 'multiplePredatorClasses', 'mixotrophy'};
@@ -37,9 +41,8 @@ if ~exist('forcDir', 'var')
 end
 x.forcDir = forcDir;
 x.forcDummy = 'particles_MODEL_DOMAIN_EXPERIMENT-YEAR_YEAR_t*iSub03.mat';
-
 if ~exist(forcDir, 'dir')
-    mkdir(forcDir)
+    mkdir(baseDir, forcDir)
 end
 
 % In-situ data directory
@@ -50,7 +53,7 @@ x.obsDir = obsDir;
 
 % Set/create results directory
 if ~exist('results', 'dir')
-    mkdir('results')
+    mkdir(baseDir, 'results')
     addpath results
 end
 resultsDir = fullfile('results', bioModel);
@@ -61,18 +64,28 @@ end
 x.resultsDir = resultsDir;
 
 % Output plot directory
-plotDir = fullfile(eval('resultsDir'), 'plots');
+plotDir = fullfile(resultsDir, 'plots');
 if ~exist(eval('plotDir'), 'dir')
-    mkdir(eval('resultsDir'), 'plots')
+    mkdir(resultsDir, 'plots')
     addpath(plotDir)
 end
 x.plotDir = plotDir;
 
+% Map topology directory
+topoDir = fullfile('MATLAB', 'map_tools', 'topo_mat');
+if ~exist(eval('topoDir'), 'dir')
+    mkdir(baseDir, topoDir)
+end
+x.topoDir = topoDir;
+if ~exist('topoName', 'var')
+    topoName = 'AWI-Hausgarten_topo_i';
+end
+x.topoName = topoName;
+
 % Model parameters (default or initial values)
 if ~exist('parFile', 'var')
-    parFile = 'parameterInitialValues_1.mat';
+    parFile = 'parameterInitialValues.mat';
 end
-
 initialParamDir = fullfile(resultsDir, parFile);
 initialsExist = ~isempty(parFile) && exist(initialParamDir, 'file');
 if ~initialsExist
@@ -80,3 +93,5 @@ if ~initialsExist
 end
 % paramName = ['parametersInitialValues_' x.bioModel '.mat'];
 x.initialParamDir = initialParamDir;
+
+
