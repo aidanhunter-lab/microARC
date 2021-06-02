@@ -2,34 +2,21 @@ function plt = plot_timeSeries_trajectoryPolygon(var, event, traj, out, ...
     auxVars, fixedParams, forcing, dat, varargin)
 
 plt = [];
-depth = 'mean';
-plotNew = true;
-fixedYaxis = false;
+extractVarargin(varargin)
 
-if ~isempty(varargin)
-    if any(strcmp(varargin, 'depth'))
-        depth = varargin{find(strcmp(varargin, 'depth'))+1};
-    end
-    
-    if any(strcmp(varargin, 'highlightColour'))
-        highlightColour = varargin{find(strcmp(varargin, 'highlightColour'))+1};
-    else
-        highlightColour = [0 1 0]; % green as default
-    end
-    
-    if any(strcmp(varargin, 'plotNew'))
-        plotNew = varargin{find(strcmp(varargin, 'plotNew'))+1};
-    end
-    
-    if any(strcmp(varargin, 'fixedYaxis'))
-        fixedYaxis = varargin{find(strcmp(varargin, 'fixedYaxis'))+1};
-    end
-    
-    if any(strcmp(varargin, 'waterMass'))
-        waterMass = varargin{find(strcmp(varargin, 'waterMass')) +1};
-    end
-    
+if ~exist('depth', 'var')
+    depth = 'mean';
 end
+if ~exist('highlightColour', 'var')
+    highlightColour = [0 1 0]; % green as default
+end
+if ~exist('plotNew', 'var')
+    plotNew = true;
+end
+if ~exist('fixedYaxis', 'var')
+    fixedYaxis = false;
+end
+
 
 nt = fixedParams.nt;
 nz = fixedParams.nz;
@@ -490,12 +477,12 @@ switch var
         
         Y = squeeze(P(:,:,fixedParams.PP_C_index,:,:));
         Y = repmat(reshape(fixedParams.zwidth, [1 nz]), [nPP_size 1]) .* Y; % conc -> quantity
-        Y = squeeze(sum(Y,2));
+        Y = squeeze(sum(Y,2,'omitnan')); % sum over depth
         
         YZ = squeeze(Z(:,:,fixedParams.ZP_C_index,:,:));
         if nZP_size == 1, YZ = reshape(YZ, [1 size(YZ)]); end
         YZ = repmat(reshape(fixedParams.zwidth, [1 nz]), [nZP_size 1]) .* YZ;
-        YZ = squeeze(sum(YZ,2));
+        YZ = squeeze(sum(YZ,2,'omitnan'));
         if nZP_size == 1, YZ = reshape(YZ, [1 size(YZ)]); end
         
         Y = cat(1, Y, YZ);

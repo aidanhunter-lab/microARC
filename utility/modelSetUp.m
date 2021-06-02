@@ -243,7 +243,6 @@ Data = sizeDataOrigin(Data);
 % reduce model run-times during parameter optimisation.
 Forc = latestSampleTime(Forc, Data);
 
-
 % Standardise the fitting data using linear mixed models to adjust for
 % variability due to depth and sampling event.
 if ~exist('plotScalarData', 'var')

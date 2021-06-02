@@ -89,7 +89,7 @@ switch restartRun, case true
         [fileName_results '_' tag]);
     % Load stored results    
     [~, results, ~, ~, boundsLower, boundsUpper, Data, Forc, FixedParams, Params, v0] = ...
-        loadOptimisationRun(fileName_results);    
+        loadOptimisationRun(fileName_results);
     populationOld = results.populationHistory(:,:,end);
     scoresOld = results.scoreHistory(:,end);
     optimiserOptions = results.optimiserOptions;
