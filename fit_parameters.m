@@ -27,6 +27,9 @@ display(Directories)
 % pairs (preferable), or directly modified within modelSetUp.m
 [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
     'displayAllOutputs', true); % default set-up -- no plots
+% [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
+%     'displayAllOutputs', true, ...
+%     'useTraj', 1:50:5000); % default set-up -- no plots
 
 % Useful name-value pairs for modelSetUp.m include: useTraj, ESDmin, ESDmax, nsizes
 
@@ -45,9 +48,26 @@ display(Directories)
 
 %% Optimise parameters
 
-% Parallelise integrations over trajectories
-poolObj = gcp('nocreate');
-if isempty(poolObj), poolObj = parpool('SpmdEnabled', false); end
+% Choose which parameters to tune, the cost function, and numerical tuning
+% algorithm. Can also select which data to fit / trajectories to run as
+% Arctic and/or Atlantic.
+[FixedParams, Params, Forc, Data] = ... 
+    optimisationOptions(FixedParams, Params, Forc, Data, ... 
+    'niter', 10, ... 
+    'costFunctionType', 'Hellinger2_groupWaterOrigin', ...
+   'fitTrajectories', 'Atlantic');
+% Optional arguments (e.g. 'niter') may be included as name-value pairs,
+% otherwise default values are used.
+% It is important to specify 'costFunctionType' as one of the options
+% available in costFunction.m.
+% The 'fitTrajectories' option is also important. It is used to select sets
+% of trajectories to use within the parameter optimisation. Set 
+% fitTrajectories = 'Atlantic' or 'Arctic' to use trajectories originating
+% from either region and the associated fitting data, or set
+% fitTrajectories = 'all' to fit to all data using using trajectories
+% originating from Arctic or Atlantic. Omit fitTrajectories or set it empty
+% ([]) to optimise using all trajectories and fitting to size data that is
+% aggregated over all samples.
 
 % Store state variables in array v0: 1st dimension = variable
 %                                    2nd dimension = location (trajectory)
@@ -59,22 +79,17 @@ v0 = initialiseVariables(FixedParams, Params, Forc);
 %                      organic matter      [type, depth, nutrient]
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-% Choose which parameters to tune, the cost function, and numerical tuning algorithm
-[FixedParams, Params, Forc] = optimisationOptions(FixedParams, Params, Forc, ... 
-    'niter', 10, ... 
-    'costFunctionType', 'Hellinger2_groupWaterOrigin'); % extra arguments (e.g. 'niter') may be included as name-value pairs, or omitted for default values
-
-restartRun = false; % restart algorithm from a saved prior run?
+restartRun = true; % restart algorithm from a saved prior run?
 switch restartRun, case true
     fileName_results = 'fittedParameters';  % saved parameters file name
 %     tag = '1';                              % and identifying tag
     tag = FixedParams.costFunction;
-%     tag = [tag '_2'];
+    tag = [tag '_Atlantic'];
     fileName_results = fullfile(Directories.resultsDir, ...
         [fileName_results '_' tag]);
     % Load stored results    
     [~, results, ~, ~, boundsLower, boundsUpper, Data, Forc, FixedParams, Params, v0] = ...
-        loadOptimisationRun(fileName_results);    
+        loadOptimisationRun(fileName_results);
     populationOld = results.populationHistory(:,:,end);
     scoresOld = results.scoreHistory(:,end);
     optimiserOptions = results.optimiserOptions;
@@ -83,10 +98,14 @@ switch restartRun, case true
     optimiserOptions.InitialScoresMatrix = scoresOld;
 end
 
+% Parallelise integrations over trajectories
+poolObj = gcp('nocreate');
+if isempty(poolObj), poolObj = parpool('SpmdEnabled', false); end
+
 % Call optimiser
 tic; disp('.. started at'); disp(datetime('now'))
 [optPar, fval, exitflag, output, population, scores] = optimise(@(x) ... 
-    costFunction(x, FixedParams, Params, Forc, Data, v0, FixedParams.odeIntegrator, ...
+    costCalc(x, FixedParams, Params, Forc, Data, v0, FixedParams.odeIntegrator, ...
     FixedParams.odeOptions, 'selectFunction', costFunctionLabel), ... 
     npars, [], [], [], [], boundsLower, boundsUpper, [], optimiserOptions);
 optimisationTime = toc / 60 / 60; disp('.. finished at'); disp(datetime('now')); fprintf('\n')
@@ -127,7 +146,7 @@ saveParams = true;
 
 fileName_results = 'fittedParameters';  % choose file name
 tag = FixedParams.costFunction;         % and identifying tag
-% tag = [tag '_2'];
+tag = [tag '_Atlantic'];
 fileName_results = fullfile(Directories.resultsDir, ...
     [fileName_results '_' tag]);
 
