@@ -317,7 +317,12 @@ end
 if (isfield(Params, 'delta_opt') && isfield(Params, 'sigG') && isfield(Params, 'phi')) && ...
         ~(isempty(Params.delta_opt) && isempty(Params.sigG) && isempty(Params.phi))
     Params.phi = exp(-log(FixedParams.delta ./ Params.delta_opt) .^ 2 ./ (2 .* Params.sigG .^ 2));
-%     Params.phi = Params.phi ./ max(Params.phi, [], 2); % standardise so each predator may optimally graze some prey -- this messes up pred:prey size ratio effect
+    % Standardise so that each predator may optimally graze some prey class.
+    % Otherwise the small predators cannot optimally graze so their
+    % experienced prey saturation is always low.
+    % This messes up the pred:prey size ratio effect, but modelled size 
+    % classes are actually intervals containing a range of sizes
+    Params.phi = Params.phi ./ max(Params.phi, [], 2);
 end
 
 if isfield(Params, 'wPOM_func') && isfield(Params, 'wPOM1') && ~isempty(Params.wPOM1)

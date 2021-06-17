@@ -94,9 +94,6 @@ if ~exist('ESD1', 'var')
 end
 
 
-% Use the same size classes for autotrophs and heterotrophs to ensure that
-% grazing pressure is unbiased across sizes
-
 % Initialise model parameters.
 % Values can be modified in defaultParameters.m, which is called from
 % within initialiseParameters.m.
@@ -246,7 +243,6 @@ Data = sizeDataOrigin(Data);
 % reduce model run-times during parameter optimisation.
 Forc = latestSampleTime(Forc, Data);
 
-
 % Standardise the fitting data using linear mixed models to adjust for
 % variability due to depth and sampling event.
 if ~exist('plotScalarData', 'var')
@@ -259,8 +255,15 @@ if ~exist('plotAllData', 'var')
     plotAllData = false;
 end
 
+if isfield(FixedParams,'NclineDepth')
+    NclineDepth = FixedParams.NclineDepth;
+else
+    NclineDepth = [];
+end
+
 Data = standardiseFittingData(Data, ...
-    'plotScalarData', plotScalarData, 'plotSizeData', plotSizeData, 'plotAllData', plotAllData);
+    'plotScalarData', plotScalarData, 'plotSizeData', plotSizeData, ...
+    'plotAllData', plotAllData, 'NclineDepth', NclineDepth);
 
 % Include extra fields indexing sorted order of data -- convenience for
 % plotting

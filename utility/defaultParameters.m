@@ -15,17 +15,25 @@ FixedParams.years = []; % number of modelled years (determined from forcing and 
 %~~~~~~~~~~~~~
 % Depth layers
 %~~~~~~~~~~~~~
-% FixedParams.nz     = 15;                                                   % number of modelled depth layers
+% Modelled layer width increases with depth => model has greater resolution
+% near surface waters. Define 2 depth zones: from the surface to depth
+% Hmain; and from depth Hmain to Htot. The 1st of these zones should be set
+% where the interesting plankton dynamics occurs -- where there's
+% sufficient light. Within this zone, the depth layer widths increase with
+% depth. The 2nd zone is included to model variables at depths below the 
+% nitrocline, and should be set with reference to nutrient data. This zone
+% is simply a single extra wide modelled layer.
 FixedParams.nz     = 9;                                                    % number of modelled depth layers
-% FixedParams.Htot   = 150;                                                  % total modelled depth
-FixedParams.Htot   = 80;                                                   % total modelled depth
+FixedParams.Hmain = 100;
+FixedParams.Htot  = 300;                                                   % total modelled depth
 FixedParams.dzmin  = 5;                                                    % minimum layer width (dzmin <= Htot/(nz-1))
-FixedParams.dzmax  = 2 * FixedParams.Htot / FixedParams.nz - ... 
+FixedParams.dzmax  = 2 * FixedParams.Hmain / (FixedParams.nz - 1) - ... 
     FixedParams.dzmin;                                                     % maximum layer width
 FixedParams.zwidth = linspace(FixedParams.dzmin, FixedParams.dzmax, ... 
-    FixedParams.nz)';                                                      % widths of depth layers
+    FixedParams.nz - 1)';                                                  % widths of depth layers
+FixedParams.zwidth = [FixedParams.zwidth; ... 
+    FixedParams.Htot - FixedParams.Hmain];
 FixedParams.zw     = [0; -cumsum(FixedParams.zwidth)];                     % depth of layer edges
-FixedParams.zwidth = FixedParams.zw(1:end-1) - FixedParams.zw(2:end);      % widths of depth layers
 FixedParams.z      = [];                                                   % midpoints of depth layers
 FixedParams.delz   = [];                                                   % distance between centres of adjacent depth layers
 
@@ -99,7 +107,7 @@ maxDepthLayerClearRate = 0.1;                              % max rate at which d
 FixedParams.maxSinkSpeed_P = maxDepthLayerClearRate .* ...
     min(FixedParams.zwidth);                               % max sinking speed of plankton (when this is too great the model becomes unstable because cells clear from depth layers too quickly)
 FixedParams.POM_is_lost  = true;                           % is POM lost from the system by sinking below bottom modelled depth layer
-
+FixedParams.NclineDepth = 110;                             % depth of N-cline -- in-situ data sampled below NclineDepth should not vary much with depth, check plots of data to set this parameter.
 
 %% Variable parameters
 
@@ -402,9 +410,9 @@ Bounds.Gmax_b = sort(log(-Bounds.Gmax_b)); % esimated on negative log scale
 % Bounds.k_G_a = [0, 10];
 % Bounds.k_G_b = [0, 1];
 
-Bounds.m_a = [FixedParams.m_min, 0.1];
+Bounds.m_a = [2 .* FixedParams.m_min, 0.1]; % if m_a=m_min then m_b becomes totally irrelevant => set lower bound of m_a > m_min
 Bounds.m_b = [-1, -1e-2]; % negativity ensures that mortality rate decreases with size
-Bounds.m_b = sort(log(-Bounds.m_b)); % estiamte on negative log scale
+Bounds.m_b = sort(log(-Bounds.m_b)); % estimate on negative log scale
 
 Bounds.beta1 = [0.5, 1];
 Bounds.beta2 = [0, 0.9];
