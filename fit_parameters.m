@@ -24,17 +24,12 @@ display(Directories)
 
 % Use default set-up to load and organise data and initialise model parameters.
 % Set-up may be modified here by passing some extra arguments as name-value
-% pairs (preferable), or directly modified within modelSetUp.m
+% pairs (preferable), or directly modified within modelSetUp.m. % Useful 
+% name-value pairs for modelSetUp.m include: useTraj, ESDmin, ESDmax, nsizes
 [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
     'displayAllOutputs', true); % default set-up -- no plots
-% [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
-%     'displayAllOutputs', true, ...
-%     'useTraj', 1:50:5000); % default set-up -- no plots
-
-% Useful name-value pairs for modelSetUp.m include: useTraj, ESDmin, ESDmax, nsizes
 
 % modelSetup.m may also produce plots -- set to 'true' any name-value pair as shown below
-
 % [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
 %     'plotCellConcSpectra', true, 'plotBioVolSpectra', true, ...
 %     'plotSizeClassIntervals', true, ...
@@ -102,7 +97,6 @@ end
 % Parallelise integrations over trajectories
 poolObj = gcp('nocreate');
 if isempty(poolObj), poolObj = parpool('SpmdEnabled', false); end
-
 
 % Call optimiser
 tic; disp('.. started at'); disp(datetime('now'))
