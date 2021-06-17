@@ -1,5 +1,6 @@
 function [dat, datFull] = setSizeClassIntervals(sizeData, varargin)
-% Specify cell size class intervals used in model
+% Specify cell size class intervals used in model / organise data into size
+% class bins
 
 extractVarargin(varargin)
 
@@ -262,8 +263,20 @@ switch Case
         
         % Assign all measurements to size class intervals
         for j = 1:ntrophicLevels
-            if strcmp(trophicLevels{j}, 'autotroph'), nsizes = nsizesP; end
-            if strcmp(trophicLevels{j}, 'heterotroph'), nsizes = nsizesZ; end
+            if strcmp(trophicLevels{j}, 'autotroph')
+                nsizes = nsizesP;
+                if ~isempty(FixedParams)
+                    cellDia = FixedParams.PPdia;
+                    cellDiaInt = FixedParams.PPdia_intervals;
+                end
+            end
+            if strcmp(trophicLevels{j}, 'heterotroph')
+                nsizes = nsizesZ;
+                if ~isempty(FixedParams)
+                    cellDia = FixedParams.ZPdia;
+                    cellDiaInt = FixedParams.ZPdia_intervals;
+                end
+            end
             
             datj = dat(strcmp(dat.trophicLevel, trophicLevels{j}),:);
             if j > 1
@@ -273,23 +286,20 @@ switch Case
             
             dat3 = dat2;
             
-            if ~isempty(FixedParams)
-                b = log10(FixedParams.PPdia_intervals);
-                m = FixedParams.PPdia;
+            if exist('cellDiaInt', 'var') && ~isempty(cellDiaInt)
                 for jk = nsizes:-1:1
-                    ind = dat3.log10ESD <= b(jk+1);
+                    ind = dat3.ESD <= cellDiaInt(jk+1);
                     dat3.sizeClass(ind) = jk; % assign size classes
-                    dat3.size(ind) = m(jk); % and mean sizes
+                    dat3.size(ind) = cellDia(jk); % and mean sizes
                 end
             else
-                b = linspace(lESDmin, lESDmax, nsizes+1); % interval edge positions
-                lm = 0.5 * (b(1:end-1) + b(2:end)); % interval midpoints
-                m = 10 .^ lm; % midpoint on natural scale
-                %             rm = round(m * 4) / 4; % round to 0.25
+                cellDiaInt = linspace(lESDmin, lESDmax, nsizes+1); % interval edge positions
+                logCellDia = 0.5 * (cellDiaInt(1:end-1) + cellDiaInt(2:end)); % interval midpoints
+                cellDia = 10 .^ logCellDia; % midpoint on natural scale
                 for jk = nsizes:-1:1
-                    ind = dat3.log10ESD <= b(jk+1);
+                    ind = dat3.log10ESD <= cellDiaInt(jk+1);
                     dat3.sizeClass(ind) = jk; % assign size classes
-                    dat3.size(ind) = m(jk); % and mean sizes
+                    dat3.size(ind) = cellDia(jk); % and mean sizes
                 end
             end
             
@@ -317,21 +327,14 @@ switch Case
                     ind = indjj & dat.sizeClass == k;
                     n = sum(ind);
                     x = log10(dat.ESD(ind));
-                    xd = diff(x);
                     % cell density (cells m^-3)
-                    y = dat.cellDensity(ind);
-                    ys = y(1:end-1) + y(2:end);
-                    CellConc = sum(0.5 * xd .* ys);
+                    CellConc = trapz(x, dat.cellDensity(ind));
                     dat.CellConc(ind) = repmat(CellConc, [n, 1]);
                     % biovolume (m^3 m^-3)
-                    y = dat.BioVolDensity(ind);
-                    ys = y(1:end-1) + y(2:end);
-                    BioVol = sum(0.5 * xd .* ys);
-                    dat.BioVol(ind) = repmat(BioVol, [n, 1]);
+                    BioVol = trapz(x, dat.BioVolDensity(ind));
+                    dat.BioVol(ind) = repmat(BioVol, [n, 1]);                    
                     % nitrogen concentration (mmol N m^-3)
-                    y = dat.Ndensity(ind);
-                    ys = y(1:end-1) + y(2:end);
-                    NConc = sum(0.5 * xd .* ys);
+                    NConc = trapz(x, dat.Ndensity(ind));
                     dat.NConc(ind) = repmat(NConc, [n, 1]);
                 end
             end
@@ -454,28 +457,36 @@ switch Case
                 datj.size = [];
                 datj.sizeClass = [];
             end
-            dat3 = dat2;
+            dat3 = dat2;            
+            if strcmp(trophicLevels{j}, 'autotroph')
+                nsizes = nsizesP;
+                if ~isempty(FixedParams)
+                    cellDia = FixedParams.PPdia;
+                    cellDiaInt = FixedParams.PPdia_intervals;
+                end
+            end
+            if strcmp(trophicLevels{j}, 'heterotroph')
+                nsizes = nsizesZ;
+                if ~isempty(FixedParams)
+                    cellDia = FixedParams.ZPdia;
+                    cellDiaInt = FixedParams.ZPdia_intervals;
+                end
+            end
             
-            if strcmp(trophicLevels{j}, 'autotroph'), nsizes = nsizesP; end
-            if strcmp(trophicLevels{j}, 'heterotroph'), nsizes = nsizesZ; end
-            
-            if ~isempty(FixedParams)
-                b = log10(FixedParams.PPdia_intervals);
-                m = FixedParams.PPdia;
+            if exist('cellDiaInt', 'var') && ~isempty(cellDiaInt)
                 for jk = nsizes:-1:1
-                    ind = dat3.log10ESD <= b(jk+1);
+                    ind = dat3.ESD <= cellDiaInt(jk+1);
                     dat3.sizeClass(ind) = jk; % assign size classes
-                    dat3.size(ind) = m(jk); % and mean sizes
+                    dat3.size(ind) = cellDia(jk); % and mean sizes
                 end
             else
-                b = linspace(lESDmin, lESDmax, nsizes+1); % interval edge positions
-                lm = 0.5 * (b(1:end-1) + b(2:end)); % interval midpoints
-                m = 10 .^ lm; % midpoint on natural scale
-                rm = round(m * 4) / 4; % round to 0.25
+                logCellDiaInt = linspace(lESDmin, lESDmax, nsizes+1); % interval edge positions
+                logCellDia = 0.5 * (logCellDiaInt(1:end-1) + logCellDiaInt(2:end)); % interval midpoints
+                cellDia = 10 .^ logCellDia; % midpoint on natural scale
                 for jk = nsizes:-1:1
-                    ind = dat3.log10ESD <= b(jk+1);
+                    ind = dat3.log10ESD <= logCellDiaInt(jk+1);
                     dat3.sizeClass(ind) = jk; % assign size classes
-                    dat3.size(ind) = rm(jk); % and mean sizes
+                    dat3.size(ind) = cellDia(jk); % and mean sizes
                 end
             end
             
@@ -507,16 +518,11 @@ switch Case
                         ind = indjd & datFull.sizeClass == k;
                         n = sum(ind);
                         x = log10(datFull.ESD(ind));
-                        xd = diff(x);
                         % cell density (cells m^-3)
-                        y = datFull.cellDensity(ind);
-                        ys = y(1:end-1) + y(2:end);
-                        CellConc = sum(0.5 * xd .* ys);
+                        CellConc = trapz(x, datFull.cellDensity(ind));                        
                         datFull.CellConc(ind) = repmat(CellConc, [n, 1]);
                         % biovolume (m^3 m^-3)
-                        y = datFull.BioVolDensity(ind);
-                        ys = y(1:end-1) + y(2:end);
-                        BioVol = sum(0.5 * xd .* ys);
+                        BioVol = trapz(x, datFull.BioVolDensity(ind));
                         datFull.BioVol(ind) = repmat(BioVol, [n, 1]);
                     end
                 end

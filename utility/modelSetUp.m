@@ -55,7 +55,7 @@ Data = prepareFittingData(obsDir, ...
     'plotBioVolSpectra', plotBioVolSpectra);
 
 % Choose number of modelled size class intervals using function
-% chooseSizeClassIntervals.m
+% setSizeClassIntervals.m
 % min/max sizes to retain from the data
 if ~exist('ESDmin', 'var')
     ESDmin = 1;
@@ -85,12 +85,14 @@ if ~exist('plotSizeClassIntervals', 'var')
 end
 
 % Choose number of modelled size classes
-% setVariable('nsizes', 8)
 if ~exist('nsizes', 'var')
-   nsizes = 8;
+   nsizes = 9;
 end
-% Use the same size classes for autotrophs and heterotrophs to ensure that
-% grazing pressure is unbiased across sizes
+% And cell diameter of smallest class
+if ~exist('ESD1', 'var')
+    ESD1 = 1.5;
+end
+
 
 % Initialise model parameters.
 % Values can be modified in defaultParameters.m, which is called from
@@ -102,8 +104,9 @@ if ~exist('initialParamDir', 'var')
     initialParamDir = [];
 end
 [FixedParams, Params] = initialiseParameters(F, bioModel, ... 
-    'ESDmin', ESDmin, 'ESDmax', ESDmax, 'nsizes', nsizes,  ...
+    'ESDmin', ESDmin, 'ESDmax', ESDmax, 'ESD1', ESD1, 'nsizes', nsizes,  ...
     'parFile', initialParamDir);
+nsizes = FixedParams.nPP_size;
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % Parameter values should not be changed by directly modifying Params
@@ -206,10 +209,10 @@ Forc = Forc_; clear Forc_
 Data = omitUnmatchedEvents(Data, eventTraj, Forc);
 % [Data, eventTraj] = omitUnmatchedEvents(Data, eventTraj, Forc);
 
-% For each trajectory, find the time of the latest sampling event.
-% Integrations along trajectories can then be stopped at these events to
-% reduce model run-times during parameter optimisation.
-Forc = latestSampleTime(Forc, Data);
+% % For each trajectory, find the time of the latest sampling event.
+% % Integrations along trajectories can then be stopped at these events to
+% % reduce model run-times during parameter optimisation.
+% Forc = latestSampleTime(Forc, Data);
 
 % Group sampling events by origin of particles: Arctic or Atlantic.
 % Each individual trajectory is either of Atlantic or Arctic origin
@@ -224,8 +227,21 @@ if ~exist('dendrogramPlot', 'var')
     dendrogramPlot = false;
 end
 
-[Forc, Data.scalar] = particleOrigin(Forc, Data.scalar, ...
+% [Forc, Data.scalar] = particleOrigin(Forc, Data.scalar, ...
+%     'trajectoryPlot', trajectoryPlot, 'dendrogramPlot', dendrogramPlot); pause(0.25)
+[Forc, Data] = particleOrigin(Forc, Data, ...
     'trajectoryPlot', trajectoryPlot, 'dendrogramPlot', dendrogramPlot); pause(0.25)
+
+
+% Group size data by water origin -- find average spectra using
+% measurements from events whose trajectories all orginate from either the
+% Arctic or the Atlantic
+Data = sizeDataOrigin(Data);
+
+% For each trajectory, find the time of the latest sampling event.
+% Integrations along trajectories can then be stopped at these events to
+% reduce model run-times during parameter optimisation.
+Forc = latestSampleTime(Forc, Data);
 
 % Standardise the fitting data using linear mixed models to adjust for
 % variability due to depth and sampling event.
@@ -239,8 +255,15 @@ if ~exist('plotAllData', 'var')
     plotAllData = false;
 end
 
+if isfield(FixedParams,'NclineDepth')
+    NclineDepth = FixedParams.NclineDepth;
+else
+    NclineDepth = [];
+end
+
 Data = standardiseFittingData(Data, ...
-    'plotScalarData', plotScalarData, 'plotSizeData', plotSizeData, 'plotAllData', plotAllData);
+    'plotScalarData', plotScalarData, 'plotSizeData', plotSizeData, ...
+    'plotAllData', plotAllData, 'NclineDepth', NclineDepth);
 
 % Include extra fields indexing sorted order of data -- convenience for
 % plotting
