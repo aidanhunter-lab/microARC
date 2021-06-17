@@ -54,7 +54,7 @@ display(Directories)
 [FixedParams, Params, Forc, Data] = ... 
     optimisationOptions(FixedParams, Params, Forc, Data, ... 
     'niter', 10, ... 
-    'costFunctionType', 'Hellinger2_groupWaterOrigin', ...
+    'costFunctionType', 'IQD_Hellinger_groupWaterOrigin', ...
    'fitTrajectories', 'Atlantic');
 % Optional arguments (e.g. 'niter') may be included as name-value pairs,
 % otherwise default values are used.
@@ -85,6 +85,7 @@ switch restartRun, case true
 %     tag = '1';                              % and identifying tag
     tag = FixedParams.costFunction;
     tag = [tag '_Atlantic'];
+%     tag = [tag '_fittedMortalityIntercept_Arctic'];
     fileName_results = fullfile(Directories.resultsDir, ...
         [fileName_results '_' tag]);
     % Load stored results    
@@ -101,6 +102,7 @@ end
 % Parallelise integrations over trajectories
 poolObj = gcp('nocreate');
 if isempty(poolObj), poolObj = parpool('SpmdEnabled', false); end
+
 
 % Call optimiser
 tic; disp('.. started at'); disp(datetime('now'))
@@ -147,6 +149,8 @@ saveParams = true;
 fileName_results = 'fittedParameters';  % choose file name
 tag = FixedParams.costFunction;         % and identifying tag
 tag = [tag '_Atlantic'];
+% tag = [tag '_Arctic'];
+% tag = [tag '_fittedMortalityIntercept_Arctic'];
 fileName_results = fullfile(Directories.resultsDir, ...
     [fileName_results '_' tag]);
 

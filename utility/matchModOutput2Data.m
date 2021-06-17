@@ -7,6 +7,15 @@ function modData = matchModOutput2Data(out, auxVars, Data, FixedParams)
 % Then model outputs are transformed using the same functions that
 % standardised the data.
 
+ntrajOut = size(out.N, ndims(out.N));
+ntrajData = size(Data.scalar.EventTraj, 2);
+
+if ntrajOut ~= ntrajData
+    warning('Number of trajectories in model output "out" does not equal number of trajectories used in from the Data.')
+end
+
+
+
 %% Scalar data
 Vars = Data.scalar.obsInCostFunction;
 
@@ -20,6 +29,7 @@ depths_mod = abs(FixedParams.z); % modelled depth layers
 % field, only the fields required for the cost function.
 modData.scalar.Yearday = nan(Data.scalar.nSamples,1);
 modData.scalar.Depth = nan(Data.scalar.nSamples,1);
+modData.scalar.waterMass = cell(Data.scalar.nSamples,1);
 modData.scalar.Variable = cell(Data.scalar.nSamples,1);
 modData.scalar.Value = nan(Data.scalar.nSamples, nsamples);
 modData.scalar.scaled_Value = modData.scalar.Value;
@@ -32,10 +42,13 @@ for i = 1:nEvent
     vars = vars(ismember(vars, Vars));
     iEvent = ismember(Data.scalar.Variable, vars) & iEvent; % omit unmodelled variables from the event index
     Yearday = Data.scalar.Yearday(find(iEvent, 1));
-    Depth = Data.scalar.Depth(iEvent);    
+    Depth = Data.scalar.Depth(iEvent);
+    clear waterMass
+    [waterMass{1:sum(iEvent),1}] = deal(Data.scalar.waterMass{i});
     Variable = Data.scalar.Variable(iEvent);
     modData.scalar.Yearday(iEvent) = Yearday;
     modData.scalar.Depth(iEvent) = Depth;
+    modData.scalar.waterMass(iEvent) = waterMass;
     modData.scalar.Variable(iEvent) = Variable;
     for j = 1:length(vars)
         % loop through all data types sampled during event i
@@ -66,6 +79,10 @@ for i = 1:nEvent
         modData.scalar.scaled_Value(ind,:) = ymod_scaled;
     end
 end
+
+% Input names of measurements not included in model/cost function
+modData.scalar.Variable(~Data.scalar.inCostFunction) = ... 
+    Data.scalar.Variable(~Data.scalar.inCostFunction);
 
 
 %% Size spectra

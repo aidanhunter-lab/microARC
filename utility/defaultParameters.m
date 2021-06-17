@@ -107,7 +107,7 @@ maxDepthLayerClearRate = 0.1;                              % max rate at which d
 FixedParams.maxSinkSpeed_P = maxDepthLayerClearRate .* ...
     min(FixedParams.zwidth);                               % max sinking speed of plankton (when this is too great the model becomes unstable because cells clear from depth layers too quickly)
 FixedParams.POM_is_lost  = true;                           % is POM lost from the system by sinking below bottom modelled depth layer
-
+FixedParams.NclineDepth = 110;                             % depth of N-cline -- in-situ data sampled below NclineDepth should not vary much with depth, check plots of data to set this parameter.
 
 %% Variable parameters
 
@@ -410,9 +410,9 @@ Bounds.Gmax_b = sort(log(-Bounds.Gmax_b)); % esimated on negative log scale
 % Bounds.k_G_a = [0, 10];
 % Bounds.k_G_b = [0, 1];
 
-Bounds.m_a = [FixedParams.m_min, 0.1];
+Bounds.m_a = [2 .* FixedParams.m_min, 0.1]; % if m_a=m_min then m_b becomes totally irrelevant => set lower bound of m_a > m_min
 Bounds.m_b = [-1, -1e-2]; % negativity ensures that mortality rate decreases with size
-Bounds.m_b = sort(log(-Bounds.m_b)); % estiamte on negative log scale
+Bounds.m_b = sort(log(-Bounds.m_b)); % estimate on negative log scale
 
 Bounds.beta1 = [0.5, 1];
 Bounds.beta2 = [0, 0.9];

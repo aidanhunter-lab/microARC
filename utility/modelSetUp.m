@@ -255,8 +255,15 @@ if ~exist('plotAllData', 'var')
     plotAllData = false;
 end
 
+if isfield(FixedParams,'NclineDepth')
+    NclineDepth = FixedParams.NclineDepth;
+else
+    NclineDepth = [];
+end
+
 Data = standardiseFittingData(Data, ...
-    'plotScalarData', plotScalarData, 'plotSizeData', plotSizeData, 'plotAllData', plotAllData);
+    'plotScalarData', plotScalarData, 'plotSizeData', plotSizeData, ...
+    'plotAllData', plotAllData, 'NclineDepth', NclineDepth);
 
 % Include extra fields indexing sorted order of data -- convenience for
 % plotting

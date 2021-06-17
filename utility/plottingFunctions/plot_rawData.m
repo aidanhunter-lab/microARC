@@ -41,6 +41,19 @@ end
 if ~exist('legendPosition', 'var')
     legendPosition = 'southwest';
 end
+if ~exist('legendTextSize', 'var')
+    legendTextSize = 10;
+end
+if ~exist('legendTitle', 'var')
+    legendTitle = [];
+end
+if ~exist('legendTitleSize', 'var')
+    legendTitleSize = 10;
+end
+
+if ~exist('axesTextSize', 'var')
+    axesTextSize = 10;
+end
 
 if ~exist('groupAutotroph', 'var')
     groupAutotroph = false;
@@ -101,6 +114,9 @@ switch Type
             case 'chl_a'
                 xLab = 'chl-a (mg m^{-3})';
         end
+        
+        set(gca, 'FontSize', axesTextSize)
+
         xlabel(xLab)
         ylabel('depth (m)')
         gc = gca;
@@ -123,8 +139,12 @@ switch Type
             yl(2) = yl(2) + adj * yld;
         end
         gc.YLim = yl;
+                        
         switch includeLegend, case true
-            legend(waterMass, 'Location', legendPosition)
+            leg = legend(waterMass, 'Location', legendPosition);
+            leg.Title.String = legendTitle;
+            leg.Title.FontSize  = legendTitleSize;
+            leg.FontSize = legendTextSize;            
         end
         
         
@@ -213,9 +233,12 @@ switch Type
                 '--', 'Color', colArctic);
             hold off
             switch includeLegend, case true
-                legend('Atlantic autotrophs', 'Atlantic heterotrophs', ...
+                leg = legend('Atlantic autotrophs', 'Atlantic heterotrophs', ...
                     'Arctic autotrophs', 'Arctic heterotrophs', ...
-                    'Location', legendPosition)
+                    'Location', legendPosition);
+                leg.Title.String = legendTitle;
+                leg.Title.FontSize  = legendTitleSize;
+                leg.FontSize = legendTextSize;
             end
         elseif sum(plotGroups) > 1
             error('Of the 4 plotGroups options ("groupAutotroph", "groupHeterotroph", "groupAtlantic", "groupArctic") only 1 at a time may be true.')
@@ -227,8 +250,11 @@ switch Type
                 'Color', colArctic);
             hold off
             switch includeLegend, case true
-                legend('Atlantic autotrophs', 'Arctic autotrophs', ... 
-                    'Location', legendPosition)
+                leg = legend('Atlantic autotrophs', 'Arctic autotrophs', ... 
+                    'Location', legendPosition);
+                leg.Title.String = legendTitle;
+                leg.Title.FontSize  = legendTitleSize;
+                leg.FontSize = legendTextSize;
             end
         elseif groupHeterotroph
             plt = loglog(x,values(:,Atlantic,heterotroph), ...
@@ -238,8 +264,11 @@ switch Type
                 '--', 'Color', colArctic);
             hold off
             switch includeLegend, case true
-                legend('Atlantic heterotrophs', 'Arctic heterotrophs', ...
-                    'Location', legendPosition)
+                leg = legend('Atlantic heterotrophs', 'Arctic heterotrophs', ...
+                    'Location', legendPosition);
+                leg.Title.String = legendTitle;
+                leg.Title.FontSize  = legendTitleSize;
+                leg.FontSize = legendTextSize;
             end
         elseif groupAtlantic
             plt = loglog(x,values(:,Atlantic,autotroph), ...
@@ -260,11 +289,16 @@ switch Type
                 '--', 'Color', colArctic);
             hold off
             switch includeLegend, case true
-                legend('Arctic autotrophs', 'Arctic heterotrophs', ...
-                    'Location', legendPosition)
+                leg = legend('Arctic autotrophs', 'Arctic heterotrophs', ...
+                    'Location', legendPosition);
+                leg.Title.String = legendTitle;
+                leg.Title.FontSize  = legendTitleSize;
+                leg.FontSize = legendTextSize;
             end
         end
-                    
+        
+        set(gca, 'FontSize', axesTextSize)
+
         gc = gca;
         if isempty(Ylim)
             switch group
@@ -351,12 +385,13 @@ switch Type
         gc.XTickLabel = round(unique([x_auto; x_hetero]), 2, 'significant');
         
         switch includeLegend, case true
-            legend('Atlantic autotrophs', 'Atlantic heterotrophs', ...
+            leg = legend('Atlantic autotrophs', 'Atlantic heterotrophs', ...
                 'Arctic autotrophs', 'Arctic heterotrophs', ...
-                'Location', legendPosition)
+                'Location', legendPosition);
+            leg.Title.String = legendTitle;
+            leg.Title.FontSize  = legendTitleSize;
+            leg.FontSize = legendTextSize;
         end
-
-        
 end
 
 % old below, new above        

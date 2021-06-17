@@ -14,7 +14,9 @@ costFunctionChoices = { ...
     'N_LN-Dir_groupWaterOrigin', ...
     'Hellinger_groupWaterOrigin', ...
     'Hellinger2_groupWaterOrigin', ...
-    'Hellinger_MVN_groupWaterOrigin'
+    'Hellinger3_groupWaterOrigin', ...
+    'Hellinger_MVN_groupWaterOrigin', ...
+    'IQD_Hellinger_groupWaterOrigin'
     };
 
 % Evaluating cost requires passing name-value pairs for 'label', 'Data' and
@@ -98,6 +100,7 @@ else
                 % of grid nodes, ng, relative to number of observations, n.
                 vrange = [min([yobsc(:); ymodc(:)]), max([yobsc(:); ymodc(:)])];
                 nr = 1; % choice of grid resolution influences cost values... is there a better way to do this, or a principled way to choose grid resolution?
+%                 ng = 9; 
                 ng = ceil(nr * n);
                 grid = nan(ng, 1);
                 grid(2:end) = linspace(vrange(1), vrange(2), ng-1)';
@@ -229,7 +232,325 @@ else
             cost = weights .* cost;
             
             cost = mean(cost); % finally, average cost over nutrient and size data components
+            
+            
+            
+        case 'Hellinger3_groupWaterOrigin'
+            
+            % Scalar data
+            for i = 1:length(Vars)
+                varLabel = Vars{i};
+                yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+                ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+                n = size(ymod, 1);
+                m = size(ymod, 2);
+                yobsc = sort(yobs); % sort observations
+                ymodc = sort(ymod);
+                cdf = (1:n)' ./ n;
+                % remove any duplicate values (more likely in model output than
+                % in data), retaining the largest probability values
+                keep = ~[diff(yobsc) == 0; false];
+                cdfobs = cdf(keep);
+                yobsc = yobsc(keep);
+                % store cdfmod as cell-array because vector lengths may differ
+                % after removing duplicates
+                keep = ~[diff(ymodc) == 0; false(1, m)];
+                cdfmod = cell(1, m);
+                ymodc_ = cell(1, m);
+                for ij = 1:m
+                    cdfmod{:,ij} = cdf(keep(:,ij));
+                    ymodc_{:,ij} = ymodc(keep(:,ij),ij);
+                end
+                
+                % interpolate data-CDF over modelled query points
+                cdfobsi = cell(1,m);
+                for ij = 1:m
+                    cdfobsi{ij} = interp1(yobsc, cdfobs, ymodc_{ij}, 'linear', 'extrap');
+                    cdfobsi{ij}(cdfobsi{ij} < 0) = 0;
+                    cdfobsi{ij}(cdfobsi{ij} > 1) = 1;
+                end
+                % distances between each modelled CDF value and equivalent
+                % data-CDF value, and use average distance as the metric
+                cdfDist = cell(1,m);
+                avDist = nan(1,m);
+                for ij = 1:m
+                    cdfDist{ij} = abs(cdfobsi{ij} - cdfmod{ij});
+                    avDist(ij) = mean(cdfDist{ij});
+                end
+                costComponents.(varLabel) = mean(avDist); % average over trajectory selections
+            end
+                
+                
+            % Vector (size) data
+            groupedByWaterOrigin = isfield(Data.size.dataBinned, 'waterMass');
+            a = log(3) / log(2); % steepness of cost metric for total abundance
+            for i = 1:length(VarsSize)
+                varLabel = VarsSize{i};
+                ind0 = strcmp(Data.size.dataBinned.Variable, varLabel);
+                if groupedByWaterOrigin
+                    waterMasses = unique(Data.size.dataBinned.waterMass);
+                else
+                    waterMasses = {[]};
+                end
+                for w = 1:length(waterMasses)
+                    wm = waterMasses{w};
+                    ind1 = ind0;
+                    if groupedByWaterOrigin
+                        ind1 = ind0 & strcmp(Data.size.dataBinned.waterMass, wm);
+                    end
+                    if groupedByWaterOrigin
+                        label_autoRel = [varLabel '_' wm '_autotroph_Rel'];
+                        label_autoTot = [varLabel '_' wm '_autotroph_Tot'];
+                        label_heteroRel = [varLabel '_' wm '_heterotroph_Rel'];
+                        label_heteroTot = [varLabel '_' wm '_heterotroph_Tot'];
+                    else
+                        label_autoRel = [varLabel '_autotroph_Rel'];
+                        label_autoTot = [varLabel '_autotroph_Tot'];
+                        label_heteroRel = [varLabel '_heterotroph_Rel'];
+                        label_heteroTot = [varLabel '_heterotroph_Tot'];
+                    end
+                    
+                    % autotrophs
+                    ind = ind1 & strcmp(Data.size.dataBinned.trophicLevel, 'autotroph');
+                    yobs = Data.size.dataBinned.Value(ind);
+                    ymod = modData.size.Value(ind,:);
+                    nsize = size(ymod, 1);
+                    ymod = reshape(ymod(~isnan(ymod)), nsize, []); % remove NaNs ymod contains when fitting to Arctic AND Atlantic data
+                    nsample = size(ymod, 2);
+                    yobsTot = sum(yobs);
+                    ymodTot = sum(ymod);
+                    % Cost metric for relative abundance (vector)
+                    cdfobs = cumsum(yobs) ./ yobsTot;
+                    pdfobs = diff([0; cdfobs]);
+                    cdfmod = cumsum(ymod) ./ ymodTot;
+                    pdfmod = diff([zeros(1, nsample); cdfmod]);
+                    hellingerDistance = (1 - sum((pdfobs .* pdfmod) .^ 0.5)) .^ 0.5;
+                    costComponents.(label_autoRel) = mean(hellingerDistance); % average over trajectory selections
+                    % Cost metric for total abundance (scalar)
+                    u = abs(log(ymodTot / yobsTot));
+                    u = exp(-a .* u);
+                    z = (1 - u) ./ (1 + u);
+                    costComponents.(label_autoTot) = mean(z); % average over trajectory selections
+                    
+                    % heterotrophs
+                    ind = ind1 & strcmp(Data.size.dataBinned.trophicLevel, 'heterotroph');
+                    yobs = Data.size.dataBinned.Value(ind);
+                    ymod = modData.size.Value(ind,:);
+                    nsize = size(ymod, 1);
+                    ymod = reshape(ymod(~isnan(ymod)), nsize, []); % remove NaNs ymod contains when fitting to Arctic AND Atlantic data
+                    nsample = size(ymod, 2);
+                    yobsTot = sum(yobs);
+                    ymodTot = sum(ymod);
+                    % Cost metric for relative abundance (vector)
+                    cdfobs = cumsum(yobs) ./ yobsTot;
+                    pdfobs = diff([0; cdfobs]);
+                    cdfmod = cumsum(ymod) ./ ymodTot;
+                    pdfmod = diff([zeros(1, nsample); cdfmod]);
+                    hellingerDistance = (1 - sum((pdfobs .* pdfmod) .^ 0.5)) .^ 0.5;
+                    costComponents.(label_heteroRel) = mean(hellingerDistance);
+                    % Cost metric for total abundance (scalar)
+                    u = abs(log(ymodTot / yobsTot));
+                    u = exp(-a .* u);
+                    z = (1 - u) ./ (1 + u);
+                    costComponents.(label_heteroTot) = mean(z); % average over trajectory selections
+                end
+            end
+            
+            % Within each size data group, weight relative abundance-at-size
+            % relative to total abundance.
+            weight_relVsTot = 3; % weighting factor of relative vs total abundance
+            costSize = zeros(2,length(waterMasses)); % store weighted costs for all size data groups
+            for i = 1:length(waterMasses)
+                wm = waterMasses{i};
+                if groupedByWaterOrigin
+                    cta = costComponents.([varLabel '_' wm '_autotroph_Tot']);
+                    cra = costComponents.([varLabel '_' wm '_autotroph_Rel']);
+                    cth = costComponents.([varLabel '_' wm '_heterotroph_Tot']);
+                    crh = costComponents.([varLabel '_' wm '_heterotroph_Rel']);
+                else
+                    cta = costComponents.([varLabel '_autotroph_Tot']);
+                    cra = costComponents.([varLabel '_autotroph_Rel']);
+                    cth = costComponents.([varLabel '_heterotroph_Tot']);
+                    crh = costComponents.([varLabel '_heterotroph_Rel']);
+                end
+                costSize(1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
+                costSize(2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
+            end
+                        
+            costNutrient = zeros(1,length(Vars));
+            for i = 1:length(Vars)
+                costNutrient(i) = costComponents.(Vars{i});
+            end
+            
+            % Average the cost across data-types (nutrient & size)
+            cost = [mean(costNutrient), mean(costSize(:))];
+            % Assign size vs nutrient weighting
+            weight_sizeVsNutrient = 1; % weighting factor of size vs nutrient data
+            weights = 2 .* [1, weight_sizeVsNutrient] ./ (weight_sizeVsNutrient+1);
+            cost = weights .* cost;
+            
+            cost = mean(cost); % finally, average cost over nutrient and size data components
 
+            
+            
+        case 'IQD_Hellinger_groupWaterOrigin'
+            
+            % Scalar data
+            for i = 1:length(Vars)
+                varLabel = Vars{i};
+                yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+                ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+                n = size(ymod, 1);
+                m = size(ymod, 2);
+                yobsc = sort(yobs); % sort observations
+                ymodc = sort(ymod);
+                cdf = (1:n)' ./ n;
+                % remove any duplicate values (more likely in model output than
+                % in data), retaining the largest probability values
+                keep = ~[diff(yobsc) == 0; false];
+                cdfobs = cdf(keep);
+                yobsc = yobsc(keep);
+                % store cdfmod as cell-array because vector lengths may differ
+                % after removing duplicates
+                keep = ~[diff(ymodc) == 0; false(1, m)];
+                cdfmod = cell(1, m);
+                ymodc_ = cell(1, m);
+                for ij = 1:m
+                    cdfmod{:,ij} = cdf(keep(:,ij));
+                    ymodc_{:,ij} = ymodc(keep(:,ij),ij);
+                end
+                
+                % interpolate modelled CDFs over query points defined by
+                % the data
+                cdfmodi = cell(1,m);
+                for ij =1:m
+                    cdfmodi{ij} = interp1(ymodc_{ij}, cdfmod{ij}, yobsc, 'linear', 'extrap');
+                    cdfmodi{ij}(cdfmodi{ij} < 0) = 0;
+                    cdfmodi{ij}(cdfmodi{ij} > 1) = 1;
+                end
+                
+                % distances between each data CDF value and equivalent 
+                % modelled CDF value -- use average distance as the metric
+                cdfDist = cell(1,m);
+                avDist = nan(1,m);
+                for ij = 1:m
+                    cdfDist{ij} = (cdfobs - cdfmodi{ij}) .^ 2;
+                    avDist(ij) = mean(cdfDist{ij}) .^ 0.5;
+                end
+                costComponents.(varLabel) = mean(avDist); % average over trajectory selections
+            end    
+                
+            % Vector (size) data
+            groupedByWaterOrigin = isfield(Data.size.dataBinned, 'waterMass');
+            a = log(3) / log(2); % steepness of cost metric for total abundance
+            for i = 1:length(VarsSize)
+                varLabel = VarsSize{i};
+                ind0 = strcmp(Data.size.dataBinned.Variable, varLabel);
+                if groupedByWaterOrigin
+                    waterMasses = unique(Data.size.dataBinned.waterMass);
+                else
+                    waterMasses = {[]};
+                end
+                for w = 1:length(waterMasses)
+                    wm = waterMasses{w};
+                    ind1 = ind0;
+                    if groupedByWaterOrigin
+                        ind1 = ind0 & strcmp(Data.size.dataBinned.waterMass, wm);
+                    end
+                    if groupedByWaterOrigin
+                        label_autoRel = [varLabel '_' wm '_autotroph_Rel'];
+                        label_autoTot = [varLabel '_' wm '_autotroph_Tot'];
+                        label_heteroRel = [varLabel '_' wm '_heterotroph_Rel'];
+                        label_heteroTot = [varLabel '_' wm '_heterotroph_Tot'];
+                    else
+                        label_autoRel = [varLabel '_autotroph_Rel'];
+                        label_autoTot = [varLabel '_autotroph_Tot'];
+                        label_heteroRel = [varLabel '_heterotroph_Rel'];
+                        label_heteroTot = [varLabel '_heterotroph_Tot'];
+                    end
+                    
+                    % autotrophs
+                    ind = ind1 & strcmp(Data.size.dataBinned.trophicLevel, 'autotroph');
+                    yobs = Data.size.dataBinned.Value(ind);
+                    ymod = modData.size.Value(ind,:);
+                    nsize = size(ymod, 1);
+                    ymod = reshape(ymod(~isnan(ymod)), nsize, []); % remove NaNs ymod contains when fitting to Arctic AND Atlantic data
+                    nsample = size(ymod, 2);
+                    yobsTot = sum(yobs);
+                    ymodTot = sum(ymod);
+                    % Cost metric for relative abundance (vector)
+                    cdfobs = cumsum(yobs) ./ yobsTot;
+                    pdfobs = diff([0; cdfobs]);
+                    cdfmod = cumsum(ymod) ./ ymodTot;
+                    pdfmod = diff([zeros(1, nsample); cdfmod]);
+                    hellingerDistance = (1 - sum((pdfobs .* pdfmod) .^ 0.5)) .^ 0.5;
+                    costComponents.(label_autoRel) = mean(hellingerDistance); % average over trajectory selections
+                    % Cost metric for total abundance (scalar)
+                    u = abs(log(ymodTot / yobsTot));
+                    u = exp(-a .* u);
+                    z = (1 - u) ./ (1 + u);
+                    costComponents.(label_autoTot) = mean(z); % average over trajectory selections
+                    
+                    % heterotrophs
+                    ind = ind1 & strcmp(Data.size.dataBinned.trophicLevel, 'heterotroph');
+                    yobs = Data.size.dataBinned.Value(ind);
+                    ymod = modData.size.Value(ind,:);
+                    nsize = size(ymod, 1);
+                    ymod = reshape(ymod(~isnan(ymod)), nsize, []); % remove NaNs ymod contains when fitting to Arctic AND Atlantic data
+                    nsample = size(ymod, 2);
+                    yobsTot = sum(yobs);
+                    ymodTot = sum(ymod);
+                    % Cost metric for relative abundance (vector)
+                    cdfobs = cumsum(yobs) ./ yobsTot;
+                    pdfobs = diff([0; cdfobs]);
+                    cdfmod = cumsum(ymod) ./ ymodTot;
+                    pdfmod = diff([zeros(1, nsample); cdfmod]);
+                    hellingerDistance = (1 - sum((pdfobs .* pdfmod) .^ 0.5)) .^ 0.5;
+                    costComponents.(label_heteroRel) = mean(hellingerDistance);
+                    % Cost metric for total abundance (scalar)
+                    u = abs(log(ymodTot / yobsTot));
+                    u = exp(-a .* u);
+                    z = (1 - u) ./ (1 + u);
+                    costComponents.(label_heteroTot) = mean(z); % average over trajectory selections
+                end
+            end
+            
+            % Within each size data group, weight relative abundance-at-size
+            % relative to total abundance.
+            weight_relVsTot = 3; % weighting factor of relative vs total abundance
+            costSize = zeros(2,length(waterMasses)); % store weighted costs for all size data groups
+            for i = 1:length(waterMasses)
+                wm = waterMasses{i};
+                if groupedByWaterOrigin
+                    cta = costComponents.([varLabel '_' wm '_autotroph_Tot']);
+                    cra = costComponents.([varLabel '_' wm '_autotroph_Rel']);
+                    cth = costComponents.([varLabel '_' wm '_heterotroph_Tot']);
+                    crh = costComponents.([varLabel '_' wm '_heterotroph_Rel']);
+                else
+                    cta = costComponents.([varLabel '_autotroph_Tot']);
+                    cra = costComponents.([varLabel '_autotroph_Rel']);
+                    cth = costComponents.([varLabel '_heterotroph_Tot']);
+                    crh = costComponents.([varLabel '_heterotroph_Rel']);
+                end
+                costSize(1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
+                costSize(2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
+            end
+                        
+            costNutrient = zeros(1,length(Vars));
+            for i = 1:length(Vars)
+                costNutrient(i) = costComponents.(Vars{i});
+            end
+            
+            % Average the cost across data-types (nutrient & size)
+            cost = [mean(costNutrient), mean(costSize(:))];
+            % Assign size vs nutrient weighting
+            weight_sizeVsNutrient = 1; % weighting factor of size vs nutrient data
+            weights = 2 .* [1, weight_sizeVsNutrient] ./ (weight_sizeVsNutrient+1);
+            cost = weights .* cost;
+            
+            cost = mean(cost); % finally, average cost over nutrient and size data components
+
+            
     end
     
 end
