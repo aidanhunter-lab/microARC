@@ -29,6 +29,7 @@ fileName = 'fittedParameters';  % saved parameters file name
 % tag = 'Hellinger2_groupWaterOrigin_fittedMortalityIntercept_Arctic';
 % tag = 'Hellinger3_groupWaterOrigin_Atlantic';
 tag = 'IQD_Hellinger_groupWaterOrigin_Atlantic';
+tag = 'meanCDFdist_Hellinger_Atlantic';
 
 
 % tag = 'Hellinger_MVN_groupWaterOrigin';10
@@ -98,8 +99,8 @@ toc
 
 % Generate modelled equivalents of the data
 % modData = matchModOutput2Data(out, auxVars, Data, FixedParams);
-modData0 = matchModOutput2Data2(out0, auxVars0, Data0, FixedParams);
-modData = matchModOutput2Data2(out, auxVars, Data, FixedParams);
+modData0 = matchModOutput2Data(out0, auxVars0, Data0, FixedParams);
+modData = matchModOutput2Data(out, auxVars, Data, FixedParams);
 
 [cost, costComponents] = costFunction('label', FixedParams.costFunction, ...
     'Data', Data, 'modData', modData);
@@ -226,6 +227,8 @@ end
 % Standardised data
 %~~~~~~~~~~~~~~~~~~
 
+close all
+
 plt_stnd = figure;
 plt_stnd.Units = 'inches';
 plt_stnd.Position = [0 0 16 6];
@@ -267,6 +270,8 @@ end
 %~~~~~~~~~~
 % Map plots
 %~~~~~~~~~~
+
+close all
 
 % Particle trajectories from physical model
 
@@ -407,6 +412,8 @@ end
 % Model fits to data
 %~~~~~~~~~~~~~~~~~~~
 
+close all
+
 % Plot representations of the cost function distance metrics.
 
 % Scalar (nutrient) data
@@ -422,14 +429,14 @@ colMod_(2) = 0.5;
 colMod = hsv2rgb(colMod_);
 plotTitle = false;
 legendPosition = 'southeast';
-% itraj = [];
-itraj = 1;
+itraj = [];
+% itraj = 1;
 
 subplot(2,2,1)
 varLabel = 'N';
 yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
 ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
-plot_compareCDFs2(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
+plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
     'plotTitle', plotTitle, 'legendPosition', legendPosition, ...
     'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
     'itraj', itraj);
@@ -438,7 +445,7 @@ plotLegend = 'false';
 varLabel = 'PON';
 yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
 ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
-plot_compareCDFs2(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
+plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
     'plotTitle', plotTitle, 'plotLegend', plotLegend, ...
     'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
     'itraj', itraj);
@@ -446,7 +453,7 @@ subplot(2,2,4)
 varLabel = 'POC';
 yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
 ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
-plot_compareCDFs2(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
+plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
     'plotTitle', plotTitle, 'plotLegend', plotLegend, ...
     'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
     'itraj', itraj);
@@ -454,7 +461,7 @@ subplot(2,2,3)
 varLabel = 'chl_a';
 yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
 ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
-plot_compareCDFs2(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
+plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
     'plotTitle', plotTitle, 'plotLegend', plotLegend, ...
     'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
     'itraj', itraj);
@@ -588,6 +595,8 @@ end
 
 % Simpler plots -- boxplots against depth
 
+close all
+
 plt = figure;
 subplot(2,2,1)
 logPlot = false;
@@ -602,13 +611,15 @@ plot_fitToData_depthBoxplot('PON', Data, modData, logPlot); pause(0.25)
 plt.Units = 'inches';
 plt.Position = [0 0 8 8];
 
-filename = 'fitToData_depthBoxplot.png';
-print(plt, fullfile(folder, filename), '-r300', '-dpng');
+switch save, case true
+    if exist('plt', 'var') && isvalid(plt)
+        filename = 'fitToData_depthBoxplot.png';
+        print(plt, fullfile(folder, filename), '-r300', '-dpng');
+    end
+end
 
 
 %% Fitted parameters
-
-save = false;
 
 % Display fitted parameters in relation to their bounding values (in the
 % table, columns widths shoukd be adjustable).
@@ -880,9 +891,6 @@ switch save, case true
             
     end
 end
-    
-
-close all
 
 
 %% Time evolution
@@ -891,7 +899,7 @@ close all
 % and of Arctic orgin because some sampling events use trajectories
 % originating from both oceans... red for Atlantic blue for Arctic
 
-save = false;
+close all
 
 % Choose event
 sampleEvent = 1;
@@ -1055,10 +1063,10 @@ end
 
 save = false;
 
-plt_Atlantic = plot_timeSeries_trajectoryPolygon2('phytoZooPlanktonStacked', ...
+plt_Atlantic = plot_timeSeries_trajectoryPolygon('phytoZooPlanktonStacked', ...
     [], [], out0, auxVars0, FixedParams, Forc0, Data0, ...
     'waterMass', 'Atlantic');
-plt_Arctic = plot_timeSeries_trajectoryPolygon2('phytoZooPlanktonStacked', ...
+plt_Arctic = plot_timeSeries_trajectoryPolygon('phytoZooPlanktonStacked', ...
     [], [], out0, auxVars0, FixedParams, Forc0, Data0, ...
     'waterMass', 'Arctic');
 
@@ -1075,7 +1083,6 @@ plt_Arctic = plot_timeSeries_trajectoryPolygon2('phytoZooPlanktonStacked', ...
 %     'legendPointSize', legendPointSize);
 % plt_Atlantic.Units = 'inches';
 % plt_Atlantic.Position = [0 0 10 4];
-
 
 
 switch save
@@ -1103,10 +1110,10 @@ end
 % end
 % 
 
-close all
-
 
 %% Network plots -- fluxes, production
+
+close all
 
 % Feeding fluxes
 
@@ -1114,28 +1121,39 @@ plt_feedFlux_N = figure;
 plt_feedFlux_N.Units = 'inches';
 plt_feedFlux_N.Position = [0 0 10 7.5];
 subplot(2,1,1)
-plot_network2('feedingFluxes', 'nitrogen', auxVars0, FixedParams, Forc0, 'Arctic');
+plot_network('feedingFluxes', 'nitrogen', auxVars0, FixedParams, Forc0, 'Arctic');
 subplot(2,1,2)
-plot_network2('feedingFluxes', 'nitrogen', auxVars0, FixedParams, Forc0, 'Atlantic');
+plot_network('feedingFluxes', 'nitrogen', auxVars0, FixedParams, Forc0, 'Atlantic');
+
+
+
+plt_feedFlux_C = figure;
+plt_feedFlux_C.Units = 'inches';
+plt_feedFlux_C.Position = [0 0 10 7.5];
+subplot(2,1,1)
+plot_network('feedingFluxes', 'carbon', auxVars0, FixedParams, Forc0, 'Arctic');
+subplot(2,1,2)
+plot_network('feedingFluxes', 'carbon', auxVars0, FixedParams, Forc0, 'Atlantic');
+
 
 % Organic matter
 plt_OM = figure;
 plt_OM.Units = 'inches';
 plt_OM.Position = [0 0 10 10];
 subplot(2,2,1)
-plot_network2('OMfluxes', 'carbon', auxVars0, FixedParams, Forc0, 'Arctic');
+plot_network('OMfluxes', 'carbon', auxVars0, FixedParams, Forc0, 'Arctic');
 subplot(2,2,2)
-plot_network2('OMfluxes', 'nitrogen', auxVars0, FixedParams, Forc0, 'Arctic');
+plot_network('OMfluxes', 'nitrogen', auxVars0, FixedParams, Forc0, 'Arctic');
 subplot(2,2,3)
-plot_network2('OMfluxes', 'carbon', auxVars0, FixedParams, Forc0, 'Atlantic');
+plot_network('OMfluxes', 'carbon', auxVars0, FixedParams, Forc0, 'Atlantic');
 subplot(2,2,4)
-plot_network2('OMfluxes', 'nitrogen', auxVars0, FixedParams, Forc0, 'Atlantic');
+plot_network('OMfluxes', 'nitrogen', auxVars0, FixedParams, Forc0, 'Atlantic');
 
 
 
 switch save, case true
         if exist('plt_feedFlux_C', 'var') && isvalid(plt_feedFlux_C)
-            filename = 'networkPlot_feedingFlux_carbon_slides.png';
+            filename = 'networkPlot_feedingFlux_carbon.png';
             print(plt_feedFlux_C, fullfile(folder, filename), '-r300', '-dpng');
         end
         if exist('plt_feedFlux_N', 'var') && isvalid(plt_feedFlux_N)
@@ -1147,6 +1165,54 @@ switch save, case true
             print(plt_OM, fullfile(folder, filename), '-r300', '-dpng');
         end
 end
+
+
+
+
+%% Parameter plots -- correlations
+
+parNames = results.parNames;
+popHist = results.populationHistory;
+costHist = results.scoreHistory;
+
+size(popHist)
+size(costHist)
+
+% index parameter sets within 15% of best cost
+optCost = min(costHist(:));
+costInd = costHist <= optCost + 0.5 * optCost;
+costInd = reshape(costInd, [100, 1, 40]);
+% costInd = repmat(reshape(costInd, [100, 1, 40]), [1, length(parNames), 1]);
+
+
+Gmax_a_i = strcmp(parNames, 'Gmax_a');
+k_G_i = strcmp(parNames, 'k_G');
+m_a_i = strcmp(parNames, 'm_a');
+
+Gmax_a = popHist(:,Gmax_a_i,:);
+k_G = popHist(:,k_G_i,:);
+m_a = popHist(:,m_a_i,:);
+
+figure
+scatter(Gmax_a(costInd), k_G(costInd))
+scatter(m_a(costInd), Gmax_a(costInd))
+
+
+figure
+scatter(Gmax_a(:), costHist(:))
+
+figure
+Gmax_b_i = strcmp(parNames, 'Gmax_b');
+Gmax_b = -exp(popHist(:,Gmax_b_i,:));
+scatter(Gmax_b(:), costHist(:))
+
+
+figure
+m_b_i = strcmp(parNames, 'm_b');
+m_b = -exp(popHist(:,m_b_i,:));
+scatter(m_b(:), costHist(:))
+
+
 
 
 %% Plot groups of trajectories corresponding to each event
