@@ -31,7 +31,6 @@ display(Directories)
 [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
     'displayAllOutputs', true, 'numTraj', 1); % use only a single trajectory per sampling event
 
-
 % modelSetup.m may also produce plots -- set to 'true' any name-value pair as shown below
 % [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
 %     'plotCellConcSpectra', true, 'plotBioVolSpectra', true, ...
@@ -82,7 +81,7 @@ switch restartRun, case true
     fileName_results = 'fittedParameters';  % saved parameters file name
 %     tag = '1';                              % and identifying tag
     tag = FixedParams.costFunction;
-    tag = [tag '_Atlantic'];
+    tag = [tag '_Atlantic_quadraticMortality_singleTraj'];
 %     tag = [tag '_fittedMortalityIntercept_Arctic'];
     fileName_results = fullfile(Directories.resultsDir, ...
         [fileName_results '_' tag]);
@@ -145,7 +144,7 @@ saveParams = true;
 
 fileName_results = 'fittedParameters';  % choose file name
 tag = FixedParams.costFunction;         % and identifying tag
-tag = [tag '_Atlantic'];
+tag = [tag '_Atlantic_quadraticMortality_singleTraj'];
 % tag = [tag '_Arctic'];
 % tag = [tag '_fittedMortalityIntercept_Arctic'];
 fileName_results = fullfile(Directories.resultsDir, ...

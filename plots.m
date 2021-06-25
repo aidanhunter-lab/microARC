@@ -29,7 +29,7 @@ fileName = 'fittedParameters';  % saved parameters file name
 % tag = 'Hellinger2_groupWaterOrigin_fittedMortalityIntercept_Arctic';
 % tag = 'Hellinger3_groupWaterOrigin_Atlantic';
 tag = 'IQD_Hellinger_groupWaterOrigin_Atlantic';
-tag = 'meanCDFdist_Hellinger_Atlantic';
+tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj';
 
 
 % tag = 'Hellinger_MVN_groupWaterOrigin';10
@@ -51,7 +51,7 @@ switch loadFittedParams
         % As saved results may be based on trajectories originating fom the
         % Arctic or Atlantic, call modelSetUp to generate the unfiltered
         % forcing and fitting data
-        [Forc0, ~, ParamsDefault, Data0] = modelSetUp(Directories);
+        [Forc0, ~, ParamsDefault, Data0] = modelSetUp(Directories, 'numTraj', 1);
         
     case false % Use default model set-up if fitted outputs are not loaded
         [Forc0, FixedParams, Params, Data0] = modelSetUp(Directories);
@@ -115,6 +115,149 @@ modData = matchModOutput2Data(out, auxVars, Data, FixedParams);
 % functions stored in utility/plottingFunctions/...
 
 folder = Directories.plotDir; % save plots here
+
+
+%% Map plots
+
+close all
+
+% Particle trajectories from physical model
+
+projection = 'lambert';
+% projection = 'miller';
+alphaLine = 0.15;
+
+% plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
+%     'alphaLine', alphaLine);
+plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
+    'alphaLine', alphaLine, 'Data', Data0);
+% plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
+%     'alphaLine', alphaLine, 'Data', Data0, 'labelSampleArea', true);
+
+% plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
+%     'alphaLine', alphaLine, 'Data', Data0, 'flowArrows', true);
+
+
+plt_mapTraj.Units = 'inches';
+plt_mapTraj.Position = [0 0 10 10];
+
+
+switch save, case true
+    if exist('plt_mapTraj', 'var') && isvalid(plt_mapTraj)
+        filename = 'map_trajectories.png';
+        print(plt_mapTraj, fullfile(folder, filename), '-r300', '-dpng');
+    end
+end
+
+
+% In-situ data
+
+projection = 'lambert';
+% projection = 'miller';
+% projection = 'utm';
+alphaPoint = 0.5;
+pointSize = 9;
+pieSize = 0.02;
+lonSpace = 0.4;
+latSpace = 0.1;
+colourByDataType = true;
+showWaterOrigin = true;
+polygonAlpha = 0.5;
+polygonSmooth = false;
+polygonExpand = 0;
+omitMapGrid = false; % do not plot map coords -- instead surround data points with polygon used to show sample area in the trajectory map
+includeLegend = true;
+legendPosition = 'southeast';
+
+plt_mapData = plot_dataMap(Directories, Data0, 'projection', projection, ...
+    'alphaPoint', alphaPoint, 'pointSize', pointSize, 'lonSpace', lonSpace, ... 
+    'latSpace', latSpace, 'Forc', Forc0, ... 
+    'showWaterOrigin', showWaterOrigin, 'polygonAlpha', polygonAlpha, ...
+    'polygonExpand', polygonExpand, 'polygonSmooth', polygonSmooth, ...
+    'colourByDataType', colourByDataType, 'pieSize', pieSize, ...
+    'includeLegend', includeLegend, 'legendPosition', legendPosition, ...
+    'omitMapGrid', omitMapGrid);
+
+plt_mapData.Units = 'inches';
+plt_mapData.Position = [0 0 6 4];
+
+switch save, case true
+    if exist('plt_mapData', 'var') && isvalid(plt_mapData)
+        filename = 'map_shipData.png';
+        print(plt_mapData, fullfile(folder, filename), '-r300', '-dpng');
+    end
+end
+
+
+% Combine the above maps
+plt_combineMaps = figure;
+plt_combineMaps.Units = 'inches';
+plt_combineMaps.Position = [0 0 8 8];
+
+% axes('position', [0.2, 0.2, 0.75, 0.75])
+axes('position', [0.15, 0.15, 0.85, 0.85])
+
+projection = 'lambert';
+alphaLine = 0.15;
+includeLegend = true;
+legendPosition = 'east';
+legendTextSize = 12;
+legendTitle = 'Water origin';
+legendTitleSize = 12;
+polygonLineWidth = 3;
+stripedBorder = false;
+
+plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
+    'alphaLine', alphaLine, 'Data', Data0, 'newPlot', false, ...
+    'includeLegend', includeLegend, 'legendPosition', legendPosition, ...
+    'legendTitle', legendTitle, 'legendTitleSize', legendTitleSize, ...
+    'legendTextSize', legendTextSize, 'polygonLineWidth', polygonLineWidth, ...
+    'stripedBorder', stripedBorder);
+
+axes('position', [0.1, 0.12, 0.5, 0.5])
+
+projection = 'lambert';
+alphaPoint = 0.5;
+pointSize = 9;
+pieSize = 0.02;
+lonSpace = 0.05;
+latSpace = 0.05;
+colourByDataType = true;
+showWaterOrigin = true;
+trimPolygons = true; % shape the water-origin polygons to fit neatly into the full area polygon
+polygonAlpha = 1; % polygons cannot be transparent because the underlying map shows though
+colSat = 0.6; % reduce colour saturation to emulate the transparent colours
+polygonSmooth = false;
+polygonExpand = 0;
+legendPosition = 'west';
+legendTitle = 'Data';
+omitMapGrid = true; % do not plot map coords -- instead surround data points with polygon used to show sample area in the trajectory map
+fullAreaPolygon = true; % draw polygon matching that used in the trajectory map
+polygonLineWidth = 3;
+
+plot_dataMap(Directories, Data0, 'projection', projection, ...
+    'alphaPoint', alphaPoint, 'pointSize', pointSize, 'lonSpace', lonSpace, ... 
+    'latSpace', latSpace, 'Forc', Forc0, ... 
+    'showWaterOrigin', showWaterOrigin, 'polygonAlpha', polygonAlpha, ...
+    'polygonExpand', polygonExpand, 'polygonSmooth', polygonSmooth, ...
+    'colourByDataType', colourByDataType, 'pieSize', pieSize, ...
+    'includeLegend', includeLegend, 'legendPosition', legendPosition, ... 
+    'omitMapGrid', omitMapGrid, 'colSat', colSat, ... 
+    'fullAreaPolygon', fullAreaPolygon, 'polygonLineWidth', polygonLineWidth, ... 
+    'trimPolygons', trimPolygons, 'legendTitle', legendTitle, ... 
+    'legendTitleSize', legendTitleSize, 'legendTextSize', legendTextSize, ...
+    'stripedBorder', stripedBorder, 'newPlot', false);
+
+switch save, case true
+    if exist('plt_combineMaps', 'var') && isvalid(plt_combineMaps)
+        filename = 'map_shipDataAndTrajectories.png';
+        print(plt_combineMaps, fullfile(folder, filename), '-r300', '-dpng');
+    end
+end
+
+
+
+
 
 %% Model fit to data
 
@@ -265,148 +408,6 @@ switch save, case true
         print(plt_stnd, fullfile(folder, filename), '-r300', '-dpng');
     end
 end
-
-
-%~~~~~~~~~~
-% Map plots
-%~~~~~~~~~~
-
-close all
-
-% Particle trajectories from physical model
-
-projection = 'lambert';
-% projection = 'miller';
-alphaLine = 0.15;
-
-% plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
-%     'alphaLine', alphaLine);
-plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
-    'alphaLine', alphaLine, 'Data', Data0);
-% plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
-%     'alphaLine', alphaLine, 'Data', Data0, 'labelSampleArea', true);
-
-% plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
-%     'alphaLine', alphaLine, 'Data', Data0, 'flowArrows', true);
-
-
-plt_mapTraj.Units = 'inches';
-plt_mapTraj.Position = [0 0 10 10];
-
-
-switch save, case true
-    if exist('plt_mapTraj', 'var') && isvalid(plt_mapTraj)
-        filename = 'map_trajectories.png';
-        print(plt_mapTraj, fullfile(folder, filename), '-r300', '-dpng');
-    end
-end
-
-
-% In-situ data
-
-projection = 'lambert';
-% projection = 'miller';
-% projection = 'utm';
-alphaPoint = 0.5;
-pointSize = 9;
-pieSize = 0.02;
-lonSpace = 0.4;
-latSpace = 0.1;
-colourByDataType = true;
-showWaterOrigin = true;
-polygonAlpha = 0.5;
-polygonSmooth = false;
-polygonExpand = 0;
-omitMapGrid = false; % do not plot map coords -- instead surround data points with polygon used to show sample area in the trajectory map
-includeLegend = true;
-legendPosition = 'southeast';
-
-plt_mapData = plot_dataMap(Directories, Data0, 'projection', projection, ...
-    'alphaPoint', alphaPoint, 'pointSize', pointSize, 'lonSpace', lonSpace, ... 
-    'latSpace', latSpace, 'Forc', Forc0, ... 
-    'showWaterOrigin', showWaterOrigin, 'polygonAlpha', polygonAlpha, ...
-    'polygonExpand', polygonExpand, 'polygonSmooth', polygonSmooth, ...
-    'colourByDataType', colourByDataType, 'pieSize', pieSize, ...
-    'includeLegend', includeLegend, 'legendPosition', legendPosition, ...
-    'omitMapGrid', omitMapGrid);
-
-plt_mapData.Units = 'inches';
-plt_mapData.Position = [0 0 6 4];
-
-switch save, case true
-    if exist('plt_mapData', 'var') && isvalid(plt_mapData)
-        filename = 'map_shipData.png';
-        print(plt_mapData, fullfile(folder, filename), '-r300', '-dpng');
-    end
-end
-
-
-% Combine the above maps
-plt_combineMaps = figure;
-plt_combineMaps.Units = 'inches';
-plt_combineMaps.Position = [0 0 8 8];
-
-% axes('position', [0.2, 0.2, 0.75, 0.75])
-axes('position', [0.15, 0.15, 0.85, 0.85])
-
-projection = 'lambert';
-alphaLine = 0.15;
-includeLegend = true;
-legendPosition = 'east';
-legendTextSize = 12;
-legendTitle = 'Water origin';
-legendTitleSize = 12;
-polygonLineWidth = 3;
-stripedBorder = false;
-
-plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
-    'alphaLine', alphaLine, 'Data', Data0, 'newPlot', false, ...
-    'includeLegend', includeLegend, 'legendPosition', legendPosition, ...
-    'legendTitle', legendTitle, 'legendTitleSize', legendTitleSize, ...
-    'legendTextSize', legendTextSize, 'polygonLineWidth', polygonLineWidth, ...
-    'stripedBorder', stripedBorder);
-
-axes('position', [0.1, 0.12, 0.5, 0.5])
-
-projection = 'lambert';
-alphaPoint = 0.5;
-pointSize = 9;
-pieSize = 0.02;
-lonSpace = 0.05;
-latSpace = 0.05;
-colourByDataType = true;
-showWaterOrigin = true;
-trimPolygons = true; % shape the water-origin polygons to fit neatly into the full area polygon
-polygonAlpha = 1; % polygons cannot be transparent because the underlying map shows though
-colSat = 0.6; % reduce colour saturation to emulate the transparent colours
-polygonSmooth = false;
-polygonExpand = 0;
-legendPosition = 'west';
-legendTitle = 'Data';
-omitMapGrid = true; % do not plot map coords -- instead surround data points with polygon used to show sample area in the trajectory map
-fullAreaPolygon = true; % draw polygon matching that used in the trajectory map
-polygonLineWidth = 3;
-
-plot_dataMap(Directories, Data0, 'projection', projection, ...
-    'alphaPoint', alphaPoint, 'pointSize', pointSize, 'lonSpace', lonSpace, ... 
-    'latSpace', latSpace, 'Forc', Forc0, ... 
-    'showWaterOrigin', showWaterOrigin, 'polygonAlpha', polygonAlpha, ...
-    'polygonExpand', polygonExpand, 'polygonSmooth', polygonSmooth, ...
-    'colourByDataType', colourByDataType, 'pieSize', pieSize, ...
-    'includeLegend', includeLegend, 'legendPosition', legendPosition, ... 
-    'omitMapGrid', omitMapGrid, 'colSat', colSat, ... 
-    'fullAreaPolygon', fullAreaPolygon, 'polygonLineWidth', polygonLineWidth, ... 
-    'trimPolygons', trimPolygons, 'legendTitle', legendTitle, ... 
-    'legendTitleSize', legendTitleSize, 'legendTextSize', legendTextSize, ...
-    'stripedBorder', stripedBorder, 'newPlot', false);
-
-switch save, case true
-    if exist('plt_combineMaps', 'var') && isvalid(plt_combineMaps)
-        filename = 'map_shipDataAndTrajectories.png';
-        print(plt_combineMaps, fullfile(folder, filename), '-r300', '-dpng');
-    end
-end
-
 
 %~~~~~~~~~~~~~~~~~~~
 % Model fits to data
@@ -1109,6 +1110,31 @@ end
 %         end
 % end
 % 
+
+
+
+% Make animated plots showing fluctuations in abundance, and possibly
+% predator cycles, and probably increased variability within the smallest
+% size classes
+
+work in progress...
+
+xp = auxVars0.biovolume(1:9,:,:,1);
+xp = auxVars0.cellDensity(1:9,:,:,1);
+xp = squeeze(sum(xp, 2));
+xz = auxVars0.biovolume(10:18,:,:,1);
+xz = auxVars0.cellDensity(10:18,:,:,1);
+xz = squeeze(sum(xz, 2));
+
+figure
+semilogy(1:9,xp(:,180))
+hold on
+semilogy(1:9,xz(:,180))
+
+hold off
+
+
+
 
 
 %% Network plots -- fluxes, production
