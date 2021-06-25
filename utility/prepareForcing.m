@@ -76,7 +76,7 @@ for iy = 1:length(FixedParams.years)
     
     forcing = rmfield(forcing, 'kv');
     
-    % Convert surface light from swrad (W/m^2) to PAR (muEin/s/m^2)
+    % Convert surface light from swrad (W/m^2) to PAR (muEin/d/m^2)
     PARfrac = 0.43; % photosynthetically available fraction of incoming shortwave radiation at surface
     forcing.PARsurf = reshape(PARfrac .* forcing.swrad, [nt 1 np]); % convert swrad to PAR (W/m^2)    
     h=6.62607004e-34; % Planck constant
@@ -86,9 +86,9 @@ for iy = 1:length(FixedParams.years)
     e=h*c/l;          % energy of single photon (J)
     E=a*e;            % energy (J / mole) => 1 Einstein = E J => 1 J = 1/E Einstein => 1 J = 1e6/E micro Einsteins    
     forcing.PARsurf = 1e6/E .* forcing.PARsurf; % surface PAR (muEin/s/m^2)
+    forcing.PARsurf = 86400 .* forcing.PARsurf; % (muEin/d/m^2)
     % Light attenuation is calculated within ODEs because it depends on
     % plankton concentrations 
-    
 
     % Variables useful to set initial conditions, NO3, PS and PL
 

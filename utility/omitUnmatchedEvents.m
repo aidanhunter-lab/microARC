@@ -46,26 +46,27 @@ end
 % Rearrange the trajectories to minimise duplicates across the samples... 
 % this is beneficial for the cost function
 nsamples = size(Data.scalar.evTraj, 1);
-for i = 2:size(Data.scalar.evTraj, 2) % this loop is not robust code, but should be OK if sample number is not very large
-    xp = Data.scalar.evTraj(:,1:i-1);
-    xi = Data.scalar.evTraj(:,i);    
-    duplicateTrajectory = repmat(xi, [1, i-1]) == xp;
-    duplicateTrajectory = any(duplicateTrajectory(:));    
-    j = 1;
-    while duplicateTrajectory
-        xi = circshift(xi, 1);
+if size(Data.scalar.evTraj, 1) > 1
+    for i = 2:size(Data.scalar.evTraj, 2) % this loop is not robust code, but should be OK if sample number is not very large
+        xp = Data.scalar.evTraj(:,1:i-1);
+        xi = Data.scalar.evTraj(:,i);
         duplicateTrajectory = repmat(xi, [1, i-1]) == xp;
         duplicateTrajectory = any(duplicateTrajectory(:));
-        j = j+1;
-        if j == nsamples
-            xi = Data.scalar.evTraj(:,i);
-            break;
+        j = 1;
+        while duplicateTrajectory
+            xi = circshift(xi, 1);
+            duplicateTrajectory = repmat(xi, [1, i-1]) == xp;
+            duplicateTrajectory = any(duplicateTrajectory(:));
+            j = j+1;
+            if j == nsamples
+                xi = Data.scalar.evTraj(:,i);
+                break;
+            end
         end
+        Data.scalar.evTraj(:,i) = xi;
+        eventTraj.trajIndex(eventTraj.event == i) = xi;
     end
-    Data.scalar.evTraj(:,i) = xi;
-    eventTraj.trajIndex(eventTraj.event == i) = xi;
 end
-
 
 
 % Size data
