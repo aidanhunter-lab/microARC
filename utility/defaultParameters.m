@@ -256,7 +256,7 @@ Params.beta3 = 2.0;
 Params.beta = [];
 
 % Size-independent
-Params.aP = 0.0277;           % initial slope of photosynthesis(metabolism)-irradiance curve [mmol C / (mg Chl mu Ein / m^2)]
+Params.aP = 3.83e-7;        % initial slope of photosynthesis-irradiance curve [(mmol C m^2) / (mg Chl mu Ein)]
 Params.theta = 4.2;         % maximum chl:N ratio [mg Chl / mmol N], Geider et al., 1998
 Params.xi = 2.33;           % cost of photosynthesis (mmol C / mmol N)
 Params.Tref = 20;           % reference temperature (degrees C)
@@ -335,7 +335,8 @@ Params.wk = [];
 Bounds.Tref       = [20, 20];
 Bounds.A          = [0.01, 0.2];
 Bounds.h          = [5, 15];
-Bounds.aP         = [0, 0.5];
+Bounds.aP         = [7.66e-8, 5.75e-6];
+% Bounds.aP         = [0, 0.5];
 Bounds.theta      = [3, 5];
 Bounds.xi         = [1.5, 5];
 Bounds.k_G        = [0.5, 10];

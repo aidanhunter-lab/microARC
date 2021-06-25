@@ -3,8 +3,8 @@ function [cost, costComponents, costFunctionChoices] = costFunction(varargin)
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 % Labels for cost function options -- code for each is below.
-% To include another cost function simply includes its label here, and
-% include another case -- it must be fully code-able from Data and modData
+% To use a different cost function simply write its label here then include
+% another case below -- it must be fully code-able from Data and modData
 costFunctionChoices = { ...
     'LSS', ...
     'RMS', ...
@@ -16,7 +16,8 @@ costFunctionChoices = { ...
     'Hellinger2_groupWaterOrigin', ...
     'Hellinger3_groupWaterOrigin', ...
     'Hellinger_MVN_groupWaterOrigin', ...
-    'IQD_Hellinger_groupWaterOrigin'
+    'IQD_Hellinger_groupWaterOrigin', ...
+    'meanCDFdist_Hellinger'
     };
 
 % Evaluating cost requires passing name-value pairs for 'label', 'Data' and
@@ -43,6 +44,95 @@ else
 
     switch label
         
+        case 'LSS' % Least sum of squares
+            % Scalar data
+            for i = 1:length(Vars)
+                varLabel = Vars{i};
+                yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+                ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+                squaredError = (yobs - ymod) .^ 2;
+                costComponents.(varLabel) = sum(squaredError(:)) / numel(squaredError);
+            end
+            % Size spectra data
+            for i = 1:length(VarsSize)
+                varLabel = VarsSize{i};
+                ind0 = strcmp(Data.size.dataBinned.Variable, varLabel);
+                % autotrophs
+                ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'autotroph');
+                yobs = Data.size.dataBinned.scaled_Value(ind);
+                if isfield(modData.size, 'scaled_Value')
+                    ymod = modData.size.scaled_Value(ind,:);
+                else
+                    ymod = modData.size.Value(ind,:);
+                    ymod = (ymod - mean(ymod)) ./ std(ymod);
+                end
+                squaredError = (yobs - ymod) .^ 2;
+                costComponents.([varLabel '_autotroph']) = sum(squaredError(:)) / numel(squaredError);
+                % heterotrophs
+                ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'heterotroph');
+                yobs = Data.size.dataBinned.scaled_Value(ind);
+                if isfield(modData.size, 'scaled_Value')
+                    ymod = modData.size.scaled_Value(ind,:);
+                else
+                    ymod = modData.size.Value(ind,:);
+                    ymod = (ymod - mean(ymod)) ./ std(ymod);
+                end
+                squaredError = (yobs - ymod) .^ 2;
+                costComponents.([varLabel '_heterotroph']) = sum(squaredError(:)) / numel(squaredError);
+            end            
+            fields = fieldnames(costComponents);
+            x = struct2array(costComponents);
+            scalarCosts = x(contains(fields, Vars));
+            sizeCosts = x(contains(fields, VarsSize));
+            cost = mean(scalarCosts) + mean(sizeCosts);
+            
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~            
+            
+        case 'RMS' % Root mean square
+            % Scalar data
+            for i = 1:length(Vars)
+                varLabel = Vars{i};
+                yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+                ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+                absError = sqrt((yobs - ymod) .^ 2);
+                costComponents.(varLabel) = sum(absError(:)) / numel(absError);
+            end
+            % Size spectra data
+            for i = 1:length(VarsSize)
+                varLabel = VarsSize{i};
+                ind0 = strcmp(Data.size.dataBinned.Variable, varLabel);
+                % autotrophs
+                ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'autotroph');
+                yobs = Data.size.dataBinned.scaled_Value(ind);
+                if isfield(modData.size, 'scaled_Value')
+                    ymod = modData.size.scaled_Value(ind,:);
+                else
+                    ymod = modData.size.Value(ind,:);
+                    ymod = (ymod - mean(ymod)) ./ std(ymod);
+                end
+                absError = sqrt((yobs - ymod) .^ 2);
+                costComponents.([varLabel '_autotroph']) = sum(absError(:)) / numel(absError);
+                % heterotrophs
+                ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, 'heterotroph');
+                yobs = Data.size.dataBinned.scaled_Value(ind);
+                if isfield(modData.size, 'scaled_Value')
+                    ymod = modData.size.scaled_Value(ind,:);
+                else
+                    ymod = modData.size.Value(ind,:);
+                    ymod = (ymod - mean(ymod)) ./ std(ymod);
+                end
+                absError = sqrt((yobs - ymod) .^ 2);
+                costComponents.([varLabel '_heterotroph']) = sum(absError(:)) / numel(absError);
+                costComponents.(varLabel) = costComponents.([varLabel '_autotroph']) + costComponents.([varLabel '_heterotroph']);
+            end
+            fields = fieldnames(costComponents);
+            x = struct2array(costComponents);
+            scalarCosts = x(contains(fields, Vars));
+            sizeCosts = x(contains(fields, VarsSize));
+            cost = mean(scalarCosts) + mean(sizeCosts);
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~            
+
         case 'Hellinger2_groupWaterOrigin'
             % Calculate non-parameteric Hellinger distances for the scalar
             % (nutrient) data and for size spectra vectors of relative
@@ -233,7 +323,7 @@ else
             
             cost = mean(cost); % finally, average cost over nutrient and size data components
             
-            
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~            
             
         case 'Hellinger3_groupWaterOrigin'
             
@@ -391,8 +481,8 @@ else
             
             cost = mean(cost); % finally, average cost over nutrient and size data components
 
-            
-            
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
         case 'IQD_Hellinger_groupWaterOrigin'
             
             % Scalar data
@@ -550,6 +640,154 @@ else
             
             cost = mean(cost); % finally, average cost over nutrient and size data components
 
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        case 'meanCDFdist_Hellinger'
+            
+            % This method uses [0,1] metrics for all data types.
+            % The scalar data are fitted by reference to their CDFs in a
+            % manner that explicitly accounts for each data point rather
+            % than fitting to a distribution.
+            % The relative abundance-at-size data are fitted with Hellinger
+            % distances.
+            % The total abundance from the size data are fitted with my
+            % custom metric (relies on a ratio rather like Shannon's entropy)
+            
+            % Scalar data
+            for i = 1:length(Vars)
+                varLabel = Vars{i};
+                yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+                ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+                n = size(ymod, 1);
+%                 m = size(ymod, 2);
+                cdf = (1:n)' ./ n;
+                [yobs_sort, o] = sort(yobs); % sort observations
+                % put modelled output in same order -- these values will
+                % almost certainly NOT be in ascending order...
+                ymod_sort = ymod(o,:);
+%                 figure(1)
+%                 plot(yobs_sort, cdf)
+%                 hold on
+%                 plot(ymod_sort, cdf)
+%                 hold off
+                % find distances between each modelled data point and the
+                % empirical data CDF
+                ymodi = interp1(yobs_sort, cdf, ymod_sort, 'linear', 'extrap');
+                ymodi = min(1, max(0, ymodi));
+                CDFdist = abs(cdf - ymodi);
+                avDist = mean(CDFdist); % average over data points
+                costComponents.(varLabel) = mean(avDist); % average over trajectory selections
+            end    
+                
+            % Vector (size) data
+            groupedByWaterOrigin = isfield(Data.size.dataBinned, 'waterMass');
+            a = log(3) / log(2); % steepness of cost metric for total abundance
+            for i = 1:length(VarsSize)
+                varLabel = VarsSize{i};
+                ind0 = strcmp(Data.size.dataBinned.Variable, varLabel);
+                if groupedByWaterOrigin
+                    waterMasses = unique(Data.size.dataBinned.waterMass);
+                else
+                    waterMasses = {[]};
+                end
+                for w = 1:length(waterMasses)
+                    wm = waterMasses{w};
+                    ind1 = ind0;
+                    if groupedByWaterOrigin
+                        ind1 = ind0 & strcmp(Data.size.dataBinned.waterMass, wm);
+                    end
+                    if groupedByWaterOrigin
+                        label_autoRel = [varLabel '_' wm '_autotroph_Rel'];
+                        label_autoTot = [varLabel '_' wm '_autotroph_Tot'];
+                        label_heteroRel = [varLabel '_' wm '_heterotroph_Rel'];
+                        label_heteroTot = [varLabel '_' wm '_heterotroph_Tot'];
+                    else
+                        label_autoRel = [varLabel '_autotroph_Rel'];
+                        label_autoTot = [varLabel '_autotroph_Tot'];
+                        label_heteroRel = [varLabel '_heterotroph_Rel'];
+                        label_heteroTot = [varLabel '_heterotroph_Tot'];
+                    end
+                    
+                    % autotrophs
+                    ind = ind1 & strcmp(Data.size.dataBinned.trophicLevel, 'autotroph');
+                    yobs = Data.size.dataBinned.Value(ind);
+                    ymod = modData.size.Value(ind,:);
+                    nsize = size(ymod, 1);
+                    ymod = reshape(ymod(~isnan(ymod)), nsize, []); % remove NaNs ymod contains when fitting to Arctic AND Atlantic data
+                    nsample = size(ymod, 2);
+                    yobsTot = sum(yobs);
+                    ymodTot = sum(ymod);
+                    % Cost metric for relative abundance (vector)
+                    cdfobs = cumsum(yobs) ./ yobsTot;
+                    pdfobs = diff([0; cdfobs]);
+                    cdfmod = cumsum(ymod) ./ ymodTot;
+                    pdfmod = diff([zeros(1, nsample); cdfmod]);
+                    hellingerDistance = (1 - sum((pdfobs .* pdfmod) .^ 0.5)) .^ 0.5;
+                    costComponents.(label_autoRel) = mean(hellingerDistance); % average over trajectory selections
+                    % Cost metric for total abundance (scalar)
+                    u = abs(log(ymodTot / yobsTot));
+                    u = exp(-a .* u);
+                    z = (1 - u) ./ (1 + u);
+                    costComponents.(label_autoTot) = mean(z); % average over trajectory selections
+                    
+                    % heterotrophs
+                    ind = ind1 & strcmp(Data.size.dataBinned.trophicLevel, 'heterotroph');
+                    yobs = Data.size.dataBinned.Value(ind);
+                    ymod = modData.size.Value(ind,:);
+                    nsize = size(ymod, 1);
+                    ymod = reshape(ymod(~isnan(ymod)), nsize, []); % remove NaNs ymod contains when fitting to Arctic AND Atlantic data
+                    nsample = size(ymod, 2);
+                    yobsTot = sum(yobs);
+                    ymodTot = sum(ymod);
+                    % Cost metric for relative abundance (vector)
+                    cdfobs = cumsum(yobs) ./ yobsTot;
+                    pdfobs = diff([0; cdfobs]);
+                    cdfmod = cumsum(ymod) ./ ymodTot;
+                    pdfmod = diff([zeros(1, nsample); cdfmod]);
+                    hellingerDistance = (1 - sum((pdfobs .* pdfmod) .^ 0.5)) .^ 0.5;
+                    costComponents.(label_heteroRel) = mean(hellingerDistance);
+                    % Cost metric for total abundance (scalar)
+                    u = abs(log(ymodTot / yobsTot));
+                    u = exp(-a .* u);
+                    z = (1 - u) ./ (1 + u);
+                    costComponents.(label_heteroTot) = mean(z); % average over trajectory selections
+                end
+            end
+            
+            % Within each size data group, weight relative abundance-at-size
+            % relative to total abundance.
+            weight_relVsTot = 3; % weighting factor of relative vs total abundance
+            costSize = zeros(2,length(waterMasses)); % store weighted costs for all size data groups
+            for i = 1:length(waterMasses)
+                wm = waterMasses{i};
+                if groupedByWaterOrigin
+                    cta = costComponents.([varLabel '_' wm '_autotroph_Tot']);
+                    cra = costComponents.([varLabel '_' wm '_autotroph_Rel']);
+                    cth = costComponents.([varLabel '_' wm '_heterotroph_Tot']);
+                    crh = costComponents.([varLabel '_' wm '_heterotroph_Rel']);
+                else
+                    cta = costComponents.([varLabel '_autotroph_Tot']);
+                    cra = costComponents.([varLabel '_autotroph_Rel']);
+                    cth = costComponents.([varLabel '_heterotroph_Tot']);
+                    crh = costComponents.([varLabel '_heterotroph_Rel']);
+                end
+                costSize(1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
+                costSize(2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
+            end
+                        
+            costNutrient = zeros(1,length(Vars));
+            for i = 1:length(Vars)
+                costNutrient(i) = costComponents.(Vars{i});
+            end
+            
+            % Average the cost across data-types (nutrient & size)
+            cost = [mean(costNutrient), mean(costSize(:))];
+            % Assign size vs nutrient weighting
+            weight_sizeVsNutrient = 1; % weighting factor of size vs nutrient data
+            weights = 2 .* [1, weight_sizeVsNutrient] ./ (weight_sizeVsNutrient+1);
+            cost = weights .* cost;
+            
+            cost = mean(cost); % finally, average cost over nutrient and size data components
             
     end
     
