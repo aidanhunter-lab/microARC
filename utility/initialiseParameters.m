@@ -321,8 +321,9 @@ if (isfield(Params, 'delta_opt') && isfield(Params, 'sigG') && isfield(Params, '
     % Otherwise the small predators cannot optimally graze so their
     % experienced prey saturation is always low.
     % This messes up the pred:prey size ratio effect, but modelled size 
-    % classes are actually intervals containing a range of sizes
-    Params.phi = Params.phi ./ max(Params.phi, [], 2);
+    % classes are actually intervals containing a range of sizes.
+    % OR NOT, AS IT MAY NOT BE ECOLOGICALLY REASONABLE => COMMENT OUT
+%     Params.phi = Params.phi ./ max(Params.phi, [], 2);
 end
 
 if isfield(Params, 'wPOM_func') && isfield(Params, 'wPOM1') && ~isempty(Params.wPOM1)
