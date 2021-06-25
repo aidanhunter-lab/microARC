@@ -71,7 +71,8 @@ out.Qstat = 1 - out.gammaN .^ params.h;
 out.gammaT = exp(params.A .* (T - params.Tref));
 
 % Background mortality
-out.mortality = params.m .* B;
+% out.mortality = params.m .* B;
+out.mortality = (params.m + params.m2 .* B) .* B;
 
 %~~~~~~~~~~~
 % Autotrophy

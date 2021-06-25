@@ -116,6 +116,7 @@ Params.scalarParams = {
     'Tref'
     'A'
     'h'
+    'm2'
     'aP'
     'theta'
     'xi'
@@ -233,11 +234,12 @@ Params.Gmax = [];
 % prey size preferences
 Params.phi = [];
 
-% background mortality
+% background mortality -- linear
 % Params.m_func = @(a,b,V) powerFunction(a,b,V);
 Params.m_func = @(a,b,V) powerFunction(a,-exp(b),V);
 Params.m_a = 0.05; % mortality for cell volume = 1 mu m ^ 3
-Params.m_b = -0.1; % mortality size-exponent
+Params.m_b = 0; % mortality size-exponent
+% Params.m_b = -0.1; % mortality size-exponent
 Params.m_b = log(-Params.m_b); % estimate on negative log scale
 Params.m = [];
 
@@ -256,6 +258,7 @@ Params.beta3 = 2.0;
 Params.beta = [];
 
 % Size-independent
+Params.m2 = 1e-5;           % quadratic, density-dependent, term in background mortality (1/day)
 Params.aP = 3.83e-7;        % initial slope of photosynthesis-irradiance curve [(mmol C m^2) / (mg Chl mu Ein)]
 Params.theta = 4.2;         % maximum chl:N ratio [mg Chl / mmol N], Geider et al., 1998
 Params.xi = 2.33;           % cost of photosynthesis (mmol C / mmol N)
@@ -335,16 +338,17 @@ Params.wk = [];
 Bounds.Tref       = [20, 20];
 Bounds.A          = [0.01, 0.2];
 Bounds.h          = [5, 15];
+Bounds.m2         = [0, 1e-3];
 Bounds.aP         = [7.66e-8, 5.75e-6];
 % Bounds.aP         = [0, 0.5];
 Bounds.theta      = [3, 5];
 Bounds.xi         = [1.5, 5];
 Bounds.k_G        = [0.5, 10];
-Bounds.sigG        = [0.25, 2.5];
+Bounds.sigG       = [0.25, 2.5];
 Bounds.delta_opt  = [10, 10];
 Bounds.Lambda     = [-1.5, -0.5];
 Bounds.lambda_max = [0.5, 0.9];
-Bounds.wDOM1       = [0, 0];
+Bounds.wDOM1      = [0, 0];
 switch FixedParams.depthDependentPOMsinkSpeed
     case false
         Bounds.wPOM1 = [0.5, FixedParams.maxSinkSpeed_POM];
@@ -412,7 +416,8 @@ Bounds.Gmax_b = sort(log(-Bounds.Gmax_b)); % esimated on negative log scale
 % Bounds.k_G_b = [0, 1];
 
 Bounds.m_a = [2 .* FixedParams.m_min, 0.1]; % if m_a=m_min then m_b becomes totally irrelevant => set lower bound of m_a > m_min
-Bounds.m_b = [-1, -1e-2]; % negativity ensures that mortality rate decreases with size
+Bounds.m_b = [-1, 0]; % negativity ensures that mortality rate decreases with size
+% Bounds.m_b = [-1, -1e-2]; % negativity ensures that mortality rate decreases with size
 Bounds.m_b = sort(log(-Bounds.m_b)); % estimate on negative log scale
 
 Bounds.beta1 = [0.5, 1];
