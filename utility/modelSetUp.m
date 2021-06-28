@@ -141,7 +141,7 @@ clear sizeData
 
 % Interpolate forcing data over modelled depth layers, and combine multiple
 % years of forcing data into a single structure using prepareForcing.m.
-% A few extra useful metrics are also calculated here.
+% An extra few useful metrics are also calculated here.
 Forc = prepareForcing(F,FixedParams);
 clear F
 
@@ -227,8 +227,6 @@ if ~exist('dendrogramPlot', 'var')
     dendrogramPlot = false;
 end
 
-% [Forc, Data.scalar] = particleOrigin(Forc, Data.scalar, ...
-%     'trajectoryPlot', trajectoryPlot, 'dendrogramPlot', dendrogramPlot); pause(0.25)
 [Forc, Data] = particleOrigin(Forc, Data, ...
     'trajectoryPlot', trajectoryPlot, 'dendrogramPlot', dendrogramPlot); pause(0.25)
 
