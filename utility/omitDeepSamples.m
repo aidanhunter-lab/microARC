@@ -5,7 +5,8 @@ function dat = omitDeepSamples(Data, FixedParams)
 dat = Data;
 scalarData = Data.scalar;
 
-remove = scalarData.Depth > max(abs(FixedParams.z));
+% remove = scalarData.Depth > max(abs(FixedParams.z)); % omit data sampled from below midpoint of deepest modelled layer
+remove = scalarData.Depth > max(abs(FixedParams.zw)); % omit data sampled from below lower bound of deepest modelled layer
 if any(remove)
     fields = fieldnames(scalarData);
     for i = 1:length(fields)

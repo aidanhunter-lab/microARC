@@ -1,6 +1,8 @@
 function plt = plot_fitToData(v, Data, modData, logPlot, varargin)
 % Plot to compare model output to data used to tune the parameters.
 
+extractVarargin(varargin)
+
 plt = figure;
 
 % Default colours
@@ -336,162 +338,347 @@ switch v
     
     case unique(Data.size.dataBinned.Variable)
         
-        plt.Units = 'inches';
-        plt.Position = [0 0 16 6];
-        
-        switch v
-            case 'CellConc'
-                Var = 'cell concentration';
-                ylab = 'cell conc. (cells m^{-3})';
-                ylab_rel = 'relative cell conc.';
-                ylab_tot = 'total cell conc. (cells m^{-3})';
-            case 'BioVol'
-                Var = 'bio-volume';
-                ylab = 'bio-volume (m^3 m^{-3})';
-                ylab_rel = 'relative bio-volume';
-                ylab_tot = 'total bio-volume (m^3 m^{-3})';
-            case 'NConc'
-                Var = 'nitrogen concentration';
-                ylab = 'N conc. (mmol N m^{-3})';
-                ylab_rel = 'relative N conc.';
-                ylab_tot = 'total N conc. (mmol N m^{-3})';
+        if ~exist('waterOrigin', 'var')
+            % By default do not group by water origin, just plot the fully
+            % averaged size data
+            waterOrigin = false;
         end
         
-        %% Relative abundances
-        subplot(1,3,1)
-        ind = strcmp(Data.size.dataBinned.Variable, v);
-        
-        if ~isempty(varargin) && any(strcmp(varargin, 'trophicGroup'))
-            trophicGroup = varargin{find(strcmp(varargin, 'trophicGroup')) + 1};
-            ind = ind & strcmp(Data.size.dataBinned.trophicLevel, trophicGroup);
-        end
-        
-        x = unique(Data.size.dataBinned.size(ind));
-        ydat = Data.size.dataBinned.Value(ind);  % observed spectra
-        ymod = modData.size.Value(ind,:);        % modelled equivalent
-        ydat_tot = sum(ydat);
-        ymod_tot = sum(ymod);
-        ydat_rel = ydat ./ ydat_tot;
-        ymod_rel = ymod ./ ymod_tot;        
-        switch logPlot
-            case 'loglog'
-                plotFun = @loglog;
-            case 'semilogx'
-                plotFun = @semilogx;
-        end
-        for i = 1:size(ymod_rel, 2)
-            plotFun(x, ymod_rel(:,i), 'Marker', '.', ...
-                'MarkerEdgeColor', colmod, 'Color', colmod);
-            if i == 1, hold on; end
-        end
-        plotFun(x, ydat_rel, '-o', 'Color', coldat)        
-        gc = gca;
-        xlabel('ESD (\mum)')
-        ylabel(ylab_rel)
-        % legend
-        xl = gc.XLim;
-        yl = gc.YLim;
-        switch logPlot
-            case 'loglog'
-                xl = log10(xl);
-                yl = log10(yl);
-                xleg = 10 .^ [xl(2)-0.2*diff(xl), xl(2)-0.0125*diff(xl)];
-                yleg = 10 .^ [yl(2)-0.125*diff(yl), yl(2)-0.025*diff(yl)];
-                fill([xleg(1), xleg(2), xleg(2), xleg(1), xleg(1)], ...
-                    [yleg(1), yleg(1), yleg(2), yleg(2), yleg(1)], ...
-                    [1 1 1], 'EdgeColor', [1 1 1])
-                text(10 .^ (xl(2)-0.15*diff(xl)), 10 .^ (yl(2)-0.05*diff(yl)), 'data')
-                text(10 .^ (xl(2)-0.15*diff(xl)), 10 .^ (yl(2)-0.1*diff(yl)), 'model')
-                scatter(10 .^ (xl(2)-0.17*diff(xl)), 10 .^ (yl(2)-0.05*diff(yl)), 'MarkerEdgeColor', coldat)
-                scatter(10 .^ (xl(2)-0.17*diff(xl)), 10 .^ (yl(2)-0.1*diff(yl)), 'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod)
-            case 'semilogx'
-                xl = log10(xl);
-                xleg = 10 .^ [xl(2)-0.2*diff(xl), xl(2)-0.0125*diff(xl)];
+        switch waterOrigin
+            
+            case false
+                
+                plt.Units = 'inches';
+                plt.Position = [0 0 16 6];
+                
+                switch v
+                    case 'CellConc'
+                        Var = 'cell concentration';
+                        ylab = 'cell conc. (cells m^{-3})';
+                        ylab_rel = 'relative cell conc.';
+                        ylab_tot = 'total cell conc. (cells m^{-3})';
+                    case 'BioVol'
+                        Var = 'bio-volume';
+                        ylab = 'bio-volume (m^3 m^{-3})';
+                        ylab_rel = 'relative bio-volume';
+                        ylab_tot = 'total bio-volume (m^3 m^{-3})';
+                    case 'NConc'
+                        Var = 'nitrogen concentration';
+                        ylab = 'N conc. (mmol N m^{-3})';
+                        ylab_rel = 'relative N conc.';
+                        ylab_tot = 'total N conc. (mmol N m^{-3})';
+                end
+                
+                %% Relative abundances
+                subplot(1,3,1)
+                ind = strcmp(Data.size.dataBinned.Variable, v);
+                
+                if ~isempty(varargin) && any(strcmp(varargin, 'trophicGroup'))
+                    trophicGroup = varargin{find(strcmp(varargin, 'trophicGroup')) + 1};
+                    ind = ind & strcmp(Data.size.dataBinned.trophicLevel, trophicGroup);
+                end
+                
+                x = unique(Data.size.dataBinned.size(ind));
+                ydat = Data.size.dataBinned.Value(ind);  % observed spectra
+                ymod = modData.size.Value(ind,:);        % modelled equivalent
+                ydat_tot = sum(ydat);
+                ymod_tot = sum(ymod);
+                ydat_rel = ydat ./ ydat_tot;
+                ymod_rel = ymod ./ ymod_tot;
+                switch logPlot
+                    case 'loglog'
+                        plotFun = @loglog;
+                    case 'semilogx'
+                        plotFun = @semilogx;
+                end
+                for i = 1:size(ymod_rel, 2)
+                    plotFun(x, ymod_rel(:,i), 'Marker', '.', ...
+                        'MarkerEdgeColor', colmod, 'Color', colmod);
+                    if i == 1, hold on; end
+                end
+                plotFun(x, ydat_rel, '-o', 'Color', coldat)
+                gc = gca;
+                xlabel('ESD (\mum)')
+                ylabel(ylab_rel)
+                % legend
+                xl = gc.XLim;
+                yl = gc.YLim;
+                switch logPlot
+                    case 'loglog'
+                        xl = log10(xl);
+                        yl = log10(yl);
+                        xleg = 10 .^ [xl(2)-0.2*diff(xl), xl(2)-0.0125*diff(xl)];
+                        yleg = 10 .^ [yl(2)-0.125*diff(yl), yl(2)-0.025*diff(yl)];
+                        fill([xleg(1), xleg(2), xleg(2), xleg(1), xleg(1)], ...
+                            [yleg(1), yleg(1), yleg(2), yleg(2), yleg(1)], ...
+                            [1 1 1], 'EdgeColor', [1 1 1])
+                        text(10 .^ (xl(2)-0.15*diff(xl)), 10 .^ (yl(2)-0.05*diff(yl)), 'data')
+                        text(10 .^ (xl(2)-0.15*diff(xl)), 10 .^ (yl(2)-0.1*diff(yl)), 'model')
+                        scatter(10 .^ (xl(2)-0.17*diff(xl)), 10 .^ (yl(2)-0.05*diff(yl)), 'MarkerEdgeColor', coldat)
+                        scatter(10 .^ (xl(2)-0.17*diff(xl)), 10 .^ (yl(2)-0.1*diff(yl)), 'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod)
+                    case 'semilogx'
+                        xl = log10(xl);
+                        xleg = 10 .^ [xl(2)-0.2*diff(xl), xl(2)-0.0125*diff(xl)];
+                        yleg = [yl(2)-0.125*diff(yl), yl(2)-0.025*diff(yl)];
+                        fill([xleg(1), xleg(2), xleg(2), xleg(1), xleg(1)], ...
+                            [yleg(1), yleg(1), yleg(2), yleg(2), yleg(1)], ...
+                            [1 1 1], 'EdgeColor', [1 1 1])
+                        text(10 .^ (xl(2)-0.15*diff(xl)), yl(2)-0.05*diff(yl), 'data')
+                        text(10 .^ (xl(2)-0.15*diff(xl)), yl(2)-0.1*diff(yl), 'model')
+                        scatter(10 .^ (xl(2)-0.17*diff(xl)), yl(2)-0.05*diff(yl), 'MarkerEdgeColor', coldat)
+                        scatter(10 .^ (xl(2)-0.17*diff(xl)), yl(2)-0.1*diff(yl), 'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod)
+                end
+                hold off
+                
+                %% total abundance
+                subplot(1,3,2)
+                scatter(repmat(1/3, [1 length(ymod_tot)]), ymod_tot, 'MarkerFaceColor', colmod, ...
+                    'MarkerEdgeColor', colmod);
+                hold on
+                scatter(2/3, ydat_tot, 'MarkerEdgeColor', coldat);
+                gc = gca;
+                yl = gc.YLim;
+                yl(1) = 0;
+                yl(2) = 1.5 .* yl(2);
+                gc.YLim = yl;
+                gc.XLim = [0 1];
+                gc.XTick = [];
+                ylabel(ylab_tot)
+                % legend
+                xl = gc.XLim;
+                yl = gc.YLim;
+                xleg = [xl(2)-0.2*diff(xl), xl(2)-0.0125*diff(xl)];
                 yleg = [yl(2)-0.125*diff(yl), yl(2)-0.025*diff(yl)];
                 fill([xleg(1), xleg(2), xleg(2), xleg(1), xleg(1)], ...
                     [yleg(1), yleg(1), yleg(2), yleg(2), yleg(1)], ...
                     [1 1 1], 'EdgeColor', [1 1 1])
-                text(10 .^ (xl(2)-0.15*diff(xl)), yl(2)-0.05*diff(yl), 'data')
-                text(10 .^ (xl(2)-0.15*diff(xl)), yl(2)-0.1*diff(yl), 'model')
-                scatter(10 .^ (xl(2)-0.17*diff(xl)), yl(2)-0.05*diff(yl), 'MarkerEdgeColor', coldat)
-                scatter(10 .^ (xl(2)-0.17*diff(xl)), yl(2)-0.1*diff(yl), 'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod)
-        end
-        hold off
-        
-        %% total abundance
-        subplot(1,3,2)        
-        scatter(repmat(1/3, [1 length(ymod_tot)]), ymod_tot, 'MarkerFaceColor', colmod, ... 
-            'MarkerEdgeColor', colmod);
-        hold on
-        scatter(2/3, ydat_tot, 'MarkerEdgeColor', coldat);        
-        gc = gca;
-        yl = gc.YLim;
-        yl(1) = 0;
-        yl(2) = 1.5 .* yl(2);
-        gc.YLim = yl;
-        gc.XLim = [0 1];
-        gc.XTick = [];
-        ylabel(ylab_tot)        
-        % legend
-        xl = gc.XLim;
-        yl = gc.YLim;
-        xleg = [xl(2)-0.2*diff(xl), xl(2)-0.0125*diff(xl)];
-        yleg = [yl(2)-0.125*diff(yl), yl(2)-0.025*diff(yl)];
-        fill([xleg(1), xleg(2), xleg(2), xleg(1), xleg(1)], ...
-            [yleg(1), yleg(1), yleg(2), yleg(2), yleg(1)], ...
-            [1 1 1], 'EdgeColor', [1 1 1])
-        text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
-        text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
-        scatter(xl(2)-0.17*diff(xl), yl(2)-0.05*diff(yl), 'MarkerEdgeColor', coldat)
-        scatter(xl(2)-0.17*diff(xl), yl(2)-0.1*diff(yl), 'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod)
-        hold off
+                text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+                text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+                scatter(xl(2)-0.17*diff(xl), yl(2)-0.05*diff(yl), 'MarkerEdgeColor', coldat)
+                scatter(xl(2)-0.17*diff(xl), yl(2)-0.1*diff(yl), 'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod)
+                hold off
+                
+                %% Abundance spectra
+                subplot(1,3,3)
+                for i = 1:size(ymod, 2)
+                    plotFun(x, ymod(:,i), 'Marker', '.', ...
+                        'MarkerEdgeColor', colmod, 'Color', colmod);
+                    if i == 1, hold on; end
+                end
+                plotFun(x, ydat, '-o', 'Color', coldat)
+                gc = gca;
+                xlabel('ESD (\mum)')
+                ylabel(ylab)
+                % legend
+                xl = gc.XLim;
+                yl = gc.YLim;
+                switch logPlot
+                    case 'loglog'
+                        xl = log10(xl);
+                        yl = log10(yl);
+                        xleg = 10 .^ [xl(2)-0.2*diff(xl), xl(2)-0.0125*diff(xl)];
+                        yleg = 10 .^ [yl(2)-0.125*diff(yl), yl(2)-0.025*diff(yl)];
+                        fill([xleg(1), xleg(2), xleg(2), xleg(1), xleg(1)], ...
+                            [yleg(1), yleg(1), yleg(2), yleg(2), yleg(1)], ...
+                            [1 1 1], 'EdgeColor', [1 1 1])
+                        text(10 .^ (xl(2)-0.15*diff(xl)), 10 .^ (yl(2)-0.05*diff(yl)), 'data')
+                        text(10 .^ (xl(2)-0.15*diff(xl)), 10 .^ (yl(2)-0.1*diff(yl)), 'model')
+                        scatter(10 .^ (xl(2)-0.17*diff(xl)), 10 .^ (yl(2)-0.05*diff(yl)), 'MarkerEdgeColor', coldat)
+                        scatter(10 .^ (xl(2)-0.17*diff(xl)), 10 .^ (yl(2)-0.1*diff(yl)), 'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod)
+                    case 'semilogx'
+                        xl = log10(xl);
+                        xleg = 10 .^ [xl(2)-0.2*diff(xl), xl(2)-0.0125*diff(xl)];
+                        yleg = [yl(2)-0.125*diff(yl), yl(2)-0.025*diff(yl)];
+                        fill([xleg(1), xleg(2), xleg(2), xleg(1), xleg(1)], ...
+                            [yleg(1), yleg(1), yleg(2), yleg(2), yleg(1)], ...
+                            [1 1 1], 'EdgeColor', [1 1 1])
+                        text(10 .^ (xl(2)-0.15*diff(xl)), yl(2)-0.05*diff(yl), 'data')
+                        text(10 .^ (xl(2)-0.15*diff(xl)), yl(2)-0.1*diff(yl), 'model')
+                        scatter(10 .^ (xl(2)-0.17*diff(xl)), yl(2)-0.05*diff(yl), 'MarkerEdgeColor', coldat)
+                        scatter(10 .^ (xl(2)-0.17*diff(xl)), yl(2)-0.1*diff(yl), 'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod)
+                end
+                hold off
+                
+                if exist('trophicGroup', 'var')
+                    sgtitle(['Model fit to ' trophicGroup ' ' Var ' data'])
+                else
+                    sgtitle(['Model fit to ' Var ' data'])
+                end
+                
+                
+            case {'Arctic','Atlantic'}
+                
+                
+                plt.Units = 'inches';
+                plt.Position = [0 0 16 6];
+                
+                switch v
+                    case 'CellConc'
+                        Var = 'cell concentration';
+                        ylab = 'cell conc. (cells m^{-3})';
+                        ylab_rel = 'relative cell conc.';
+                        ylab_tot = 'total cell conc. (cells m^{-3})';
+                    case 'BioVol'
+                        Var = 'bio-volume';
+                        ylab = 'bio-volume (m^3 m^{-3})';
+                        ylab_rel = 'relative bio-volume';
+                        ylab_tot = 'total bio-volume (m^3 m^{-3})';
+                    case 'NConc'
+                        Var = 'nitrogen concentration';
+                        ylab = 'N conc. (mmol N m^{-3})';
+                        ylab_rel = 'relative N conc.';
+                        ylab_tot = 'total N conc. (mmol N m^{-3})';
+                end
+                
+                %% Relative abundances
+                subplot(1,3,1)
 
-        %% Abundance spectra
-        subplot(1,3,3)
-        for i = 1:size(ymod, 2)
-            plotFun(x, ymod(:,i), 'Marker', '.', ...
-                'MarkerEdgeColor', colmod, 'Color', colmod);
-            if i == 1, hold on; end
-        end
-        plotFun(x, ydat, '-o', 'Color', coldat)
-        gc = gca;
-        xlabel('ESD (\mum)')
-        ylabel(ylab)
-        % legend
-        xl = gc.XLim;
-        yl = gc.YLim;        
-        switch logPlot
-            case 'loglog'            
-                xl = log10(xl);
-                yl = log10(yl);
-                xleg = 10 .^ [xl(2)-0.2*diff(xl), xl(2)-0.0125*diff(xl)];
-                yleg = 10 .^ [yl(2)-0.125*diff(yl), yl(2)-0.025*diff(yl)];
-                fill([xleg(1), xleg(2), xleg(2), xleg(1), xleg(1)], ...
-                    [yleg(1), yleg(1), yleg(2), yleg(2), yleg(1)], ...
-                    [1 1 1], 'EdgeColor', [1 1 1])
-                text(10 .^ (xl(2)-0.15*diff(xl)), 10 .^ (yl(2)-0.05*diff(yl)), 'data')
-                text(10 .^ (xl(2)-0.15*diff(xl)), 10 .^ (yl(2)-0.1*diff(yl)), 'model')
-                scatter(10 .^ (xl(2)-0.17*diff(xl)), 10 .^ (yl(2)-0.05*diff(yl)), 'MarkerEdgeColor', coldat)
-                scatter(10 .^ (xl(2)-0.17*diff(xl)), 10 .^ (yl(2)-0.1*diff(yl)), 'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod)                
-            case 'semilogx'
-                xl = log10(xl);
-                xleg = 10 .^ [xl(2)-0.2*diff(xl), xl(2)-0.0125*diff(xl)];
+                dat = Data.size.dataBinned;
+%                 dat = Data.sizeFull.dataBinned.groupedByOrigin;
+                modDat = modData.size;
+%                 modDat = modData.sizeFull;
+                
+                ind = strcmp(dat.Variable, v) & strcmp(dat.waterMass, waterOrigin);
+                
+                if exist('trophicGroup', 'var')
+                    ind = ind & strcmp(dat.trophicLevel, eval('trophicGroup'));
+                end
+                
+                x = unique(dat.size(ind));
+                ydat = dat.Value(ind); % observation
+                ymod = modDat.Value(ind,:); % modelled equivalents
+%                 ymod = modDat.(['Value_' waterOrigin])(ind,:); % modelled equivalents
+
+                ydat_tot = sum(ydat);
+                ymod_tot = sum(ymod);
+                ydat_rel = ydat ./ ydat_tot;
+                ymod_rel = ymod ./ ymod_tot;
+                switch logPlot
+                    case 'loglog'
+                        plotFun = @loglog;
+                    case 'semilogx'
+                        plotFun = @semilogx;
+                end
+                for i = 1:size(ymod_rel, 2)
+                    plotFun(x, ymod_rel(:,i), 'Marker', '.', ...
+                        'MarkerEdgeColor', colmod, 'Color', colmod);
+                    if i == 1, hold on; end
+                end
+                plotFun(x, ydat_rel, '-o', 'Color', coldat)
+                gc = gca;
+                xlabel('ESD (\mum)')
+                ylabel(ylab_rel)
+                % legend
+                xl = gc.XLim;
+                yl = gc.YLim;
+                switch logPlot
+                    case 'loglog'
+                        xl = log10(xl);
+                        yl = log10(yl);
+                        xleg = 10 .^ [xl(2)-0.2*diff(xl), xl(2)-0.0125*diff(xl)];
+                        yleg = 10 .^ [yl(2)-0.125*diff(yl), yl(2)-0.025*diff(yl)];
+                        fill([xleg(1), xleg(2), xleg(2), xleg(1), xleg(1)], ...
+                            [yleg(1), yleg(1), yleg(2), yleg(2), yleg(1)], ...
+                            [1 1 1], 'EdgeColor', [1 1 1])
+                        text(10 .^ (xl(2)-0.15*diff(xl)), 10 .^ (yl(2)-0.05*diff(yl)), 'data')
+                        text(10 .^ (xl(2)-0.15*diff(xl)), 10 .^ (yl(2)-0.1*diff(yl)), 'model')
+                        scatter(10 .^ (xl(2)-0.17*diff(xl)), 10 .^ (yl(2)-0.05*diff(yl)), 'MarkerEdgeColor', coldat)
+                        scatter(10 .^ (xl(2)-0.17*diff(xl)), 10 .^ (yl(2)-0.1*diff(yl)), 'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod)
+                    case 'semilogx'
+                        xl = log10(xl);
+                        xleg = 10 .^ [xl(2)-0.2*diff(xl), xl(2)-0.0125*diff(xl)];
+                        yleg = [yl(2)-0.125*diff(yl), yl(2)-0.025*diff(yl)];
+                        fill([xleg(1), xleg(2), xleg(2), xleg(1), xleg(1)], ...
+                            [yleg(1), yleg(1), yleg(2), yleg(2), yleg(1)], ...
+                            [1 1 1], 'EdgeColor', [1 1 1])
+                        text(10 .^ (xl(2)-0.15*diff(xl)), yl(2)-0.05*diff(yl), 'data')
+                        text(10 .^ (xl(2)-0.15*diff(xl)), yl(2)-0.1*diff(yl), 'model')
+                        scatter(10 .^ (xl(2)-0.17*diff(xl)), yl(2)-0.05*diff(yl), 'MarkerEdgeColor', coldat)
+                        scatter(10 .^ (xl(2)-0.17*diff(xl)), yl(2)-0.1*diff(yl), 'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod)
+                end
+                hold off
+                
+                %% total abundance
+                subplot(1,3,2)
+                scatter(repmat(1/3, [1 length(ymod_tot)]), ymod_tot, 'MarkerFaceColor', colmod, ...
+                    'MarkerEdgeColor', colmod);
+                hold on
+                scatter(2/3, ydat_tot, 'MarkerEdgeColor', coldat);
+                gc = gca;
+                yl = gc.YLim;
+                yl(1) = 0;
+                yl(2) = 1.5 .* yl(2);
+                gc.YLim = yl;
+                gc.XLim = [0 1];
+                gc.XTick = [];
+                ylabel(ylab_tot)
+                % legend
+                xl = gc.XLim;
+                yl = gc.YLim;
+                xleg = [xl(2)-0.2*diff(xl), xl(2)-0.0125*diff(xl)];
                 yleg = [yl(2)-0.125*diff(yl), yl(2)-0.025*diff(yl)];
                 fill([xleg(1), xleg(2), xleg(2), xleg(1), xleg(1)], ...
                     [yleg(1), yleg(1), yleg(2), yleg(2), yleg(1)], ...
                     [1 1 1], 'EdgeColor', [1 1 1])
-                text(10 .^ (xl(2)-0.15*diff(xl)), yl(2)-0.05*diff(yl), 'data')
-                text(10 .^ (xl(2)-0.15*diff(xl)), yl(2)-0.1*diff(yl), 'model')
-                scatter(10 .^ (xl(2)-0.17*diff(xl)), yl(2)-0.05*diff(yl), 'MarkerEdgeColor', coldat)
-                scatter(10 .^ (xl(2)-0.17*diff(xl)), yl(2)-0.1*diff(yl), 'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod)
+                text(xl(2)-0.15*diff(xl), yl(2)-0.05*diff(yl), 'data')
+                text(xl(2)-0.15*diff(xl), yl(2)-0.1*diff(yl), 'model')
+                scatter(xl(2)-0.17*diff(xl), yl(2)-0.05*diff(yl), 'MarkerEdgeColor', coldat)
+                scatter(xl(2)-0.17*diff(xl), yl(2)-0.1*diff(yl), 'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod)
+                hold off
+                
+                %% Abundance spectra
+                subplot(1,3,3)
+                for i = 1:size(ymod, 2)
+                    plotFun(x, ymod(:,i), 'Marker', '.', ...
+                        'MarkerEdgeColor', colmod, 'Color', colmod);
+                    if i == 1, hold on; end
+                end
+                plotFun(x, ydat, '-o', 'Color', coldat)
+                gc = gca;
+                xlabel('ESD (\mum)')
+                ylabel(ylab)
+                % legend
+                xl = gc.XLim;
+                yl = gc.YLim;
+                switch logPlot
+                    case 'loglog'
+                        xl = log10(xl);
+                        yl = log10(yl);
+                        xleg = 10 .^ [xl(2)-0.2*diff(xl), xl(2)-0.0125*diff(xl)];
+                        yleg = 10 .^ [yl(2)-0.125*diff(yl), yl(2)-0.025*diff(yl)];
+                        fill([xleg(1), xleg(2), xleg(2), xleg(1), xleg(1)], ...
+                            [yleg(1), yleg(1), yleg(2), yleg(2), yleg(1)], ...
+                            [1 1 1], 'EdgeColor', [1 1 1])
+                        text(10 .^ (xl(2)-0.15*diff(xl)), 10 .^ (yl(2)-0.05*diff(yl)), 'data')
+                        text(10 .^ (xl(2)-0.15*diff(xl)), 10 .^ (yl(2)-0.1*diff(yl)), 'model')
+                        scatter(10 .^ (xl(2)-0.17*diff(xl)), 10 .^ (yl(2)-0.05*diff(yl)), 'MarkerEdgeColor', coldat)
+                        scatter(10 .^ (xl(2)-0.17*diff(xl)), 10 .^ (yl(2)-0.1*diff(yl)), 'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod)
+                    case 'semilogx'
+                        xl = log10(xl);
+                        xleg = 10 .^ [xl(2)-0.2*diff(xl), xl(2)-0.0125*diff(xl)];
+                        yleg = [yl(2)-0.125*diff(yl), yl(2)-0.025*diff(yl)];
+                        fill([xleg(1), xleg(2), xleg(2), xleg(1), xleg(1)], ...
+                            [yleg(1), yleg(1), yleg(2), yleg(2), yleg(1)], ...
+                            [1 1 1], 'EdgeColor', [1 1 1])
+                        text(10 .^ (xl(2)-0.15*diff(xl)), yl(2)-0.05*diff(yl), 'data')
+                        text(10 .^ (xl(2)-0.15*diff(xl)), yl(2)-0.1*diff(yl), 'model')
+                        scatter(10 .^ (xl(2)-0.17*diff(xl)), yl(2)-0.05*diff(yl), 'MarkerEdgeColor', coldat)
+                        scatter(10 .^ (xl(2)-0.17*diff(xl)), yl(2)-0.1*diff(yl), 'MarkerEdgeColor', colmod, 'MarkerFaceColor', colmod)
+                end
+                hold off
+                
+                if exist('trophicGroup', 'var')
+                    sgtitle({['Model fit to ' eval('trophicGroup') ' ' Var ' data'], [waterOrigin ' waters']})
+                else
+                    sgtitle({['Model fit to ' Var ' data'], [waterOrigin ' waters']})
+                end
+                
+                
         end
-        hold off
         
-        if exist('trophicGroup', 'var')
-            sgtitle(['Model fit to ' trophicGroup ' ' Var ' data'])
-        else
-            sgtitle(['Model fit to ' Var ' data'])
-        end
-
+        
+        
+        
+        
+        
 end
-        

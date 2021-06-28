@@ -1,34 +1,37 @@
-function plt = plot_timeSeries_trajectoryPolygon(var, event, traj, out, ...
+function plt = plot_timeSeries_trajectoryPolygon2(var, event, traj, out, ...
     auxVars, fixedParams, forcing, dat, varargin)
 
 plt = [];
-depth = 'mean';
-plotNew = true;
-fixedYaxis = false;
+extractVarargin(varargin)
 
-if ~isempty(varargin)
-    if any(strcmp(varargin, 'depth'))
-        depth = varargin{find(strcmp(varargin, 'depth'))+1};
-    end
-    
-    if any(strcmp(varargin, 'highlightColour'))
-        highlightColour = varargin{find(strcmp(varargin, 'highlightColour'))+1};
-    else
-        highlightColour = [0 1 0]; % green as default
-    end
-    
-    if any(strcmp(varargin, 'plotNew'))
-        plotNew = varargin{find(strcmp(varargin, 'plotNew'))+1};
-    end
-    
-    if any(strcmp(varargin, 'fixedYaxis'))
-        fixedYaxis = varargin{find(strcmp(varargin, 'fixedYaxis'))+1};
-    end
-    
-    if any(strcmp(varargin, 'waterMass'))
-        waterMass = varargin{find(strcmp(varargin, 'waterMass')) +1};
-    end
-    
+if ~exist('depth', 'var')
+    depth = 'mean';
+end
+if ~exist('highlightColour', 'var')
+    highlightColour = [0 1 0]; % green as default
+end
+if ~exist('plotNew', 'var')
+    plotNew = true;
+end
+if ~exist('fixedYaxis', 'var')
+    fixedYaxis = false;
+end
+
+if ~exist('axesTextSize', 'var')
+    axesTextSize = 12;
+end
+if ~exist('titleTextSize', 'var')
+    titleTextSize = 10;
+end
+if ~exist('legendTextSize', 'var')
+    legendTextSize = 10;
+end
+if ~exist('legendPointSize', 'var')
+    legendPointSize = 36;
+end
+
+if ~exist('waterMass', 'var')
+    waterMass = [];
 end
 
 nt = fixedParams.nt;
@@ -490,12 +493,12 @@ switch var
         
         Y = squeeze(P(:,:,fixedParams.PP_C_index,:,:));
         Y = repmat(reshape(fixedParams.zwidth, [1 nz]), [nPP_size 1]) .* Y; % conc -> quantity
-        Y = squeeze(sum(Y,2));
+        Y = squeeze(sum(Y,2,'omitnan')); % sum over depth
         
         YZ = squeeze(Z(:,:,fixedParams.ZP_C_index,:,:));
         if nZP_size == 1, YZ = reshape(YZ, [1 size(YZ)]); end
         YZ = repmat(reshape(fixedParams.zwidth, [1 nz]), [nZP_size 1]) .* YZ;
-        YZ = squeeze(sum(YZ,2));
+        YZ = squeeze(sum(YZ,2,'omitnan'));
         if nZP_size == 1, YZ = reshape(YZ, [1 size(YZ)]); end
         
         Y = cat(1, Y, YZ);
@@ -519,30 +522,58 @@ switch var
         xlim([min(x) max(x)])
         ylim([0 max(ypgonc(:))])
         xl = xlim; yl = ylim;        
-        yleg = linspace(yl(1)+0.95*diff(yl), yl(1)+0.5*diff(yl), max([nPP_size, nZP_size]) + 2);
+        yleg = linspace(yl(1)+0.95*diff(yl), yl(1)+0.25*diff(yl), max([nPP_size, nZP_size]) + 2);
+%         yleg = linspace(yl(1)+0.95*diff(yl), yl(1)+0.5*diff(yl), max([nPP_size, nZP_size]) + 2);
         hold on
-        text(xl(1)+0.1*diff(xl), yleg(1), 'cell diameter')
-        text(xl(1)+0.05*diff(xl), yleg(2), 'autotrophs')        
-        text(xl(1)+0.15*diff(xl), yleg(2), 'heterotrophs')        
+        
+        text(xl(1)+0.15*diff(xl), yleg(1), 'cell diameter (\mum)', 'FontSize', legendTextSize)
+        text(xl(1)+0.05*diff(xl), yleg(2), 'autotrophs', 'FontSize', legendTextSize)        
+        text(xl(1)+0.25*diff(xl), yleg(2), 'heterotrophs', 'FontSize', legendTextSize)                
+%         text(xl(1)+0.1*diff(xl), yleg(1), 'cell diameter')
+%         text(xl(1)+0.05*diff(xl), yleg(2), 'autotrophs')        
+%         text(xl(1)+0.15*diff(xl), yleg(2), 'heterotrophs')        
+
         ps = scatter(xl(1)+0.05*diff(xl), yleg(3), 'filled');
+%         ps = scatter(xl(1)+0.05*diff(xl), yleg(3), 'filled');
         ps.MarkerFaceColor = cols(1,:);
+        ps.SizeData = legendPointSize;
         text(xl(1)+0.07*diff(xl), yleg(3), ...
-            [num2str(round(fixedParams.PPdia(1),2,'significant')) ' \mum'])
+            num2str(round(fixedParams.PPdia(1),2,'significant')), ...
+            'FontSize', legendTextSize)
+%         text(xl(1)+0.07*diff(xl), yleg(3), ...
+%             [num2str(round(fixedParams.PPdia(1),2,'significant')) ' \mum'], ...
+%             'FontSize', legendTextSize)
         for i = 2:nPP_size
             fill(xpgon, [ypgonc(i,:), flip(ypgonc(i+1,:))], cols(i,:))
             ps = scatter(xl(1)+0.05*diff(xl), yleg(i+2), 'filled');
             ps.MarkerFaceColor = cols(i,:);
-                text(xl(1)+0.07*diff(xl), yleg(i+2), ...
-                    [num2str(round(fixedParams.PPdia(i),2,'significant')) ' \mum'])
+            ps.SizeData = legendPointSize;
+            text(xl(1)+0.07*diff(xl), yleg(i+2), ...
+                num2str(round(fixedParams.PPdia(i),2,'significant')), ...
+                'FontSize', legendTextSize)
+%             text(xl(1)+0.07*diff(xl), yleg(i+2), ...
+%                 [num2str(round(fixedParams.PPdia(i),2,'significant')) ' \mum'], ...
+%                 'FontSize', legendTextSize)
         end        
         for i = 1:nZP_size
             fill(xpgon, [ypgonc(i+nPP_size,:), flip(ypgonc(i+nPP_size+1,:))], cols(i+nPP_size,:))
-            ps = scatter(xl(1)+0.15*diff(xl), yleg(i+2), 'filled');
+            ps = scatter(xl(1)+0.25*diff(xl), yleg(i+2), 'filled');
+%             ps = scatter(xl(1)+0.15*diff(xl), yleg(i+2), 'filled');
             ps.MarkerFaceColor = cols(i+nPP_size,:);
-            text(xl(1)+0.17*diff(xl), yleg(i+2), ...
-                [num2str(round(fixedParams.ZPdia(i),2,'significant')) ' \mum'])
+            ps.SizeData = legendPointSize;
+            text(xl(1)+0.27*diff(xl), yleg(i+2), ...
+                num2str(round(fixedParams.ZPdia(i),2,'significant')), ...
+                'FontSize', legendTextSize)
+%             text(xl(1)+0.27*diff(xl), yleg(i+2), ...
+%                 [num2str(round(fixedParams.ZPdia(i),2,'significant')) ' \mum'], ...
+%                 'FontSize', legendTextSize)
+%             text(xl(1)+0.17*diff(xl), yleg(i+2), ...
+%                 [num2str(round(fixedParams.ZPdia(i),2,'significant')) ' \mum'])
         end
         hold off
+        
+        set(gca, 'FontSize', axesTextSize)
+        
         xlabel('year-day')
         ylabel('biomass (mmol C)')
         
@@ -558,7 +589,7 @@ switch var
                 [waterMass ' water mass: sample event ' num2str(event)]})
         else
             title({['plankton carbon in ' num2str(fixedParams.Htot) 'm deep (1m^2) water column'], ...
-                [waterMass ' water']})
+                [waterMass ' water']}, 'FontSize', titleTextSize)
         end
 end
 

@@ -6,7 +6,6 @@ if ~isempty(varargin)
         parnames = FixedParams.tunePars;
         npars = length(parnames);
         Vol = FixedParams.sizeAll;
-%         V_PP = FixedParams.PPsize;
         for i = 1:npars
             pn = parnames{i};
             Params.(pn) = newvals(i); % update scalars
@@ -17,29 +16,19 @@ if ~isempty(varargin)
                 param_a = Params.([Name '_a']);
                 param_b = Params.([Name '_b']);
                 Params.(Name) = Params.([Name '_func'])(param_a, param_b, Vol);
-%                 if ~(any(strcmp(Name, {'Qmax_delQ'})) || any(strcmp(Name, {'wp'})))
-%                     Params.(Name) = powerFunction(param_a, param_b, Vol);
-%                 else
-%                     if any(strcmp(Name, {'wp'}))
-%                         Params.(Name) = powerFunction(param_a, param_b, Vol, ...
-%                             'UpperBound', FixedParams.maxSinkSpeed_P, 'Transpose', true);
-%                     end
-%                     if any(strcmp(Name, {'Qmax_delQ'}))
-%                         Params.(Name) = 1 ./ (1 - powerFunction(param_a, param_b, Vol));
-%                     end
-%                 end
             end
-            
             if strcmp(pn, 'beta1') || strcmp(pn, 'beta2') || strcmp(pn, 'beta3')
                 Name = pn(1:end-1);
                 param1 = Params.([Name '1']);
                 param2 = Params.([Name '2']);
                 param3 = Params.([Name '3']);
                 Params.(Name) = Params.([Name '_func'])(param1, param2, param3, Vol);
-                Params.beta = doubleLogisticFunction(Params.beta1, Params.beta2, ...
-                    Params.beta3, log10(Vol));
             end
-            
+            if strcmp(pn, 'wDOM1') || strcmp(pn, 'wPOM1')
+                Name = pn(1:end-1);
+                param1 = Params.([Name '1']);
+                Params.(Name) = Params.([Name '_func'])(param1);
+            end
         end
         
         % Functions of parameters
@@ -48,30 +37,27 @@ if ~isempty(varargin)
                 any(strcmp('Qmax_delQ_a', parnames)) || any(strcmp('Qmax_delQ_b', parnames))
             Params.Qmax_QC = Params.Qmax_QC_func(Params.Qmin_QC, Params.Qmax_delQ);
             Params.delQ_QC = Params.delQ_QC_func(Params.Qmin_QC, Params.Qmax_QC);
-%             Params.Qmax_QC = Params.Qmin_QC ./ (1 - 1 ./ Params.Qmax_delQ);
-%             Params.delQ_QC = Params.Qmax_QC - Params.Qmin_QC;
         end
         
         if any(strcmp('Vmax_QC_a', parnames)) || any(strcmp('Vmax_QC_b', parnames)) || ...
                 any(strcmp('aN_QC_a', parnames)) || any(strcmp('aN_QC_b', parnames))
             Params.kN = Params.kN_func(Params.Vmax_QC, Params.aN_QC);
-%             Params.kN = Params.Vmax_QC ./ Params.aN_QC;
-        end
-        
-        if any(strcmp('Gmax_a', parnames)) || any(strcmp('Gmax_b', parnames))
-            Params.Gmax = Params.Gmax(FixedParams.zooplankton);
         end
         
         if any(strcmp('rDOC', parnames)) || any(strcmp('rDON', parnames)) || ...
                 any(strcmp('rPOC', parnames)) || any(strcmp('rPON', parnames))
-            Params.rOM = Params.rOM_func(Params.rDOC, Params.rDON, ...
-                Params.rPOC, Params.rPON, FixedParams.DOM_index, ...
-                FixedParams.POM_index, FixedParams.OM_C_index, FixedParams.OM_N_index);
+            if isfield(Params, 'rDOC_func')
+                Params.rDOC = Params.rDOC_func(Params.rDON);
+            end
+            if isfield(Params, 'rPOC_func')
+                Params.rPOC = Params.rPOC_func(Params.rPON);
+            end
+            Params.rOM = Params.rOM_func(Params.rDOC, Params.rDON, ... 
+                Params.rPOC, Params.rPON);
         end
         
-        if any(strcmp('wDOM', parnames)) || any(strcmp('wPOM', parnames))
-            Params.wk = Params.wk_func(Params.wDOM, Params.wPOM, ... 
-                FixedParams.DOM_index, FixedParams.POM_index);
+        if any(strcmp('wDOM1', parnames)) || any(strcmp('wPOM1', parnames))
+            Params.wk = Params.wk_func(Params.wDOM, Params.wPOM);
         end
         
                 
@@ -80,7 +66,7 @@ if ~isempty(varargin)
         extractVarargin(varargin)
         
         % Scalar parameters
-        parNames = Params.scalars;
+        parNames = Params.scalarParams;
         for i = 1:length(parNames)
             if exist(parNames{i}, 'var')
                 name = parNames{i};
@@ -89,10 +75,9 @@ if ~isempty(varargin)
             end
         end
         
-        % Size-dependent parameters
+        % Vector parameters
         Vol = FixedParams.sizeAll(:);
-%         V_PP = FixedParams.PPsize(:);
-        parNames = Params.sizeDependent;
+        parNames = Params.vectorParams;
         suf = {'_a', '_b'};
         
         for i = 1:length(parNames)
@@ -120,7 +105,11 @@ if ~isempty(varargin)
                     b3 = Params.([Name '3']);
                     Params.(Name) = Params.([Name '_func'])(b1, b2, b3, Vol);
                 end                
-                
+                if any(strcmp(name, {'wDOM1','wPOM1'}))
+                    Name = name(1:length(name)-1);
+                    param1 = Params.([Name '1']);
+                    Params.(Name) = Params.([Name '_func'])(param1);
+                end                
             end
         end
         
@@ -138,42 +127,24 @@ if ~isempty(varargin)
             Params.kN = Params.kN_func(Params.Vmax_QC, Params.aN_QC);
         end
         
-        if exist('Gmax_a', 'var') || exist('Gmax_b', 'var')
-            Params.Gmax = Params.Gmax(FixedParams.zooplankton);
-        end
-        
         if exist('rDOC', 'var') || exist('rDON', 'var') || ... 
                 exist('rPOC', 'var') || exist('rPON', 'var')
-            Params.rOM = Params.rOM_func(rDOC, rDON, rPOC, rPON, ...
-                FixedParams.DOM_index, FixedParams.POM_index, ... 
-                FixedParams.OM_C_index, FixedParams.OM_N_index);
+            if isfield(Params, 'rDOC_func')
+                Params.rDOC = Params.rDOC_func(Params.rDON);
+            end
+            if isfield(Params, 'rPOC_func')
+                Params.rPOC = Params.rPOC_func(Params.rPON);
+            end
+            Params.rOM = Params.rOM_func(Params.rDOC, Params.rDON, ... 
+                Params.rPOC, Params.rPON);
         end
         
-        if exist('wDOM', 'var') || exist('wPOM', 'var')
-            Params.wk = Params.wk_func(wDOM, wPOM, ... 
-                FixedParams.DOM_index, FixedParams.POM_index);
+        if exist('wDOM1', 'var') || exist('wPOM1', 'var')
+            Params.wk = Params.wk_func(Params.wDOM, Params.wPOM);
         end
-                    
+        
     end
 
 end
 
 end
-
-% function y = powerFunction(a, b, x, varargin)
-% y = a .* x .^ b;
-% if ~isempty(varargin)
-%     tr = strcmp(varargin, 'Transpose');
-%     if any(tr) && varargin{find(tr)+1}, y = y'; end
-%     ub = strcmp(varargin, 'UpperBound');
-%     if any(ub)
-%         cap = varargin{find(ub)+1};
-%         y(y>cap) = cap;
-%     end
-% end
-% end
-% 
-% function y = doubleLogisticFunction(a, b, c, x)
-% u = exp(x - c);
-% y = a ./ (1 + u) .* (1 + b .* u);
-% end

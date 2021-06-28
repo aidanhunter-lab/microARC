@@ -22,11 +22,10 @@ nsize = nPP_size + nZP_size;
 N = v_in(fixedParams.IN_index)';
 
 % Plankton
-B = cat(1, ...
-    reshape(v_in(fixedParams.PP_index), [nPP_size nz nPP_nut]), ... % autotrophs
+B = [reshape(v_in(fixedParams.PP_index), [nPP_size nz nPP_nut]); ... % autotrophs
     cat(3, ...
     reshape(v_in(fixedParams.ZP_index), [nZP_size nz nZP_nut]), ... % heterotrophs (include extra zeros for chl-a)
-    zeros(nZP_size, nz, 1))); % all plankton
+    zeros(nZP_size, nz, nPP_nut - nZP_nut))];
 
 B_C = B(:,:,fixedParams.PP_C_index); % all planktonic carbon
 
@@ -48,8 +47,7 @@ Isurf = (Isurf(:,1) + diff(Isurf,1,2) .* t)';
 % Calculate light levels at depth -- within each depth layer light
 % attenuates over half the layer width plus the combined widths of all
 % shallower layers.
-att = (fixedParams.attSW + fixedParams.attP .* sum(B(phyto,:,fixedParams.PP_Chl_index))) .* fixedParams.zwidth';
-% att = (fixedParams.attSW + fixedParams.attP .* sum(PP(:,:,fixedParams.PP_Chl_index))) .* fixedParams.zwidth';
+att = (fixedParams.attSW + fixedParams.attP .* sum(B(:,:,fixedParams.PP_Chl_index))) .* fixedParams.zwidth';
 att = 0.5 * att + [0 cumsum(att(1:nz-1))];
 out.I = Isurf * exp(-att);
 
@@ -73,9 +71,8 @@ out.Qstat = 1 - out.gammaN .^ params.h;
 out.gammaT = exp(params.A .* (T - params.Tref));
 
 % Background mortality
-% B_C_mortality = params.m .* B_C; % linear mortality
-% B_C_mortality = params.m .* B_C .^ 2; % non-linear mortality
-out.mortality = params.m .* B;
+% out.mortality = params.m .* B;
+out.mortality = (params.m + params.m2 .* B) .* B;
 
 %~~~~~~~~~~~
 % Autotrophy
@@ -86,18 +83,23 @@ out.V = zeros(nsize, nz, nPP_nut); % all uptake rates
 % Nutrient uptake
 out.V(:,:,fixedParams.PP_N_index) = ... 
     MichaelisMenton(params.Vmax_QC, params.kN, N) .* out.gammaT .* out.Qstat;
-out.V(zoo,:,fixedParams.PP_N_index) = 0;
 
 % Photosynthesis
-zeroLight = all(out.I == 0);
+zeroLight = out.I(1) == 0;
+
 if ~zeroLight
-    out.psat = params.pmax .* out.gammaT .* out.gammaN; % light saturated photosynthetic rate
-    aP_Q_I = (params.aP .* out.I) .* out.Q(:,:,fixedParams.PP_Chl_index);
-    out.pc = out.psat .* (1 - exp(-aP_Q_I ./ out.psat )); % photosynthetic (carbon production) rate (1 / day)
-    out.rho = params.theta .* out.pc ./ aP_Q_I;  % proportion of new nitrogen prodcution allocated to chlorophyll (mg Chl / mmol N)
+    out.psat = params.pmax .* out.gammaT .* out.gammaN; % light saturated photosynthetic rate (N-dependent)
+    aP_Q_I = (params.aP .* out.I) .* out.Q(:,:,fixedParams.PP_Chl_index); % photon capture rate (Chl-dependent)
+    out.pc = out.psat .* (1 - exp(-aP_Q_I ./ out.psat)); % photosynthetic (carbon production) rate (1 / day)    
+    out.rho = params.theta .* min(1, out.pc ./ aP_Q_I, 'includenan'); % proportion of new nitrogen prodcution diverted to chlorophyll (mg Chl / mmol N)
+    % The min function in rho should only be required to correct numerical
+    % inaccuracies when I -> 0.
+    out.V(:,:,fixedParams.PP_C_index) = max(0, ... 
+        out.pc - params.xi .* out.V(:,:,fixedParams.PP_N_index)); % photosynthesis minus metabolic cost
     out.V(:,:,fixedParams.PP_Chl_index) = out.rho .* out.V(:,:,fixedParams.PP_N_index); % chlorophyll production rate (mg Chl / mmol C / day)
-    out.V(:,:,fixedParams.PP_C_index) = max(0, out.pc - params.xi .* out.V(:,:,fixedParams.PP_N_index));
 end
+
+out.V(isnan(out.V)) = 0;
 
 out.uptake = B_C .* out.V;
 out.N_uptake_losses = sum(out.uptake(:,:,fixedParams.PP_N_index));
@@ -107,13 +109,9 @@ out.N_uptake_losses = sum(out.uptake(:,:,fixedParams.PP_N_index));
 % Heterotrophy
 %~~~~~~~~~~~~~
 
-% phi = exp(-log(fixedParams.delta ./ params.delta_opt) .^ 2 ./ (2 .* params.sigG .^ 2)); % phi could be moved outside of ODEs if delta_opt and sigG are not tuned
-phi_BC = exp(-log(fixedParams.delta ./ params.delta_opt) .^ 2 ./ (2 .* params.sigG .^ 2)) .* ... 
-    reshape(B_C, [1 size(B_C)]);
+phi_BC = params.phi .* reshape(B_C, [1 size(B_C)]);
 F = sum(phi_BC, 2);
-
 phi_BC2 = phi_BC .^ 2;
-% phi_BC2 = (phi .* reshape(B_C, [1 size(B_C)])) .^ 2;
 Phi = phi_BC2 ./ sum(phi_BC2, 2); % prey preference
 
 out.G = (reshape(out.gammaT, [1 size(out.gammaT)]) .* ...
@@ -187,9 +185,7 @@ OM_diffuse = permute(reshape( ...
 % Sinking
 %~~~~~~~~
 
-wk = repmat(params.wk, [1 nOM_nut]);
-
-v_sink = sinking([B_C_t, OM_], [params.wp, wk], fixedParams.zwidth);
+v_sink = sinking([B_C_t, OM_], [params.wp, params.wk], fixedParams.zwidth);
 
 B_sink = out.Q .* v_sink(:,1:nsize)';
 OM_sink = permute(reshape(v_sink(:,nsize+1:end), ... 
@@ -225,8 +221,8 @@ if (islogical(returnExtra) && returnExtra) || ...
     % Extra output variables retained by default when return = true or 'all'.
     keepVars = {'I', 'Q', 'V', 'G', 'lambda', 'cellDensity', 'biovolume'};
     % Any term can be included in keepVars, but it's useful to be sparing
-    % with memory by only on returning some terms then deriving extra output
-    % outside the ODEs.m script.
+    % with memory by only returning a few terms then deriving more extra
+    % output outside this ODEs.m function.
     
     if ~islogical(returnExtra) && ~all(strcmp(returnExtra, 'all'))
         % if extra output variables have been specified explicitly...
@@ -269,30 +265,4 @@ function v = MichaelisMenton(m,k,u)
 u(u<0) = 0; % include for robustness... there shouldn't be any negatives
 v = m .* u ./ (u + k);
 end
-
-% function [out1, out2, out3, out4] = groupByDimension(v)
-% % Organises extra output structs
-% fields = fieldnames(v);
-% out1 = struct();
-% out2 = struct();
-% out3 = struct();
-% out4 = struct();
-% for i = 1:length(fields)
-%     x = v.(fields{i});
-%     if isvector(x)
-%         out1.(fields{i}) = x;
-%     end
-%     if ~isvector(x) && ismatrix(x)
-%         out2.(fields{i}) = x;
-%     end
-% %     if size(x, 1) > 1 && ndims(x) == 3
-%     if ndims(x) == 3
-%         out3.(fields{i}) = x;
-%     end
-% %     if size(x, 1) > 1 && ndims(x) == 4
-%     if ndims(x) == 4
-%         out4.(fields{i}) = x;
-%     end
-% end
-% end
 

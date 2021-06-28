@@ -21,7 +21,21 @@ display(Directories)
 % Load saved outputs from optimisation runs or choose default set-up
 loadFittedParams = true; % use output saved from optimisation run?
 fileName = 'fittedParameters';  % saved parameters file name
-tag = '1';                      % and identifying tag
+% tag = '1';                      % and identifying tag
+% tag = 'N_LN-Dir_groupWaterOrigin';
+
+% tag = 'Hellinger2_groupWaterOrigin_Atlantic';
+% tag = 'Hellinger2_groupWaterOrigin_Arctic';
+% tag = 'Hellinger2_groupWaterOrigin_fittedMortalityIntercept_Arctic';
+% tag = 'Hellinger3_groupWaterOrigin_Atlantic';
+tag = 'IQD_Hellinger_groupWaterOrigin_Atlantic';
+tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj';
+tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj_sizeDataOnly';
+
+
+% tag = 'Hellinger_MVN_groupWaterOrigin';10
+% tag = 'Hellinger_MVN_groupWaterOrigin_2';
+
 fileName = fullfile(Directories.resultsDir, ...
     [fileName '_' tag]);
 
@@ -31,14 +45,17 @@ switch loadFittedParams
         [~, results, parNames, optPar, boundsLower, boundsUpper, Data, Forc, ...
             FixedParams, Params, v0] = loadOptimisationRun(fileName);
         displayFittedParameters(results)
-        Params = updateParameters(Params, FixedParams, optPar); % ensure Params struct contains the best-fitting parameter set
-        
+        Params = updateParameters(Params, FixedParams, optPar); % ensure Params struct contains the best-fitting parameter set        
         % Parameters may be modified using name-value pairs in updateParameters.m
-        % Params = updateParameters(Params, FixedParams, 'pmax_a', 20, 'aP', 0.01);
+        % Params = updateParameters(Params, FixedParams, 'pmax_a', 2, 'aP', 0.01);
+        
+        % As saved results may be based on trajectories originating fom the
+        % Arctic or Atlantic, call modelSetUp to generate the unfiltered
+        % forcing and fitting data
+        [Forc0, ~, ParamsDefault, Data0] = modelSetUp(Directories, 'numTraj', 1);
         
     case false % Use default model set-up if fitted outputs are not loaded
-        [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
-            'displayAllOutputs', true); % default set-up -- no plots
+        [Forc0, FixedParams, Params, Data0] = modelSetUp(Directories);
         
         % modelSetup.m may also produce plots -- set to 'true' any name-value pair as shown below
         
@@ -61,17 +78,34 @@ if ~exist('v0', 'var') || ~isnumeric(v0)
     % NOTE: initialiseVariables.m uses the quota parameters to initialise 
     % the plankton state variables. Thus, loaded v0 values may differ from 
     % those here generated using "best-fitting" quota params...
-    v0 = initialiseVariables(FixedParams, Params, Forc);
+    v0 = initialiseVariables(FixedParams, ParamsDefault, Forc);
 end
+% v00 = initialiseVariables(FixedParams, Params, Forc0); % create initials for full data (Forc0)
+v00 = initialiseVariables(FixedParams, ParamsDefault, Forc0); % create initials for full data (Forc0)
 
+
+clear out auxVars modData0 modData
 % Generate model outputs
+% using all trajectories
+tic; disp('.. started at'); disp(datetime('now'))
+[out0, auxVars0] = integrateTrajectories(FixedParams, Params, Forc0, v00, ... 
+    FixedParams.odeIntegrator, FixedParams.odeOptions);
+toc
+% and only trajectories used to fit the model
 tic; disp('.. started at'); disp(datetime('now'))
 [out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, ... 
     FixedParams.odeIntegrator, FixedParams.odeOptions);
 toc
 
+
 % Generate modelled equivalents of the data
+% modData = matchModOutput2Data(out, auxVars, Data, FixedParams);
+modData0 = matchModOutput2Data(out0, auxVars0, Data0, FixedParams);
 modData = matchModOutput2Data(out, auxVars, Data, FixedParams);
+
+[cost, costComponents] = costFunction('label', FixedParams.costFunction, ...
+    'Data', Data, 'modData', modData);
+
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -81,32 +115,396 @@ modData = matchModOutput2Data(out, auxVars, Data, FixedParams);
 % The above outputs are now used as arguments to various plotting 
 % functions stored in utility/plottingFunctions/...
 
-folder =Directories.plotDir; % save plots here
+folder = Directories.plotDir; % save plots here
+
+
+%% Map plots
+
+close all
+
+% Particle trajectories from physical model
+
+projection = 'lambert';
+% projection = 'miller';
+alphaLine = 0.15;
+
+% plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
+%     'alphaLine', alphaLine);
+plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
+    'alphaLine', alphaLine, 'Data', Data0);
+% plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
+%     'alphaLine', alphaLine, 'Data', Data0, 'labelSampleArea', true);
+
+% plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
+%     'alphaLine', alphaLine, 'Data', Data0, 'flowArrows', true);
+
+
+plt_mapTraj.Units = 'inches';
+plt_mapTraj.Position = [0 0 10 10];
+
+
+switch save, case true
+    if exist('plt_mapTraj', 'var') && isvalid(plt_mapTraj)
+        filename = 'map_trajectories.png';
+        print(plt_mapTraj, fullfile(folder, filename), '-r300', '-dpng');
+    end
+end
+
+
+% In-situ data
+
+projection = 'lambert';
+% projection = 'miller';
+% projection = 'utm';
+alphaPoint = 0.5;
+pointSize = 9;
+pieSize = 0.02;
+lonSpace = 0.4;
+latSpace = 0.1;
+colourByDataType = true;
+showWaterOrigin = true;
+polygonAlpha = 0.5;
+polygonSmooth = false;
+polygonExpand = 0;
+omitMapGrid = false; % do not plot map coords -- instead surround data points with polygon used to show sample area in the trajectory map
+includeLegend = true;
+legendPosition = 'southeast';
+
+plt_mapData = plot_dataMap(Directories, Data0, 'projection', projection, ...
+    'alphaPoint', alphaPoint, 'pointSize', pointSize, 'lonSpace', lonSpace, ... 
+    'latSpace', latSpace, 'Forc', Forc0, ... 
+    'showWaterOrigin', showWaterOrigin, 'polygonAlpha', polygonAlpha, ...
+    'polygonExpand', polygonExpand, 'polygonSmooth', polygonSmooth, ...
+    'colourByDataType', colourByDataType, 'pieSize', pieSize, ...
+    'includeLegend', includeLegend, 'legendPosition', legendPosition, ...
+    'omitMapGrid', omitMapGrid);
+
+plt_mapData.Units = 'inches';
+plt_mapData.Position = [0 0 6 4];
+
+switch save, case true
+    if exist('plt_mapData', 'var') && isvalid(plt_mapData)
+        filename = 'map_shipData.png';
+        print(plt_mapData, fullfile(folder, filename), '-r300', '-dpng');
+    end
+end
+
+
+% Combine the above maps
+plt_combineMaps = figure;
+plt_combineMaps.Units = 'inches';
+plt_combineMaps.Position = [0 0 8 8];
+
+% axes('position', [0.2, 0.2, 0.75, 0.75])
+axes('position', [0.15, 0.15, 0.85, 0.85])
+
+projection = 'lambert';
+alphaLine = 0.15;
+includeLegend = true;
+legendPosition = 'east';
+legendTextSize = 12;
+legendTitle = 'Water origin';
+legendTitleSize = 12;
+polygonLineWidth = 3;
+stripedBorder = false;
+
+plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
+    'alphaLine', alphaLine, 'Data', Data0, 'newPlot', false, ...
+    'includeLegend', includeLegend, 'legendPosition', legendPosition, ...
+    'legendTitle', legendTitle, 'legendTitleSize', legendTitleSize, ...
+    'legendTextSize', legendTextSize, 'polygonLineWidth', polygonLineWidth, ...
+    'stripedBorder', stripedBorder);
+
+axes('position', [0.1, 0.12, 0.5, 0.5])
+
+projection = 'lambert';
+alphaPoint = 0.5;
+pointSize = 9;
+pieSize = 0.02;
+lonSpace = 0.05;
+latSpace = 0.05;
+colourByDataType = true;
+showWaterOrigin = true;
+trimPolygons = true; % shape the water-origin polygons to fit neatly into the full area polygon
+polygonAlpha = 1; % polygons cannot be transparent because the underlying map shows though
+colSat = 0.6; % reduce colour saturation to emulate the transparent colours
+polygonSmooth = false;
+polygonExpand = 0;
+legendPosition = 'west';
+legendTitle = 'Data';
+omitMapGrid = true; % do not plot map coords -- instead surround data points with polygon used to show sample area in the trajectory map
+fullAreaPolygon = true; % draw polygon matching that used in the trajectory map
+polygonLineWidth = 3;
+
+plot_dataMap(Directories, Data0, 'projection', projection, ...
+    'alphaPoint', alphaPoint, 'pointSize', pointSize, 'lonSpace', lonSpace, ... 
+    'latSpace', latSpace, 'Forc', Forc0, ... 
+    'showWaterOrigin', showWaterOrigin, 'polygonAlpha', polygonAlpha, ...
+    'polygonExpand', polygonExpand, 'polygonSmooth', polygonSmooth, ...
+    'colourByDataType', colourByDataType, 'pieSize', pieSize, ...
+    'includeLegend', includeLegend, 'legendPosition', legendPosition, ... 
+    'omitMapGrid', omitMapGrid, 'colSat', colSat, ... 
+    'fullAreaPolygon', fullAreaPolygon, 'polygonLineWidth', polygonLineWidth, ... 
+    'trimPolygons', trimPolygons, 'legendTitle', legendTitle, ... 
+    'legendTitleSize', legendTitleSize, 'legendTextSize', legendTextSize, ...
+    'stripedBorder', stripedBorder, 'newPlot', false);
+
+switch save, case true
+    if exist('plt_combineMaps', 'var') && isvalid(plt_combineMaps)
+        filename = 'map_shipDataAndTrajectories.png';
+        print(plt_combineMaps, fullfile(folder, filename), '-r300', '-dpng');
+    end
+end
+
+
+
+
 
 %% Model fit to data
 
 save = true;
 
-% plots of raw data
-plt1 = figure;
-plt1.Units = 'inches';
-plt1.Position = [0 0 8 6];
-subplot(2,2,1)
-plot_rawData('scalar', 'N', Data, 'Ylim', [0, 70]);
-subplot(2,2,2)
-plot_rawData('scalar', 'chl_a', Data, 'Ylim', [0, 70]);
-subplot(2,2,3)
-plot_rawData('scalar', 'PON', Data, 'Ylim', [0, 70]);
-subplot(2,2,4)
-plot_rawData('scalar', 'POC', Data, 'Ylim', [0, 70]);
+%~~~~~~~~~
+% Raw data
+%~~~~~~~~~
 
-plt2 = figure;
-plt2.Units = 'inches';
-plt2.Position = [0 0 8 6];
+% Scalar data
+plt_scalar = figure;
+plt_scalar.Units = 'inches';
+plt_scalar.Position = [0 0 8 6];
+% axesTextSize = 14;
+% legendTextSize = 13;
+legendTitle = 'Water origin';
+% legendTitleSize = 13;
+pointAlpha = 0.4;
+subplot(2,2,1)
+plot_rawData('scalar', 'N', Data0, 'pointAlpha', pointAlpha, ...
+    'includeLegend', true, 'legendTitle', legendTitle);
+subplot(2,2,2)
+plot_rawData('scalar', 'chl_a', Data0, 'pointAlpha', pointAlpha);
+subplot(2,2,3)
+plot_rawData('scalar', 'PON', Data0, 'pointAlpha', pointAlpha);
+subplot(2,2,4)
+plot_rawData('scalar', 'POC', Data0, 'pointAlpha', pointAlpha);
+
+
+% Size data - spectra
+plt_spectra = figure;
+plt_spectra.Units = 'inches';
+plt_spectra.Position = [0 0 8 6];
 subplot(2,1,1)
-plot_rawData('sizeSpectra', 'CellConc', Data)
+plot_rawData('sizeSpectra', 'CellConc', Data0, 'includeLegend', true, ...
+    'legendPosition', 'southwest');
 subplot(2,1,2)
-plot_rawData('sizeSpectra', 'BioVol', Data)
+plot_rawData('sizeSpectra', 'BioVol', Data0);
+
+% Size data - spectra multipanel plots
+Type = 'CellConc';
+plt_spectra2 = figure;
+plt_spectra2.Units = 'inches';
+plt_spectra2.Position = [0 0 16 12];
+subplot(2,2,1)
+plot_rawData('sizeSpectra', Type, Data0, 'includeLegend', true, ...
+    'legendPosition', 'southwest', 'groupAutotroph', true);
+subplot(2,2,3)
+plot_rawData('sizeSpectra', Type, Data0, 'includeLegend', true, ...
+    'legendPosition', 'southwest', 'groupHeterotroph', true);
+subplot(2,2,2)
+plot_rawData('sizeSpectra', Type, Data0, 'includeLegend', true, ...
+    'legendPosition', 'southwest', 'groupAtlantic', true);
+subplot(2,2,4)
+plot_rawData('sizeSpectra', Type, Data0, 'includeLegend', true, ...
+    'legendPosition', 'southwest', 'groupArctic', true);
+
+Type = 'BioVol';
+plt_spectra3 = figure;
+plt_spectra3.Units = 'inches';
+plt_spectra3.Position = [0 0 16 12];
+subplot(2,2,1)
+plot_rawData('sizeSpectra', Type, Data0, 'includeLegend', true, ...
+    'legendPosition', 'southwest', 'groupAutotroph', true);
+subplot(2,2,3)
+plot_rawData('sizeSpectra', Type, Data0, 'includeLegend', true, ...
+    'legendPosition', 'southwest', 'groupHeterotroph', true);
+subplot(2,2,2)
+plot_rawData('sizeSpectra', Type, Data0, 'includeLegend', true, ...
+    'legendPosition', 'southwest', 'groupAtlantic', true);
+subplot(2,2,4)
+plot_rawData('sizeSpectra', Type, Data0, 'includeLegend', true, ...
+    'legendPosition', 'southwest', 'groupArctic', true);
+
+% Size data - binned
+plt_binned = figure;
+plt_binned.Units = 'inches';
+plt_binned.Position = [0 0 8 6];
+subplot(2,1,1)
+plot_rawData('sizeBinned', 'CellConc', Data0, 'pointAlpha', 0.5, ... 
+    'includeLegend', true, 'legendPosition', 'south');
+subplot(2,1,2)
+plot_rawData('sizeBinned', 'BioVol', Data0, 'pointAlpha', 0.5);
+
+switch save, case true
+    % scalar data
+    if exist('plt_scalar', 'var') && isvalid(plt_scalar)
+        filename = 'data_scalar.png';
+        print(plt_scalar, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('plt_spectra', 'var') && isvalid(plt_spectra)
+        filename = 'data_sizeSpectra.png';
+        print(plt_spectra, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('plt_spectra2', 'var') && isvalid(plt_spectra2)
+        filename = 'data_sizeSpectra_groupedCellConc.png';
+        print(plt_spectra2, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('plt_spectra3', 'var') && isvalid(plt_spectra3)
+        filename = 'data_sizeSpectra_groupedBioVol.png';
+        print(plt_spectra3, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('plt_binned', 'var') && isvalid(plt_binned)
+        filename = 'data_sizeBinned.png';
+        print(plt_binned, fullfile(folder, filename), '-r300', '-dpng');
+    end
+end
+
+%~~~~~~~~~~~~~~~~~~
+% Standardised data
+%~~~~~~~~~~~~~~~~~~
+
+close all
+
+plt_stnd = figure;
+plt_stnd.Units = 'inches';
+plt_stnd.Position = [0 0 16 6];
+subplot(2,4,1)
+plot_standardisedData('scalar', 'N', Data0, 'covariate', 'Depth', ... 
+    'pointAlpha', 0.4, 'densityCurve', true, ...
+    'includeLegend', false, 'legendPosition', 'west');
+subplot(2,4,5)
+plot_standardisedData('scalar', 'N', Data0, 'covariate', 'Event', ...
+    'pointAlpha', 0.4, 'densityCurve', true);
+subplot(2,4,2)
+plot_standardisedData('scalar', 'PON', Data0, 'covariate', 'Depth', ... 
+    'pointAlpha', 0.4, 'densityCurve', true);
+subplot(2,4,6)
+plot_standardisedData('scalar', 'PON', Data0, 'covariate', 'Event', ...
+    'pointAlpha', 0.4, 'densityCurve', true);
+subplot(2,4,3)
+plot_standardisedData('scalar', 'POC', Data0, 'covariate', 'Depth', ...
+    'pointAlpha', 0.4, 'densityCurve', true);
+subplot(2,4,7)
+plot_standardisedData('scalar', 'POC', Data0, 'covariate', 'Event', ...
+    'pointAlpha', 0.4, 'densityCurve', true);
+subplot(2,4,4)
+plot_standardisedData('scalar', 'chl_a', Data0, 'covariate', 'Depth', ...
+    'pointAlpha', 0.4, 'densityCurve', true);
+subplot(2,4,8)
+plot_standardisedData('scalar', 'chl_a', Data0, 'covariate', 'Event', ...
+    'pointAlpha', 0.4, 'densityCurve', true);
+
+
+switch save, case true
+    if exist('plt_stnd', 'var') && isvalid(plt_stnd)
+        filename = 'data_scalarStandardised.png';
+        print(plt_stnd, fullfile(folder, filename), '-r300', '-dpng');
+    end
+end
+
+%~~~~~~~~~~~~~~~~~~~
+% Model fits to data
+%~~~~~~~~~~~~~~~~~~~
+
+close all
+
+% Plot representations of the cost function distance metrics.
+
+% Scalar (nutrient) data
+plt_scalarCDFs = figure;
+plt_scalarCDFs.Units = 'inches';
+plt_scalarCDFs.Position = [0 0 12 8];
+markerSize = 5;
+showTrueDataCDF = true;
+colDat = [0, 0, 0];
+colMod = [0, 1, 0];
+colMod_ = rgb2hsv(colMod);
+colMod_(2) = 0.5;
+colMod = hsv2rgb(colMod_);
+plotTitle = false;
+legendPosition = 'southeast';
+itraj = [];
+% itraj = 1;
+
+subplot(2,2,1)
+varLabel = 'N';
+yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
+    'plotTitle', plotTitle, 'legendPosition', legendPosition, ...
+    'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
+    'itraj', itraj);
+subplot(2,2,2)
+plotLegend = 'false';
+varLabel = 'PON';
+yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
+    'plotTitle', plotTitle, 'plotLegend', plotLegend, ...
+    'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
+    'itraj', itraj);
+subplot(2,2,4)
+varLabel = 'POC';
+yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
+    'plotTitle', plotTitle, 'plotLegend', plotLegend, ...
+    'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
+    'itraj', itraj);
+subplot(2,2,3)
+varLabel = 'chl_a';
+yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
+    'plotTitle', plotTitle, 'plotLegend', plotLegend, ...
+    'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
+    'itraj', itraj);
+titleText = 'Data distributions vs modelled equivalents';
+sgtitle(titleText)
+
+
+% Size data
+plt_sizePMFs = figure;
+plt_sizePMFs.Units = 'inches';
+plt_sizePMFs.Position = [0 0 12 6];
+
+% itraj = 1; % choose a single trajectory from those used to fit the model, or set itraj = [] to display all model realisations
+itraj = [];
+barplot = true;
+% Vector (size) data
+varLabel = 'BioVol';
+waterMass = 'Atlantic';
+ind0 = strcmp(Data.size.dataBinned.Variable, varLabel) & ... 
+    strcmp(Data.size.dataBinned.waterMass, waterMass);
+% autotrophs
+subplot(1,2,1)
+trophicLevel = 'autotroph';
+xscale = round(FixedParams.PPdia, 2, 'significant');
+ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, trophicLevel);
+yobs = Data.size.dataBinned.Value(ind);
+ymod = modData.size.Value(ind,:);
+plot_comparePMFs(yobs, ymod, varLabel, 'waterMass', waterMass, ... 
+    'trophicLevel', trophicLevel, 'itraj', itraj, 'xscale', xscale, ...
+    'barplot', barplot);
+
+% heterotrophs
+subplot(1,2,2)
+trophicLevel = 'heterotroph';
+ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, trophicLevel);
+yobs = Data.size.dataBinned.Value(ind);
+ymod = modData.size.Value(ind,:);
+plotLegend = 'false';
+plot_comparePMFs(yobs, ymod, varLabel, 'waterMass', waterMass, ... 
+    'trophicLevel', trophicLevel, 'itraj', itraj, 'xscale', xscale, ...
+    'barplot', barplot, 'plotLegend', plotLegend);
 
 
 % Summary plots displaying model fit to data
@@ -118,12 +516,27 @@ logPlot = false;
 pltN = plot_fitToData('N', Data, modData, logPlot); pause(0.25)
 
 logPlot = 'loglog'; % for size spectra data choose logPlot = 'loglog' or 'semilogx'
-pltCellConc_P = plot_fitToData('CellConc', Data, modData, logPlot, 'trophicGroup', 'autotroph'); pause(0.25)
-pltCellConc_Z = plot_fitToData('CellConc', Data, modData, logPlot, 'trophicGroup', 'heterotroph'); pause(0.25)
-pltBioVol_P = plot_fitToData('BioVol', Data, modData, logPlot, 'trophicGroup', 'autotroph'); pause(0.25)
-pltBioVol_Z = plot_fitToData('BioVol', Data, modData, logPlot, 'trophicGroup', 'heterotroph'); pause(0.25)
-% pltNConc_P = plot_fitToData('NConc', Data, modData, logPlot, 'trophicGroup', 'autotroph'); pause(0.25)
-% pltNConc_Z = plot_fitToData('NConc', Data, modData, logPlot, 'trophicGroup', 'heterotroph'); pause(0.25)
+
+% Comment out Arctic plots because we're fitting to Atlantic data
+pltCellConc_Atl_P = plot_fitToData('CellConc', Data, modData, logPlot, ... 
+    'trophicGroup', 'autotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
+% pltCellConc_Arc_P = plot_fitToData('CellConc', Data, modData, logPlot, ... 
+%     'trophicGroup', 'autotroph', 'waterOrigin', 'Arctic'); pause(0.25)
+pltCellConc_Atl_Z = plot_fitToData('CellConc', Data, modData, logPlot, ... 
+    'trophicGroup', 'heterotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
+% pltCellConc_Arc_Z = plot_fitToData('CellConc', Data, modData, logPlot, ... 
+%     'trophicGroup', 'heterotroph', 'waterOrigin', 'Arctic'); pause(0.25)
+
+pltBioVol_Atl_P = plot_fitToData('BioVol', Data, modData, logPlot, ... 
+    'trophicGroup', 'autotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
+% pltBioVol_Arc_P = plot_fitToData('BioVol', Data, modData, logPlot, ... 
+%     'trophicGroup', 'autotroph', 'waterOrigin', 'Arctic'); pause(0.25)
+pltBioVol_Atl_Z = plot_fitToData('BioVol', Data, modData, logPlot, ... 
+    'trophicGroup', 'heterotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
+% pltBioVol_Arc_Z = plot_fitToData('BioVol', Data, modData, logPlot, ... 
+%     'trophicGroup', 'heterotroph', 'waterOrigin', 'Arctic'); pause(0.25)
+
+
 
 switch save, case true
     % scalar data
@@ -145,34 +558,46 @@ switch save, case true
     end
     
     % size data
-    if exist('pltCellConc_P', 'var') && isvalid(pltCellConc_P)
-        filename = 'fitToData_CellConcSpectra_P.png';
-        print(pltCellConc_P, fullfile(folder, filename), '-r300', '-dpng');
+    if exist('pltCellConc_Arc_P', 'var') && isvalid(pltCellConc_Arc_P)
+        filename = 'fitToData_CellConcSpectra_Arc_P.png';
+        print(pltCellConc_Arc_P, fullfile(folder, filename), '-r300', '-dpng');
     end
-    if exist('pltCellConc_Z', 'var') && isvalid(pltCellConc_Z)
-        filename = 'fitToData_CellConcSpectra_Z.png';
-        print(pltCellConc_Z, fullfile(folder, filename), '-r300', '-dpng');
+    if exist('pltCellConc_Arc_Z', 'var') && isvalid(pltCellConc_Arc_Z)
+        filename = 'fitToData_CellConcSpectra_Arc_Z.png';
+        print(pltCellConc_Arc_Z, fullfile(folder, filename), '-r300', '-dpng');
     end
-    if exist('pltBioVol_P', 'var') && isvalid(pltBioVol_P)
-        filename = 'fitToData_BioVolSpectra_P.png';
-        print(pltBioVol_P, fullfile(folder, filename), '-r300', '-dpng');
+    if exist('pltCellConc_Atl_P', 'var') && isvalid(pltCellConc_Atl_P)
+        filename = 'fitToData_CellConcSpectra_Atl_P.png';
+        print(pltCellConc_Atl_P, fullfile(folder, filename), '-r300', '-dpng');
     end
-    if exist('pltBioVol_Z', 'var') && isvalid(pltBioVol_Z)
-        filename = 'fitToData_BioVolSpectra_Z.png';
-        print(pltBioVol_Z, fullfile(folder, filename), '-r300', '-dpng');
-    end    
-%     if exist('pltNConc_P', 'var') && isvalid(pltNConc_P)
-%         filename = 'fitToData_NConcSpectra_P.png';
-%         print(pltNConc_P, fullfile(folder, filename), '-r300', '-dpng');
-%     end
-%     if exist('pltNConc_Z', 'var') && isvalid(pltNConc_Z)
-%         filename = 'fitToData_NConcSpectra_Z.png';
-%         print(pltNConc_Z, fullfile(folder, filename), '-r300', '-dpng');
-%     end
+    if exist('pltCellConc_Atl_Z', 'var') && isvalid(pltCellConc_Atl_Z)
+        filename = 'fitToData_CellConcSpectra_Atl_Z.png';
+        print(pltCellConc_Atl_Z, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    
+    if exist('pltBioVol_Arc_P', 'var') && isvalid(pltBioVol_Arc_P)
+        filename = 'fitToData_BioVolSpectra_Arc_P.png';
+        print(pltBioVol_Arc_P, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('pltBioVol_Arc_Z', 'var') && isvalid(pltBioVol_Arc_Z)
+        filename = 'fitToData_BioVolSpectra_Arc_Z.png';
+        print(pltBioVol_Arc_Z, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('pltBioVol_Atl_P', 'var') && isvalid(pltBioVol_Atl_P)
+        filename = 'fitToData_BioVolSpectra_Atl_P.png';
+        print(pltBioVol_Atl_P, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('pltBioVol_Atl_Z', 'var') && isvalid(pltBioVol_Atl_Z)
+        filename = 'fitToData_BioVolSpectra_Atl_Z.png';
+        print(pltBioVol_Atl_Z, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    
 end
 
 
 % Simpler plots -- boxplots against depth
+
+close all
 
 plt = figure;
 subplot(2,2,1)
@@ -188,13 +613,15 @@ plot_fitToData_depthBoxplot('PON', Data, modData, logPlot); pause(0.25)
 plt.Units = 'inches';
 plt.Position = [0 0 8 8];
 
-filename = 'fitToData_depthBoxplot.png';
-print(plt, fullfile(folder, filename), '-r300', '-dpng');
+switch save, case true
+    if exist('plt', 'var') && isvalid(plt)
+        filename = 'fitToData_depthBoxplot.png';
+        print(plt, fullfile(folder, filename), '-r300', '-dpng');
+    end
+end
 
 
 %% Fitted parameters
-
-save = false;
 
 % Display fitted parameters in relation to their bounding values (in the
 % table, columns widths shoukd be adjustable).
@@ -466,21 +893,18 @@ switch save, case true
             
     end
 end
-    
-
-close all
 
 
 %% Time evolution
 
 % These polygon plots should be extended to show water masses of Atlantic
-% and of Arctic orgin because some sampling events ue trajectories
+% and of Arctic orgin because some sampling events use trajectories
 % originating from both oceans... red for Atlantic blue for Arctic
 
-save = false;
+close all
 
 % Choose event
-sampleEvent = 30;
+sampleEvent = 1;
 if ~ismember(sampleEvent, 1:Data.scalar.nEvents), warning(['Choose event number within range (1, ' num2str(Data.scalar.nEvents) ')']); end
 % trajectory indices
 traj = find(Data.scalar.EventTraj(sampleEvent,:));
@@ -642,11 +1066,26 @@ end
 save = false;
 
 plt_Atlantic = plot_timeSeries_trajectoryPolygon('phytoZooPlanktonStacked', ...
-    [], [], out, auxVars, FixedParams, Forc, Data, ...
+    [], [], out0, auxVars0, FixedParams, Forc0, Data0, ...
     'waterMass', 'Atlantic');
 plt_Arctic = plot_timeSeries_trajectoryPolygon('phytoZooPlanktonStacked', ...
-    [], [], out, auxVars, FixedParams, Forc, Data, ...
+    [], [], out0, auxVars0, FixedParams, Forc0, Data0, ...
     'waterMass', 'Arctic');
+
+
+
+% axesTextSize = 16;
+% titleTextSize = 16;
+% legendTextSize = 16;
+% legendPointSize = 60;
+% plt_Atlantic = plot_timeSeries_trajectoryPolygon2('phytoZooPlanktonStacked', ...
+%     [], [], out, auxVars, FixedParams, Forc0, Data0, ...
+%     'waterMass', 'Atlantic', 'axesTextSize', axesTextSize, ... 
+%     'titleTextSize', titleTextSize, 'legendTextSize', legendTextSize, ...
+%     'legendPointSize', legendPointSize);
+% plt_Atlantic.Units = 'inches';
+% plt_Atlantic.Position = [0 0 10 4];
+
 
 switch save
     case true
@@ -673,41 +1112,70 @@ end
 % end
 % 
 
-close all
+
+
+% Make animated plots showing fluctuations in abundance, and possibly
+% predator cycles, and probably increased variability within the smallest
+% size classes
+
+work in progress...
+
+xp = auxVars0.biovolume(1:9,:,:,1);
+xp = auxVars0.cellDensity(1:9,:,:,1);
+xp = squeeze(sum(xp, 2));
+xz = auxVars0.biovolume(10:18,:,:,1);
+xz = auxVars0.cellDensity(10:18,:,:,1);
+xz = squeeze(sum(xz, 2));
+
+figure
+semilogy(1:9,xp(:,180))
+hold on
+semilogy(1:9,xz(:,180))
+
+hold off
+
+
+
 
 
 %% Network plots -- fluxes, production
 
-% Feeding fluxes
-plt_feedFlux_C = figure(1);
-plt_feedFlux_C.Units = 'inches';
-% plt_feedFlux_C.Position = [0 0 16 12];
-plt_feedFlux_C.Position = [0 0 10 7.5];
-subplot(2,1,1)
-plot_network('feedingFluxes', 'carbon', auxVars, FixedParams, Forc, 'Arctic');
-subplot(2,1,2)
-plot_network('feedingFluxes', 'carbon', auxVars, FixedParams, Forc, 'Atlantic');
+close all
 
-plt_feedFlux_N = figure(2);
+% Feeding fluxes
+
+plt_feedFlux_N = figure;
 plt_feedFlux_N.Units = 'inches';
 plt_feedFlux_N.Position = [0 0 10 7.5];
 subplot(2,1,1)
-plot_network('feedingFluxes', 'nitrogen', auxVars, FixedParams, Forc, 'Arctic');
+plot_network('feedingFluxes', 'nitrogen', auxVars0, FixedParams, Forc0, 'Arctic');
 subplot(2,1,2)
-plot_network('feedingFluxes', 'nitrogen', auxVars, FixedParams, Forc, 'Atlantic');
+plot_network('feedingFluxes', 'nitrogen', auxVars0, FixedParams, Forc0, 'Atlantic');
+
+
+
+plt_feedFlux_C = figure;
+plt_feedFlux_C.Units = 'inches';
+plt_feedFlux_C.Position = [0 0 10 7.5];
+subplot(2,1,1)
+plot_network('feedingFluxes', 'carbon', auxVars0, FixedParams, Forc0, 'Arctic');
+subplot(2,1,2)
+plot_network('feedingFluxes', 'carbon', auxVars0, FixedParams, Forc0, 'Atlantic');
+
 
 % Organic matter
-plt_OM = figure(3);
+plt_OM = figure;
 plt_OM.Units = 'inches';
 plt_OM.Position = [0 0 10 10];
 subplot(2,2,1)
-plot_network('OMfluxes', 'carbon', auxVars, FixedParams, Forc, 'Arctic');
+plot_network('OMfluxes', 'carbon', auxVars0, FixedParams, Forc0, 'Arctic');
 subplot(2,2,2)
-plot_network('OMfluxes', 'nitrogen', auxVars, FixedParams, Forc, 'Arctic');
+plot_network('OMfluxes', 'nitrogen', auxVars0, FixedParams, Forc0, 'Arctic');
 subplot(2,2,3)
-plot_network('OMfluxes', 'carbon', auxVars, FixedParams, Forc, 'Atlantic');
+plot_network('OMfluxes', 'carbon', auxVars0, FixedParams, Forc0, 'Atlantic');
 subplot(2,2,4)
-plot_network('OMfluxes', 'nitrogen', auxVars, FixedParams, Forc, 'Atlantic');
+plot_network('OMfluxes', 'nitrogen', auxVars0, FixedParams, Forc0, 'Atlantic');
+
 
 
 switch save, case true
@@ -724,6 +1192,54 @@ switch save, case true
             print(plt_OM, fullfile(folder, filename), '-r300', '-dpng');
         end
 end
+
+
+
+
+%% Parameter plots -- correlations
+
+parNames = results.parNames;
+popHist = results.populationHistory;
+costHist = results.scoreHistory;
+
+size(popHist)
+size(costHist)
+
+% index parameter sets within 15% of best cost
+optCost = min(costHist(:));
+costInd = costHist <= optCost + 0.5 * optCost;
+costInd = reshape(costInd, [100, 1, 40]);
+% costInd = repmat(reshape(costInd, [100, 1, 40]), [1, length(parNames), 1]);
+
+
+Gmax_a_i = strcmp(parNames, 'Gmax_a');
+k_G_i = strcmp(parNames, 'k_G');
+m_a_i = strcmp(parNames, 'm_a');
+
+Gmax_a = popHist(:,Gmax_a_i,:);
+k_G = popHist(:,k_G_i,:);
+m_a = popHist(:,m_a_i,:);
+
+figure
+scatter(Gmax_a(costInd), k_G(costInd))
+scatter(m_a(costInd), Gmax_a(costInd))
+
+
+figure
+scatter(Gmax_a(:), costHist(:))
+
+figure
+Gmax_b_i = strcmp(parNames, 'Gmax_b');
+Gmax_b = -exp(popHist(:,Gmax_b_i,:));
+scatter(Gmax_b(:), costHist(:))
+
+
+figure
+m_b_i = strcmp(parNames, 'm_b');
+m_b = -exp(popHist(:,m_b_i,:));
+scatter(m_b(:), costHist(:))
+
+
 
 
 %% Plot groups of trajectories corresponding to each event

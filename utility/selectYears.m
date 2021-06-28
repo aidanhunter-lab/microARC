@@ -1,11 +1,7 @@
-function [Data, Forc, FixedParams] = selectYears(data, forc, fixedpars, varargin)
+function [Data, Forc, FixedParams] = selectYears(Data, Forc, FixedParams, varargin)
 % Select which years to model and filter the other years out of the data
 
 extractVarargin(varargin)
-
-Data = data;
-Forc = forc;
-FixedParams = fixedpars;
 
 % years available for each data type
 nut_years = unique(Data.scalar.Year(strcmp(Data.scalar.Type, 'inorganic')));
@@ -195,6 +191,7 @@ Data.size.dataBinned = structfun(@(x) x(keep), Data.size.dataBinned, ...
 
 
 % full data separated over events
+
 keep = ismember(Data.sizeFull.Year, datYear{strcmp(prefOrd, 'size')});
 fields = fieldnames(Data.sizeFull);
 nSamples = size(Data.sizeFull.Year,1);
@@ -236,11 +233,12 @@ tmp = table(Data.scalar.Event); tmp.Properties.VariableNames = {'Event'};
 tmp = join(tmp, eventLabs);
 Data.scalar.Event = tmp.newEvent;
 
-
 tmp = table(Data.sizeFull.Event); tmp.Properties.VariableNames = {'Event'};
 tmp = join(tmp, eventLabs);
 Data.sizeFull.Event = tmp.newEvent;
 
-
+tmp = table(Data.sizeFull.dataBinned.Event); tmp.Properties.VariableNames = {'Event'};
+tmp = join(tmp, eventLabs);
+Data.sizeFull.dataBinned.Event = tmp.newEvent;
 
 
