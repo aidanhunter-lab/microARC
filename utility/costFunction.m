@@ -788,6 +788,7 @@ else
             cost = weights .* cost;
             
             cost = mean(cost); % finally, average cost over nutrient and size data components
+%             cost = cost(2); % try fitting only to the size data
             
     end
     

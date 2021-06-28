@@ -30,6 +30,7 @@ fileName = 'fittedParameters';  % saved parameters file name
 % tag = 'Hellinger3_groupWaterOrigin_Atlantic';
 tag = 'IQD_Hellinger_groupWaterOrigin_Atlantic';
 tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj';
+tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj_sizeDataOnly';
 
 
 % tag = 'Hellinger_MVN_groupWaterOrigin';10
