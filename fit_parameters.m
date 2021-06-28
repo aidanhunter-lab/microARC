@@ -28,8 +28,9 @@ display(Directories)
 % name-value pairs for modelSetUp.m include: useTraj, ESDmin, ESDmax, nsizes
 % [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
 %     'displayAllOutputs', true); % default set-up -- no plots
+numTraj = 1; % use only a single trajectory per sampling event -- events at Arctic-Atlantic water boundaries are not easily descernable when using only one trajectory
 [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
-    'displayAllOutputs', true, 'numTraj', 1); % use only a single trajectory per sampling event
+    'displayAllOutputs', true, 'numTraj', numTraj);
 
 % modelSetup.m may also produce plots -- set to 'true' any name-value pair as shown below
 % [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
