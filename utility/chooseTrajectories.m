@@ -46,8 +46,8 @@ for i = 1:nEvent
 
 end
 
-% For each sampling event choose, at most, maxTraj particle trajectories
-% from those within maxDist of the event.
+% For each sampling event choose numTraj particle trajectories from those 
+% within maxDist of the event.
 % Use a clustering method to choose the most dissimilar trajectories,
 % thereby maximising variability in the forcing data.
 
@@ -74,18 +74,22 @@ for i = 1:nEvent
         end
         lat_link = linkage(dist_dtw);
         clust = cluster(lat_link,'maxclust',numTraj);
-        % Select the 1st trajectory from each cluster.
+        
+        % From each cluster select the trajectory closest to sample event i.
         % If there are too few trajectories within radius maxDist of sample
         % location then include duplicates to return numTraj trajectories.
         uc = unique(clust);
-        nc = length(uc);        
+        nc = length(uc);
         useTrajectories = nan(numTraj,1);
         for j = 1:nc
-            useTrajectories(j) = f_traj(find(clust == j, 1));
+            jc = clust == j;
+            trajClust = f_traj(jc); % trajectories in cluster j
+            trajRank = r_traj(jc);
+            useTrajectories(j) = trajClust(trajRank == min(trajRank)); % from cluster j choose trajectory closest to sampling event i
         end
         needMore = any(isnan(useTrajectories));
         if needMore
-            warning(['Duplicate trajectories used for sampling event ' ... 
+            warning(['Duplicate trajectories used for sampling event ' ...
                 num2str(i) '. This is nothing to worry about unless warning' ...
                 ' is repeated for lots of event numbers, in which case try' ...
                 ' increasing maxDist or decreasing numTraj.'])
@@ -123,13 +127,20 @@ indexChange = table(trajIndex, trajIndex_new); % filtering trajectories changes 
 
 % store event numbers and associated trajectories in a table
 nlinks_e = sum(Keep);
-if any(nlinks_e == 0)
+if sum(nlinks_e == 0) > 1
     warning(['Sampling events ' num2str(find(nlinks_e == 0)) ...
         ' were discarded as no trajectories were within a distance of' ...
         ' maxDist from sample location. Increasing maxDist might help,' ...
         ' although some sampling event locations are far from any' ...
         ' trajectories...'])
+elseif sum(nlinks_e == 0) == 1
+    warning(['Sampling event ' num2str(find(nlinks_e == 0)) ...
+        ' was discarded as no trajectories were within a distance of' ...
+        ' maxDist from sample location. Increasing maxDist might help,' ...
+        ' although some sampling event locations are far from any' ...
+        ' trajectories...'])
 end
+
 
 nlinks = sum(nlinks_e);
 events = table(nan(nlinks,1),nan(nlinks,1));
