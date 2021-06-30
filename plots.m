@@ -22,19 +22,10 @@ display(Directories)
 loadFittedParams = true; % use output saved from optimisation run?
 fileName = 'fittedParameters';  % saved parameters file name
 % tag = '1';                      % and identifying tag
-% tag = 'N_LN-Dir_groupWaterOrigin';
 
-% tag = 'Hellinger2_groupWaterOrigin_Atlantic';
-% tag = 'Hellinger2_groupWaterOrigin_Arctic';
-% tag = 'Hellinger2_groupWaterOrigin_fittedMortalityIntercept_Arctic';
-% tag = 'Hellinger3_groupWaterOrigin_Atlantic';
-tag = 'IQD_Hellinger_groupWaterOrigin_Atlantic';
-tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj';
-tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj_sizeDataOnly';
-
-
-% tag = 'Hellinger_MVN_groupWaterOrigin';10
-% tag = 'Hellinger_MVN_groupWaterOrigin_2';
+% tag = 'IQD_Hellinger_groupWaterOrigin_Atlantic';
+% tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj';
+tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj_relativeSizeDataOnly';
 
 fileName = fullfile(Directories.resultsDir, ...
     [fileName '_' tag]);
@@ -52,7 +43,9 @@ switch loadFittedParams
         % As saved results may be based on trajectories originating fom the
         % Arctic or Atlantic, call modelSetUp to generate the unfiltered
         % forcing and fitting data
-        [Forc0, ~, ParamsDefault, Data0] = modelSetUp(Directories, 'numTraj', 1);
+        numTraj = 1;
+        [Forc0, ~, ParamsDefault, Data0] = modelSetUp(Directories, ... 
+            'numTraj', numTraj);
         
     case false % Use default model set-up if fitted outputs are not loaded
         [Forc0, FixedParams, Params, Data0] = modelSetUp(Directories);
@@ -118,149 +111,7 @@ modData = matchModOutput2Data(out, auxVars, Data, FixedParams);
 folder = Directories.plotDir; % save plots here
 
 
-%% Map plots
-
-close all
-
-% Particle trajectories from physical model
-
-projection = 'lambert';
-% projection = 'miller';
-alphaLine = 0.15;
-
-% plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
-%     'alphaLine', alphaLine);
-plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
-    'alphaLine', alphaLine, 'Data', Data0);
-% plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
-%     'alphaLine', alphaLine, 'Data', Data0, 'labelSampleArea', true);
-
-% plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
-%     'alphaLine', alphaLine, 'Data', Data0, 'flowArrows', true);
-
-
-plt_mapTraj.Units = 'inches';
-plt_mapTraj.Position = [0 0 10 10];
-
-
-switch save, case true
-    if exist('plt_mapTraj', 'var') && isvalid(plt_mapTraj)
-        filename = 'map_trajectories.png';
-        print(plt_mapTraj, fullfile(folder, filename), '-r300', '-dpng');
-    end
-end
-
-
-% In-situ data
-
-projection = 'lambert';
-% projection = 'miller';
-% projection = 'utm';
-alphaPoint = 0.5;
-pointSize = 9;
-pieSize = 0.02;
-lonSpace = 0.4;
-latSpace = 0.1;
-colourByDataType = true;
-showWaterOrigin = true;
-polygonAlpha = 0.5;
-polygonSmooth = false;
-polygonExpand = 0;
-omitMapGrid = false; % do not plot map coords -- instead surround data points with polygon used to show sample area in the trajectory map
-includeLegend = true;
-legendPosition = 'southeast';
-
-plt_mapData = plot_dataMap(Directories, Data0, 'projection', projection, ...
-    'alphaPoint', alphaPoint, 'pointSize', pointSize, 'lonSpace', lonSpace, ... 
-    'latSpace', latSpace, 'Forc', Forc0, ... 
-    'showWaterOrigin', showWaterOrigin, 'polygonAlpha', polygonAlpha, ...
-    'polygonExpand', polygonExpand, 'polygonSmooth', polygonSmooth, ...
-    'colourByDataType', colourByDataType, 'pieSize', pieSize, ...
-    'includeLegend', includeLegend, 'legendPosition', legendPosition, ...
-    'omitMapGrid', omitMapGrid);
-
-plt_mapData.Units = 'inches';
-plt_mapData.Position = [0 0 6 4];
-
-switch save, case true
-    if exist('plt_mapData', 'var') && isvalid(plt_mapData)
-        filename = 'map_shipData.png';
-        print(plt_mapData, fullfile(folder, filename), '-r300', '-dpng');
-    end
-end
-
-
-% Combine the above maps
-plt_combineMaps = figure;
-plt_combineMaps.Units = 'inches';
-plt_combineMaps.Position = [0 0 8 8];
-
-% axes('position', [0.2, 0.2, 0.75, 0.75])
-axes('position', [0.15, 0.15, 0.85, 0.85])
-
-projection = 'lambert';
-alphaLine = 0.15;
-includeLegend = true;
-legendPosition = 'east';
-legendTextSize = 12;
-legendTitle = 'Water origin';
-legendTitleSize = 12;
-polygonLineWidth = 3;
-stripedBorder = false;
-
-plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
-    'alphaLine', alphaLine, 'Data', Data0, 'newPlot', false, ...
-    'includeLegend', includeLegend, 'legendPosition', legendPosition, ...
-    'legendTitle', legendTitle, 'legendTitleSize', legendTitleSize, ...
-    'legendTextSize', legendTextSize, 'polygonLineWidth', polygonLineWidth, ...
-    'stripedBorder', stripedBorder);
-
-axes('position', [0.1, 0.12, 0.5, 0.5])
-
-projection = 'lambert';
-alphaPoint = 0.5;
-pointSize = 9;
-pieSize = 0.02;
-lonSpace = 0.05;
-latSpace = 0.05;
-colourByDataType = true;
-showWaterOrigin = true;
-trimPolygons = true; % shape the water-origin polygons to fit neatly into the full area polygon
-polygonAlpha = 1; % polygons cannot be transparent because the underlying map shows though
-colSat = 0.6; % reduce colour saturation to emulate the transparent colours
-polygonSmooth = false;
-polygonExpand = 0;
-legendPosition = 'west';
-legendTitle = 'Data';
-omitMapGrid = true; % do not plot map coords -- instead surround data points with polygon used to show sample area in the trajectory map
-fullAreaPolygon = true; % draw polygon matching that used in the trajectory map
-polygonLineWidth = 3;
-
-plot_dataMap(Directories, Data0, 'projection', projection, ...
-    'alphaPoint', alphaPoint, 'pointSize', pointSize, 'lonSpace', lonSpace, ... 
-    'latSpace', latSpace, 'Forc', Forc0, ... 
-    'showWaterOrigin', showWaterOrigin, 'polygonAlpha', polygonAlpha, ...
-    'polygonExpand', polygonExpand, 'polygonSmooth', polygonSmooth, ...
-    'colourByDataType', colourByDataType, 'pieSize', pieSize, ...
-    'includeLegend', includeLegend, 'legendPosition', legendPosition, ... 
-    'omitMapGrid', omitMapGrid, 'colSat', colSat, ... 
-    'fullAreaPolygon', fullAreaPolygon, 'polygonLineWidth', polygonLineWidth, ... 
-    'trimPolygons', trimPolygons, 'legendTitle', legendTitle, ... 
-    'legendTitleSize', legendTitleSize, 'legendTextSize', legendTextSize, ...
-    'stripedBorder', stripedBorder, 'newPlot', false);
-
-switch save, case true
-    if exist('plt_combineMaps', 'var') && isvalid(plt_combineMaps)
-        filename = 'map_shipDataAndTrajectories.png';
-        print(plt_combineMaps, fullfile(folder, filename), '-r300', '-dpng');
-    end
-end
-
-
-
-
-
-%% Model fit to data
+%% Display data
 
 save = true;
 
@@ -416,97 +267,6 @@ end
 
 close all
 
-% Plot representations of the cost function distance metrics.
-
-% Scalar (nutrient) data
-plt_scalarCDFs = figure;
-plt_scalarCDFs.Units = 'inches';
-plt_scalarCDFs.Position = [0 0 12 8];
-markerSize = 5;
-showTrueDataCDF = true;
-colDat = [0, 0, 0];
-colMod = [0, 1, 0];
-colMod_ = rgb2hsv(colMod);
-colMod_(2) = 0.5;
-colMod = hsv2rgb(colMod_);
-plotTitle = false;
-legendPosition = 'southeast';
-itraj = [];
-% itraj = 1;
-
-subplot(2,2,1)
-varLabel = 'N';
-yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
-ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
-plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
-    'plotTitle', plotTitle, 'legendPosition', legendPosition, ...
-    'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
-    'itraj', itraj);
-subplot(2,2,2)
-plotLegend = 'false';
-varLabel = 'PON';
-yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
-ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
-plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
-    'plotTitle', plotTitle, 'plotLegend', plotLegend, ...
-    'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
-    'itraj', itraj);
-subplot(2,2,4)
-varLabel = 'POC';
-yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
-ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
-plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
-    'plotTitle', plotTitle, 'plotLegend', plotLegend, ...
-    'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
-    'itraj', itraj);
-subplot(2,2,3)
-varLabel = 'chl_a';
-yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
-ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
-plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
-    'plotTitle', plotTitle, 'plotLegend', plotLegend, ...
-    'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
-    'itraj', itraj);
-titleText = 'Data distributions vs modelled equivalents';
-sgtitle(titleText)
-
-
-% Size data
-plt_sizePMFs = figure;
-plt_sizePMFs.Units = 'inches';
-plt_sizePMFs.Position = [0 0 12 6];
-
-% itraj = 1; % choose a single trajectory from those used to fit the model, or set itraj = [] to display all model realisations
-itraj = [];
-barplot = true;
-% Vector (size) data
-varLabel = 'BioVol';
-waterMass = 'Atlantic';
-ind0 = strcmp(Data.size.dataBinned.Variable, varLabel) & ... 
-    strcmp(Data.size.dataBinned.waterMass, waterMass);
-% autotrophs
-subplot(1,2,1)
-trophicLevel = 'autotroph';
-xscale = round(FixedParams.PPdia, 2, 'significant');
-ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, trophicLevel);
-yobs = Data.size.dataBinned.Value(ind);
-ymod = modData.size.Value(ind,:);
-plot_comparePMFs(yobs, ymod, varLabel, 'waterMass', waterMass, ... 
-    'trophicLevel', trophicLevel, 'itraj', itraj, 'xscale', xscale, ...
-    'barplot', barplot);
-
-% heterotrophs
-subplot(1,2,2)
-trophicLevel = 'heterotroph';
-ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, trophicLevel);
-yobs = Data.size.dataBinned.Value(ind);
-ymod = modData.size.Value(ind,:);
-plotLegend = 'false';
-plot_comparePMFs(yobs, ymod, varLabel, 'waterMass', waterMass, ... 
-    'trophicLevel', trophicLevel, 'itraj', itraj, 'xscale', xscale, ...
-    'barplot', barplot, 'plotLegend', plotLegend);
-
-
 % Summary plots displaying model fit to data
 logPlot = true; % for scalar data choose logPlot = true or false
 pltChl = plot_fitToData('chl_a', Data, modData, logPlot); pause(0.25)
@@ -516,6 +276,7 @@ logPlot = false;
 pltN = plot_fitToData('N', Data, modData, logPlot); pause(0.25)
 
 logPlot = 'loglog'; % for size spectra data choose logPlot = 'loglog' or 'semilogx'
+logPlot = 'semilogx'; % for size spectra data choose logPlot = 'loglog' or 'semilogx'
 
 % Comment out Arctic plots because we're fitting to Atlantic data
 pltCellConc_Atl_P = plot_fitToData('CellConc', Data, modData, logPlot, ... 
@@ -621,6 +382,102 @@ switch save, case true
 end
 
 
+
+
+% Plot representations of the cost function distance metrics.
+
+% Scalar (nutrient) data
+plt_scalarCDFs = figure;
+plt_scalarCDFs.Units = 'inches';
+plt_scalarCDFs.Position = [0 0 12 8];
+markerSize = 5;
+showTrueDataCDF = true;
+colDat = [0, 0, 0];
+colMod = [0, 1, 0];
+colMod_ = rgb2hsv(colMod);
+colMod_(2) = 0.5;
+colMod = hsv2rgb(colMod_);
+plotTitle = false;
+legendPosition = 'southeast';
+itraj = [];
+% itraj = 1;
+
+subplot(2,2,1)
+varLabel = 'N';
+yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
+    'plotTitle', plotTitle, 'legendPosition', legendPosition, ...
+    'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
+    'itraj', itraj);
+subplot(2,2,2)
+plotLegend = 'false';
+varLabel = 'PON';
+yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
+    'plotTitle', plotTitle, 'plotLegend', plotLegend, ...
+    'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
+    'itraj', itraj);
+subplot(2,2,4)
+varLabel = 'POC';
+yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
+    'plotTitle', plotTitle, 'plotLegend', plotLegend, ...
+    'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
+    'itraj', itraj);
+subplot(2,2,3)
+varLabel = 'chl_a';
+yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
+    'plotTitle', plotTitle, 'plotLegend', plotLegend, ...
+    'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
+    'itraj', itraj);
+titleText = 'Data distributions vs modelled equivalents';
+sgtitle(titleText)
+
+
+% Size data
+plt_sizePMFs = figure;
+plt_sizePMFs.Units = 'inches';
+plt_sizePMFs.Position = [0 0 12 6];
+
+% itraj = 1; % choose a single trajectory from those used to fit the model, or set itraj = [] to display all model realisations
+itraj = [];
+barplot = true;
+% Vector (size) data
+varLabel = 'BioVol';
+waterMass = 'Atlantic';
+ind0 = strcmp(Data.size.dataBinned.Variable, varLabel) & ... 
+    strcmp(Data.size.dataBinned.waterMass, waterMass);
+% autotrophs
+subplot(1,2,1)
+trophicLevel = 'autotroph';
+xscale = round(FixedParams.PPdia, 2, 'significant');
+ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, trophicLevel);
+yobs = Data.size.dataBinned.Value(ind);
+ymod = modData.size.Value(ind,:);
+plot_comparePMFs(yobs, ymod, varLabel, 'waterMass', waterMass, ... 
+    'trophicLevel', trophicLevel, 'itraj', itraj, 'xscale', xscale, ...
+    'barplot', barplot);
+
+% heterotrophs
+subplot(1,2,2)
+trophicLevel = 'heterotroph';
+ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, trophicLevel);
+yobs = Data.size.dataBinned.Value(ind);
+ymod = modData.size.Value(ind,:);
+plotLegend = 'false';
+plot_comparePMFs(yobs, ymod, varLabel, 'waterMass', waterMass, ... 
+    'trophicLevel', trophicLevel, 'itraj', itraj, 'xscale', xscale, ...
+    'barplot', barplot, 'plotLegend', plotLegend);
+
+
+
+
+
 %% Fitted parameters
 
 % Display fitted parameters in relation to their bounding values (in the
@@ -636,6 +493,147 @@ end
 
 
 close all
+
+
+%% Map plots
+
+close all
+
+% Particle trajectories from physical model
+
+projection = 'lambert';
+% projection = 'miller';
+alphaLine = 0.15;
+
+% plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
+%     'alphaLine', alphaLine);
+plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
+    'alphaLine', alphaLine, 'Data', Data0);
+% plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
+%     'alphaLine', alphaLine, 'Data', Data0, 'labelSampleArea', true);
+
+% plt_mapTraj = plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
+%     'alphaLine', alphaLine, 'Data', Data0, 'flowArrows', true);
+
+
+plt_mapTraj.Units = 'inches';
+plt_mapTraj.Position = [0 0 10 10];
+
+
+switch save, case true
+    if exist('plt_mapTraj', 'var') && isvalid(plt_mapTraj)
+        filename = 'map_trajectories.png';
+        print(plt_mapTraj, fullfile(folder, filename), '-r300', '-dpng');
+    end
+end
+
+
+% In-situ data
+
+projection = 'lambert';
+% projection = 'miller';
+% projection = 'utm';
+alphaPoint = 0.5;
+pointSize = 9;
+pieSize = 0.02;
+lonSpace = 0.4;
+latSpace = 0.1;
+colourByDataType = true;
+showWaterOrigin = true;
+polygonAlpha = 0.5;
+polygonSmooth = false;
+polygonExpand = 0;
+omitMapGrid = false; % do not plot map coords -- instead surround data points with polygon used to show sample area in the trajectory map
+includeLegend = true;
+legendPosition = 'southeast';
+
+plt_mapData = plot_dataMap(Directories, Data0, 'projection', projection, ...
+    'alphaPoint', alphaPoint, 'pointSize', pointSize, 'lonSpace', lonSpace, ... 
+    'latSpace', latSpace, 'Forc', Forc0, ... 
+    'showWaterOrigin', showWaterOrigin, 'polygonAlpha', polygonAlpha, ...
+    'polygonExpand', polygonExpand, 'polygonSmooth', polygonSmooth, ...
+    'colourByDataType', colourByDataType, 'pieSize', pieSize, ...
+    'includeLegend', includeLegend, 'legendPosition', legendPosition, ...
+    'omitMapGrid', omitMapGrid);
+
+plt_mapData.Units = 'inches';
+plt_mapData.Position = [0 0 6 4];
+
+switch save, case true
+    if exist('plt_mapData', 'var') && isvalid(plt_mapData)
+        filename = 'map_shipData.png';
+        print(plt_mapData, fullfile(folder, filename), '-r300', '-dpng');
+    end
+end
+
+
+% Combine the above maps
+plt_combineMaps = figure;
+plt_combineMaps.Units = 'inches';
+plt_combineMaps.Position = [0 0 8 8];
+
+% axes('position', [0.2, 0.2, 0.75, 0.75])
+axes('position', [0.15, 0.15, 0.85, 0.85])
+
+projection = 'lambert';
+alphaLine = 0.15;
+includeLegend = true;
+legendPosition = 'east';
+legendTextSize = 12;
+legendTitle = 'Water origin';
+legendTitleSize = 12;
+polygonLineWidth = 3;
+stripedBorder = false;
+
+plot_trajectoryMap(Directories, Forc0, 'projection', projection, ...
+    'alphaLine', alphaLine, 'Data', Data0, 'newPlot', false, ...
+    'includeLegend', includeLegend, 'legendPosition', legendPosition, ...
+    'legendTitle', legendTitle, 'legendTitleSize', legendTitleSize, ...
+    'legendTextSize', legendTextSize, 'polygonLineWidth', polygonLineWidth, ...
+    'stripedBorder', stripedBorder);
+
+axes('position', [0.1, 0.12, 0.5, 0.5])
+
+projection = 'lambert';
+alphaPoint = 0.5;
+pointSize = 9;
+pieSize = 0.02;
+lonSpace = 0.05;
+latSpace = 0.05;
+colourByDataType = true;
+showWaterOrigin = true;
+trimPolygons = true; % shape the water-origin polygons to fit neatly into the full area polygon
+polygonAlpha = 1; % polygons cannot be transparent because the underlying map shows though
+colSat = 0.6; % reduce colour saturation to emulate the transparent colours
+polygonSmooth = false;
+polygonExpand = 0;
+legendPosition = 'west';
+legendTitle = 'Data';
+omitMapGrid = true; % do not plot map coords -- instead surround data points with polygon used to show sample area in the trajectory map
+fullAreaPolygon = true; % draw polygon matching that used in the trajectory map
+polygonLineWidth = 3;
+
+plot_dataMap(Directories, Data0, 'projection', projection, ...
+    'alphaPoint', alphaPoint, 'pointSize', pointSize, 'lonSpace', lonSpace, ... 
+    'latSpace', latSpace, 'Forc', Forc0, ... 
+    'showWaterOrigin', showWaterOrigin, 'polygonAlpha', polygonAlpha, ...
+    'polygonExpand', polygonExpand, 'polygonSmooth', polygonSmooth, ...
+    'colourByDataType', colourByDataType, 'pieSize', pieSize, ...
+    'includeLegend', includeLegend, 'legendPosition', legendPosition, ... 
+    'omitMapGrid', omitMapGrid, 'colSat', colSat, ... 
+    'fullAreaPolygon', fullAreaPolygon, 'polygonLineWidth', polygonLineWidth, ... 
+    'trimPolygons', trimPolygons, 'legendTitle', legendTitle, ... 
+    'legendTitleSize', legendTitleSize, 'legendTextSize', legendTextSize, ...
+    'stripedBorder', stripedBorder, 'newPlot', false);
+
+switch save, case true
+    if exist('plt_combineMaps', 'var') && isvalid(plt_combineMaps)
+        filename = 'map_shipDataAndTrajectories.png';
+        print(plt_combineMaps, fullfile(folder, filename), '-r300', '-dpng');
+    end
+end
+
+
 
 
 %% Contour plots -- single trajectories, or grouped by sample event
@@ -1196,7 +1194,7 @@ end
 
 
 
-%% Parameter plots -- correlations
+%% Parameter plots -- correlations, sensitivities
 
 parNames = results.parNames;
 popHist = results.populationHistory;
@@ -1204,6 +1202,24 @@ costHist = results.scoreHistory;
 
 size(popHist)
 size(costHist)
+
+% plot cost against parameter values to gauge sensitivity
+ip = 1;
+
+for ip = 1:length(parNames)
+    pn = parNames(ip);
+    p = popHist(:,ip,:);
+    figure
+    scatter(p(:), costHist(:))
+    xlabel(pn); ylabel('cost')
+end
+
+
+
+
+
+
+
 
 % index parameter sets within 15% of best cost
 optCost = min(costHist(:));

@@ -754,27 +754,45 @@ else
                 end
             end
             
-            % Within each size data group, weight relative abundance-at-size
-            % relative to total abundance.
-            weight_relVsTot = 3; % weighting factor of relative vs total abundance
+%             % Within each size data group, weight relative abundance-at-size
+%             % relative to total abundance.
+%             weight_relVsTot = 3; % weighting factor of relative vs total abundance
+%             costSize = zeros(2,length(waterMasses)); % store weighted costs for all size data groups
+%             for i = 1:length(waterMasses)
+%                 wm = waterMasses{i};
+%                 if groupedByWaterOrigin
+%                     cta = costComponents.([varLabel '_' wm '_autotroph_Tot']);
+%                     cra = costComponents.([varLabel '_' wm '_autotroph_Rel']);
+%                     cth = costComponents.([varLabel '_' wm '_heterotroph_Tot']);
+%                     crh = costComponents.([varLabel '_' wm '_heterotroph_Rel']);
+%                 else
+%                     cta = costComponents.([varLabel '_autotroph_Tot']);
+%                     cra = costComponents.([varLabel '_autotroph_Rel']);
+%                     cth = costComponents.([varLabel '_heterotroph_Tot']);
+%                     crh = costComponents.([varLabel '_heterotroph_Rel']);
+%                 end
+%                 costSize(1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
+%                 costSize(2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
+%             end
+                        
+            
+            % Omit the total abundance info from the size data --
+            % simplified compared to the commented code above...
             costSize = zeros(2,length(waterMasses)); % store weighted costs for all size data groups
             for i = 1:length(waterMasses)
                 wm = waterMasses{i};
                 if groupedByWaterOrigin
-                    cta = costComponents.([varLabel '_' wm '_autotroph_Tot']);
                     cra = costComponents.([varLabel '_' wm '_autotroph_Rel']);
-                    cth = costComponents.([varLabel '_' wm '_heterotroph_Tot']);
                     crh = costComponents.([varLabel '_' wm '_heterotroph_Rel']);
                 else
-                    cta = costComponents.([varLabel '_autotroph_Tot']);
                     cra = costComponents.([varLabel '_autotroph_Rel']);
-                    cth = costComponents.([varLabel '_heterotroph_Tot']);
                     crh = costComponents.([varLabel '_heterotroph_Rel']);
                 end
-                costSize(1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
-                costSize(2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
+                costSize(1,i) = cra;
+                costSize(2,i) = crh;
             end
-                        
+
+            
             costNutrient = zeros(1,length(Vars));
             for i = 1:length(Vars)
                 costNutrient(i) = costComponents.(Vars{i});

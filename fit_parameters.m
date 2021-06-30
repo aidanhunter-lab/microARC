@@ -82,8 +82,7 @@ switch restartRun, case true
     fileName_results = 'fittedParameters';  % saved parameters file name
 %     tag = '1';                              % and identifying tag
     tag = FixedParams.costFunction;
-    tag = [tag '_Atlantic_quadraticMortality_singleTraj'];
-%     tag = [tag '_fittedMortalityIntercept_Arctic'];
+    tag = [tag '_Atlantic_quadraticMortality_singleTraj_relativeSizeDataOnly'];
     fileName_results = fullfile(Directories.resultsDir, ...
         [fileName_results '_' tag]);
     % Load stored results    
@@ -145,9 +144,8 @@ saveParams = true;
 
 fileName_results = 'fittedParameters';  % choose file name
 tag = FixedParams.costFunction;         % and identifying tag
-tag = [tag '_Atlantic_quadraticMortality_singleTraj_sizeDataOnly'];
+tag = [tag '_Atlantic_quadraticMortality_singleTraj_relativeSizeDataOnly'];
 % tag = [tag '_Arctic'];
-% tag = [tag '_fittedMortalityIntercept_Arctic'];
 fileName_results = fullfile(Directories.resultsDir, ...
     [fileName_results '_' tag]);
 
