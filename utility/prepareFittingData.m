@@ -312,7 +312,10 @@ for i = 1:ne
         (1/14) * 1e-9 * dat_size.(['NperCell_' NsizeEqs{i}]);
 end
 
-dat_size.BioVolDensity = 1e-18 * dat_size.cellVolume .* dat_size.cellDensity; % m^3 / m^3
+% Derive bio-volume variable
+coef = 1e-18 * dat_size.cellVolume; % 1e-18 for conversion from (mu m)^3 to m^3 (which is not needed, probably just confuses matters, and may cause numerical rounding issues with very small numbers...)
+dat_size.BioVolDensity = coef .* dat_size.cellDensity; % m^3 / m^3
+dat_size.BioVolDensitySD = abs(coef) .* dat_size.cellDensitySD;
 
 for i = 1:ne
     % nitrogen density: mug N / L -> mmol N / m^3
@@ -327,7 +330,7 @@ dat_size.Ndensity = mean(dat_size{:,strcat('Ndensity_', NsizeEqs)}, 2);
 % Remove unnecessary variables
 % scenarios = unique(dat_size.scenario)'; % data collected from different cruises/years
 keepVars = [{'scenario', 'season', 'regime', 'trophicLevel', 'ESD', 'cellVolume', ...
-    'cellDensity', 'cellDensitySD', 'BioVolDensity'}, strcat('Ndensity_', NsizeEqs), 'Ndensity'];
+    'cellDensity', 'cellDensitySD', 'BioVolDensity', 'BioVolDensitySD'}, strcat('Ndensity_', NsizeEqs), 'Ndensity'];
 dat_size = dat_size(:,keepVars);
 
 
@@ -391,17 +394,20 @@ nutrition = unique(dat_size_all.nutrition, 'stable');
 
 %~~~
 % optional plots
-plotCellConcSpectra = exist('plotCellConcSpectra', 'var') && plotCellConcSpectra;
-plotBioVolSpectra = exist('plotBioVolSpectra', 'var') && plotBioVolSpectra;
-plotNconcSpectra = exist('plotNconcSpectra', 'var') && plotNconcSpectra;
-
-% makePlots = table(plotNconcSpectra, plotCellConcSpectra, plotBioVolSpectra);
-% makePlots.Properties.VariableNames = {'Ndensity', 'cellDensity', 'BioVolDensity'};
+if ~exist('plotCellConcSpectra', 'var')
+    plotCellConcSpectra = false;
+end
+if ~exist('plotBioVolSpectra', 'var')
+    plotBioVolSpectra = false;
+end
+if ~exist('plotNconcSpectra', 'var')
+    plotNconcSpectra = false;
+end
 
 makePlots = table();
-if plotNconcSpectra, makePlots.Ndensity = true; end
-if plotCellConcSpectra, makePlots.cellDensity = true; end
-if plotBioVolSpectra, makePlots.BioVolDensity = true; end
+switch plotNconcSpectra, case true ,makePlots.Ndensity = true; end
+switch plotCellConcSpectra, case true, makePlots.cellDensity = true; end
+switch plotBioVolSpectra, case true, makePlots.BioVolDensity = true; end
 
 cluster = unique(dat_size_all.cluster);
 cols = [[0 0 1]; [1 0 0]]; % Colour plot lines by water temperature

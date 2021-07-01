@@ -3,6 +3,10 @@ function plt = plot_fitToData(v, Data, modData, logPlot, varargin)
 
 extractVarargin(varargin)
 
+if ~exist('errorBars', 'var')
+    errorBars = false;
+end
+
 plt = figure;
 
 % Default colours
@@ -565,6 +569,15 @@ switch v
                     if i == 1, hold on; end
                 end
                 plotFun(x, ydat_rel, '-o', 'Color', coldat)
+                
+                % GET BACK TO THIS... 
+%                 switch errorBars, case true
+%                     ydatSE = dat.ValueSE(ind); % observation
+%                     
+%                     
+%                 end
+
+                
                 gc = gca;
                 xlabel('ESD (\mum)')
                 ylabel(ylab_rel)

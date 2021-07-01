@@ -24,8 +24,8 @@ fileName = 'fittedParameters';  % saved parameters file name
 % tag = '1';                      % and identifying tag
 
 % tag = 'IQD_Hellinger_groupWaterOrigin_Atlantic';
-% tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj';
-tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj_relativeSizeDataOnly';
+tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj';
+% tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj_relativeSizeDataOnly';
 
 fileName = fullfile(Directories.resultsDir, ...
     [fileName '_' tag]);
@@ -48,7 +48,10 @@ switch loadFittedParams
             'numTraj', numTraj);
         
     case false % Use default model set-up if fitted outputs are not loaded
-        [Forc0, FixedParams, Params, Data0] = modelSetUp(Directories);
+        numTraj = 1;
+        [Forc0, FixedParams, Params, Data0] = modelSetUp(Directories, ...
+            'numTraj', numTraj);
+        ParamsDefault = Params;
         
         % modelSetup.m may also produce plots -- set to 'true' any name-value pair as shown below
         
@@ -280,7 +283,8 @@ logPlot = 'semilogx'; % for size spectra data choose logPlot = 'loglog' or 'semi
 
 % Comment out Arctic plots because we're fitting to Atlantic data
 pltCellConc_Atl_P = plot_fitToData('CellConc', Data, modData, logPlot, ... 
-    'trophicGroup', 'autotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
+    'trophicGroup', 'autotroph', 'waterOrigin', 'Atlantic', ...
+    'errorBars', true); pause(0.25)
 % pltCellConc_Arc_P = plot_fitToData('CellConc', Data, modData, logPlot, ... 
 %     'trophicGroup', 'autotroph', 'waterOrigin', 'Arctic'); pause(0.25)
 pltCellConc_Atl_Z = plot_fitToData('CellConc', Data, modData, logPlot, ... 
