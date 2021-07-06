@@ -17,7 +17,8 @@ costFunctionChoices = { ...
     'Hellinger3_groupWaterOrigin', ...
     'Hellinger_MVN_groupWaterOrigin', ...
     'IQD_Hellinger_groupWaterOrigin', ...
-    'meanCDFdist_Hellinger'
+    'meanCDFdist_Hellinger', ...
+    'meanCDFdist_HellingerFullSpectrum'
     };
 
 % Evaluating cost requires passing name-value pairs for 'label', 'Data' and
@@ -807,6 +808,134 @@ else
             
             cost = mean(cost); % finally, average cost over nutrient and size data components
 %             cost = cost(2); % try fitting only to the size data
+            
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        case 'meanCDFdist_HellingerFullSpectrum'
+            
+            % As above, but use model output representing the full size
+            % spectra rather than binned (integrated) data.
+            % In fact, it is potentially far better than the above because
+            % it is now much easier to separately fit all the individual
+            % size spectra rather than averaging over sampling events and
+            % depths... of course, we could still take averages...
+            % I don't know which will be the more useful approach. Fitting
+            % to each spectra separately is quite likely to produce poor
+            % fits, but the average may still be reasonable. Fitting to the
+            % different depth layers could also prove very beneficial by
+            % much more strongly informing dependence of size structure
+            % upon depth.
+            
+            % Build the size data cost section to separately fit all size
+            % spectra -- keep the returned cost components as autotrophs &
+            % heterotrophs in Arctic and/or Atlantic waters => average the
+            % costs over sampling events and depths within this function.
+            
+            
+            % Scalar data
+            for i = 1:length(Vars)
+                varLabel = Vars{i};
+                yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+                ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+                n = size(ymod, 1);
+                %                 m = size(ymod, 2);
+                cdf = (1:n)' ./ n;
+                [yobs_sort, o] = sort(yobs); % sort observations
+                % put modelled output in same order -- these values will
+                % almost certainly NOT be in ascending order...
+                ymod_sort = ymod(o,:);
+                %                 figure(1)
+                %                 plot(yobs_sort, cdf)
+                %                 hold on
+                %                 plot(ymod_sort, cdf)
+                %                 hold off
+                % find distances between each modelled data point and the
+                % empirical data CDF
+                ymodi = interp1(yobs_sort, cdf, ymod_sort, 'linear', 'extrap');
+                ymodi = min(1, max(0, ymodi));
+                CDFdist = abs(cdf - ymodi);
+                avDist = mean(CDFdist); % average over data points
+                costComponents.(varLabel) = mean(avDist); % average over trajectory selections
+            end
+            
+            % Vector (size) data
+            trophicLevels = unique(Data.size.trophicLevel);
+            groupedByWaterOrigin = isfield(Data.size, 'waterMass');
+            if groupedByWaterOrigin
+                waterMasses = unique(Data.size.waterMass);
+            else
+                waterMasses = {[]};
+            end
+            % The VarsSize labels are wrong => redefine
+            switch Data.size.obsInCostFunction{1}
+                case 'BioVol'; VarsSize = {'BioVolDensity'};
+                case 'CellConc'; VarsSize = {'cellDensity'};
+            end
+            allEvents = unique(Data.size.Event, 'stable');
+            nVars = length(VarsSize);
+            nWaterMasses = length(waterMasses);
+            nTrophicLevels = length(trophicLevels);
+            HellingerDistances = nan(nVars, nWaterMasses, nTrophicLevels);
+            for i = 1:length(VarsSize)
+                varLabel = VarsSize{i};
+                for w = 1:length(waterMasses)
+                    wm = waterMasses{w};
+                    ind0 = ismember(Data.size.Event, allEvents(strcmp(Data.size.waterMass, wm)));
+                    Events = unique(Data.size.Event(ind0));
+                    counter = 0;
+                    for ie = 1:length(Events)
+                        event = Events(ie);
+                        ind1 = ind0 & Data.size.Event == event;
+                        depths = unique(Data.size.Depth(ind1));
+                        for id = 1:length(depths)
+                            counter = counter + 1;
+                            depth = depths(id);
+                            ind2 = ind1 & Data.size.Depth == depth;
+                            for it = 1:length(trophicLevels)
+                                trophicLevel = trophicLevels{it};
+                                ind3 = ind2 & strcmp(Data.size.trophicLevel, trophicLevel);
+                                yobs = Data.size.(varLabel)(ind3);
+                                ymod = modData.size.(varLabel)(ind3);
+                                % Fit only to relative abundance-at-size =>
+                                % normalise the data & modelled output
+                                yobs = yobs ./ sum(yobs);
+                                ymod = ymod ./ sum(ymod);
+                                HellingerDistance = (1 - sum((yobs .* ymod) .^ 0.5)) .^ 0.5;
+                                HellingerDistances(i,w,it,counter) = HellingerDistance;
+                            end
+                        end
+                    end
+                end
+            end
+            
+            % Average Hellinger distances over sample events & depths
+            HellingerDistances_ = mean(HellingerDistances, ndims(HellingerDistances));
+            % Store in costComponents
+            for i = 1:length(VarsSize)
+                varLabel = VarsSize{i};
+                for it = 1:length(trophicLevels)
+                    trophicLevel = trophicLevels{it};
+                    if groupedByWaterOrigin
+                        for w = 1:length(waterMasses)
+                            waterMass = waterMasses{w};
+                            label = [varLabel '_' waterMass '_' trophicLevel];
+                            costComponents.(label) = HellingerDistances_(i,w,it);
+                        end
+                    else
+                        label = [varLabel '_' trophicLevel];
+                        costComponents.(label) = HellingerDistances_(i,1,it);
+                    end
+                end
+            end
+            
+            % Calculate total cost -- a scalar value
+            fields = fieldnames(costComponents);
+            costComponents_ = struct2array(costComponents);
+            costNutrient = costComponents_(ismember(fields, Vars));
+            costSize = costComponents_(~ismember(fields, Vars));
+            cost_ = [mean(costNutrient), mean(costSize)];
+            cost = mean(cost_);
             
     end
     

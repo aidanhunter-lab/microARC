@@ -24,8 +24,10 @@ fileName = 'fittedParameters';  % saved parameters file name
 % tag = '1';                      % and identifying tag
 
 % tag = 'IQD_Hellinger_groupWaterOrigin_Atlantic';
-tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj';
-% tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj_relativeSizeDataOnly';
+% tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj';
+tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj_omitSizeDataTot';
+% tag = 'meanCDFdist_HellingerFullSpectrum_Atlantic_quadraticMortality_singleTraj_allSpectra';
+
 
 fileName = fullfile(Directories.resultsDir, ...
     [fileName '_' tag]);
@@ -94,10 +96,13 @@ tic; disp('.. started at'); disp(datetime('now'))
 toc
 
 
+FixedParams.fitToFullSizeSpectra = false; % for code compactness/slickness the action of this field should be into matchModOutput2Data rather than costCalc... kinda annoying!!
+
 % Generate modelled equivalents of the data
-% modData = matchModOutput2Data(out, auxVars, Data, FixedParams);
-modData0 = matchModOutput2Data(out0, auxVars0, Data0, FixedParams);
-modData = matchModOutput2Data(out, auxVars, Data, FixedParams);
+modData0 = matchModOutput2Data(out0, auxVars0, Data0, FixedParams, ...
+    'fitToFullSizeSpectra', FixedParams.fitToFullSizeSpectra);
+modData = matchModOutput2Data(out, auxVars, Data, FixedParams, ...
+    'fitToFullSizeSpectra', FixedParams.fitToFullSizeSpectra);
 
 [cost, costComponents] = costFunction('label', FixedParams.costFunction, ...
     'Data', Data, 'modData', modData);
@@ -221,6 +226,7 @@ switch save, case true
     end
 end
 
+
 %~~~~~~~~~~~~~~~~~~
 % Standardised data
 %~~~~~~~~~~~~~~~~~~
@@ -278,13 +284,16 @@ pltPOC = plot_fitToData('POC', Data, modData, logPlot); pause(0.25)
 logPlot = false;
 pltN = plot_fitToData('N', Data, modData, logPlot); pause(0.25)
 
-logPlot = 'loglog'; % for size spectra data choose logPlot = 'loglog' or 'semilogx'
+% logPlot = 'loglog'; % for size spectra data choose logPlot = 'loglog' or 'semilogx'
 logPlot = 'semilogx'; % for size spectra data choose logPlot = 'loglog' or 'semilogx'
 
 % Comment out Arctic plots because we're fitting to Atlantic data
+% pltCellConc_Atl_P = plot_fitToData('CellConc', Data, modData, logPlot, ... 
+%     'trophicGroup', 'autotroph', 'waterOrigin', 'Atlantic', ...
+%     'errorBars', true); pause(0.25)
+
 pltCellConc_Atl_P = plot_fitToData('CellConc', Data, modData, logPlot, ... 
-    'trophicGroup', 'autotroph', 'waterOrigin', 'Atlantic', ...
-    'errorBars', true); pause(0.25)
+    'trophicGroup', 'autotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
 % pltCellConc_Arc_P = plot_fitToData('CellConc', Data, modData, logPlot, ... 
 %     'trophicGroup', 'autotroph', 'waterOrigin', 'Arctic'); pause(0.25)
 pltCellConc_Atl_Z = plot_fitToData('CellConc', Data, modData, logPlot, ... 
@@ -386,6 +395,239 @@ switch save, case true
 end
 
 
+
+
+
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+% Different plots needed if fitting to all uniquely measured size spectra.
+% Use a separate panel for each spectra, a separate column for each sample
+% event, and split sample depths by row.
+ESD = unique(Data.size.ESD);
+trophicLevels = unique(Data.size.trophicLevel);
+Events = unique(Data.size.Event);
+nEvents = length(Events);
+eventDepths = nan(1,  nEvents);
+for i = 1:nEvents
+    depths = unique(Data.size.Depth(Data.size.Event == Events(i)));
+    ndepths = length(depths);
+    eventDepths(1:ndepths, i) = depths;
+end
+eventDepths(eventDepths == 0) = nan;
+nrows = size(eventDepths, 1);
+ncols = nEvents;
+
+trophicLevel = trophicLevels{1};
+ind0 = strcmp(Data.size.trophicLevel, trophicLevel);
+
+plotFun = @loglog;
+plotFun = @semilogx;
+
+ymin = 1e-6; % truncate plots at ymin
+
+sizeFit = figure;
+sizeFit.Units = 'inches';
+sizeFit.Position = [0 0 16 6];
+
+subplot(nrows, ncols, 1)
+ind = ind0 & Data.size.Event == Events(1) & Data.size.Depth == eventDepths(1,1);
+ydat = Data.size.BioVolDensity(ind);
+ymod = modData.size.BioVolDensity(ind);
+ydat = ydat ./ sum(ydat);
+ymod = ymod ./ sum(ymod);
+plotFun(ESD, ydat)
+hold on
+plotFun(ESD, ymod)
+hold off
+gc = gca;
+gc.YLim(1) = ymin;
+title(['Sample event ' num2str(Events(1)) ': ' num2str(eventDepths(1,1)) ' m'])
+xlabel('ESD (\mum)')
+ylabel({'Shallow','relative biovolume'})
+legend('data','model', 'box', 'off')
+
+subplot(nrows, ncols, 2)
+ind = ind0 & Data.size.Event == Events(2) & Data.size.Depth == eventDepths(1,2);
+ydat = Data.size.BioVolDensity(ind);
+ymod = modData.size.BioVolDensity(ind);
+ydat = ydat ./ sum(ydat);
+ymod = ymod ./ sum(ymod);
+plotFun(ESD, ydat)
+hold on
+plotFun(ESD, ymod)
+hold off
+gc = gca;
+gc.YLim(1) = ymin;
+title(['Sample event ' num2str(Events(2)) ': ' num2str(eventDepths(1,2)) ' m'])
+xlabel('ESD (\mum)')
+ylabel('relative biovolume')
+legend('data','model', 'box', 'off')
+
+subplot(nrows, ncols, 3)
+ind = ind0 & Data.size.Event == Events(3) & Data.size.Depth == eventDepths(1,3);
+ydat = Data.size.BioVolDensity(ind);
+ymod = modData.size.BioVolDensity(ind);
+ydat = ydat ./ sum(ydat);
+ymod = ymod ./ sum(ymod);
+plotFun(ESD, ydat)
+hold on
+plotFun(ESD, ymod)
+hold off
+gc = gca;
+gc.YLim(1) = ymin;
+title(['Sample event ' num2str(Events(3)) ': ' num2str(eventDepths(1,3)) ' m'])
+xlabel('ESD (\mum)')
+ylabel('relative biovolume')
+legend('data','model', 'box', 'off')
+
+subplot(nrows, ncols, 4)
+ind = ind0 & Data.size.Event == Events(4) & Data.size.Depth == eventDepths(1,4);
+ydat = Data.size.BioVolDensity(ind);
+ymod = modData.size.BioVolDensity(ind);
+ydat = ydat ./ sum(ydat);
+ymod = ymod ./ sum(ymod);
+plotFun(ESD, ydat)
+hold on
+plotFun(ESD, ymod)
+hold off
+gc = gca;
+gc.YLim(1) = ymin;
+title(['Sample event ' num2str(Events(4)) ': ' num2str(eventDepths(1,4)) ' m'])
+xlabel('ESD (\mum)')
+ylabel('relative biovolume')
+legend('data','model', 'box', 'off')
+
+subplot(nrows, ncols, 5)
+ind = ind0 & Data.size.Event == Events(1) & Data.size.Depth == eventDepths(2,1);
+ydat = Data.size.BioVolDensity(ind);
+ymod = modData.size.BioVolDensity(ind);
+ydat = ydat ./ sum(ydat);
+ymod = ymod ./ sum(ymod);
+plotFun(ESD, ydat)
+hold on
+plotFun(ESD, ymod)
+hold off
+gc = gca;
+gc.YLim(1) = ymin;
+title(['Sample event ' num2str(Events(1)) ': ' num2str(eventDepths(2,1)) ' m'])
+xlabel('ESD (\mum)')
+ylabel({'Deep','relative biovolume'})
+legend('data','model', 'box', 'off')
+
+subplot(nrows, ncols, 6)
+ind = ind0 & Data.size.Event == Events(2) & Data.size.Depth == eventDepths(2,2);
+ydat = Data.size.BioVolDensity(ind);
+ymod = modData.size.BioVolDensity(ind);
+ydat = ydat ./ sum(ydat);
+ymod = ymod ./ sum(ymod);
+plotFun(ESD, ydat)
+hold on
+plotFun(ESD, ymod)
+hold off
+gc = gca;
+gc.YLim(1) = ymin;
+title(['Sample event ' num2str(Events(2)) ': ' num2str(eventDepths(2,2)) ' m'])
+xlabel('ESD (\mum)')
+ylabel('relative biovolume')
+legend('data','model', 'box', 'off')
+
+subplot(nrows, ncols, 7)
+ind = ind0 & Data.size.Event == Events(3) & Data.size.Depth == eventDepths(2,3);
+ydat = Data.size.BioVolDensity(ind);
+ymod = modData.size.BioVolDensity(ind);
+ydat = ydat ./ sum(ydat);
+ymod = ymod ./ sum(ymod);
+plotFun(ESD, ydat)
+hold on
+plotFun(ESD, ymod)
+hold off
+gc = gca;
+gc.YLim(1) = ymin;
+title(['Sample event ' num2str(Events(3)) ': ' num2str(eventDepths(2,3)) ' m'])
+xlabel('ESD (\mum)')
+ylabel('relative biovolume')
+legend('data','model', 'box', 'off')
+
+subplot(nrows, ncols, 8)
+ind = ind0 & Data.size.Event == Events(4) & Data.size.Depth == eventDepths(2,4);
+ydat = Data.size.BioVolDensity(ind);
+ymod = modData.size.BioVolDensity(ind);
+ydat = ydat ./ sum(ydat);
+ymod = ymod ./ sum(ymod);
+plotFun(ESD, ydat)
+hold on
+plotFun(ESD, ymod)
+hold off
+gc = gca;
+gc.YLim(1) = ymin;
+title(['Sample event ' num2str(Events(4)) ': ' num2str(eventDepths(2,4)) ' m'])
+xlabel('ESD (\mum)')
+ylabel('relative biovolume')
+legend('data','model', 'box', 'off')
+
+
+% Plot the same data, but combine over events... then maybe smooth to
+% reduce event-dependent variability
+
+sizeFit2 = figure;
+sizeFit2.Units = 'inches';
+sizeFit2.Position = [0 0 4 6];
+
+nESD = length(ESD);
+
+subplot(nrows, 1, 1)
+ydat = nan(nESD, nEvents);
+ymod = nan(nESD, nEvents);
+for i = 1:nEvents
+    ind = ind0 & Data.size.Event == Events(i) & Data.size.Depth == eventDepths(1,i);
+    ydat(:,i) = Data.size.BioVolDensity(ind);
+    ymod(:,i) = modData.size.BioVolDensity(ind);
+    ydat(:,i) = ydat(:,i) ./ sum(ydat(:,i));
+    ymod(:,i) = ymod(:,i) ./ sum(ymod(:,i));
+end
+ydat_mean = mean(ydat, 2);
+ymod_mean = mean(ymod, 2);
+
+plotFun(ESD, ydat)
+hold on
+plotFun(ESD, ydat_mean, 'Color', [0 0 0], 'LineWidth', 2)
+hold off
+gc = gca;
+gc.YLim(1) = ymin;
+% xlabel('ESD (\mum)')
+ylabel({'Shallow', 'relative biovolume'})
+
+subplot(nrows, 1, 2)
+ydat = nan(nESD, nEvents);
+ymod = nan(nESD, nEvents);
+for i = 1:nEvents
+    ind = ind0 & Data.size.Event == Events(i) & Data.size.Depth == eventDepths(2,i);
+    ydat(:,i) = Data.size.BioVolDensity(ind);
+    ymod(:,i) = modData.size.BioVolDensity(ind);
+    ydat(:,i) = ydat(:,i) ./ sum(ydat(:,i));
+    ymod(:,i) = ymod(:,i) ./ sum(ymod(:,i));
+end
+ydat_mean = mean(ydat, 2);
+ymod_mean = mean(ymod, 2);
+
+plotFun(ESD, ydat)
+hold on
+plotFun(ESD, ydat_mean, 'Color', [0 0 0], 'LineWidth', 2)
+hold off
+gc = gca;
+gc.YLim(1) = ymin;
+xlabel('ESD (\mum)')
+ylabel({'Deep', 'relative biovolume'})
+
+sgtitle({'Atlantic size spectra','raw samples and means'})
+
+
+
+
+
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 % Plot representations of the cost function distance metrics.
@@ -641,7 +883,6 @@ end
 
 
 %% Contour plots -- single trajectories, or grouped by sample event
-
 
 save = false;
 
@@ -1120,21 +1361,44 @@ end
 % predator cycles, and probably increased variability within the smallest
 % size classes
 
-work in progress...
+% work in progress...
 
-xp = auxVars0.biovolume(1:9,:,:,1);
-xp = auxVars0.cellDensity(1:9,:,:,1);
-xp = squeeze(sum(xp, 2));
-xz = auxVars0.biovolume(10:18,:,:,1);
-xz = auxVars0.cellDensity(10:18,:,:,1);
-xz = squeeze(sum(xz, 2));
+folderAnimate = '/home/aidan/Desktop/temp/meeting/animate';
 
-figure
-semilogy(1:9,xp(:,180))
-hold on
-semilogy(1:9,xz(:,180))
+ESDp = FixedParams.PPdia;
+ESDz = FixedParams.ZPdia;
+xp = auxVars.biovolume(FixedParams.phytoplankton,:,:,1);
+xz = auxVars.biovolume(FixedParams.zooplankton,:,:,1);
+xp = squeeze(sum(xp,2));
+xz = squeeze(sum(xz,2));
 
-hold off
+% normalise abundances over size
+xp = xp ./ sum(xp);
+xz = xz ./ sum(xz);
+
+% plotFun = @semilogx;
+plotFun = @loglog;
+
+for yearday = min(Forc.Yearday(:)):max(Forc.Yearday(:))
+    
+    plt = figure;
+    plotFun(ESDp, xp(:,yearday), '-o')
+    hold on
+    plotFun(ESDz, xz(:,yearday), '-o')
+    hold off
+    xlabel('ESD (\mum)')
+    ylabel('Relative bio-volume')
+    legend('autotrophs', 'heterotrophs')
+    title(['Day ' num2str(yearday) ': 2018'])
+    
+    filename = ['relativeBiovolume_day' num2str(yearday) '.png'];
+    print(plt, fullfile(folderAnimate, filename), '-r300', '-dpng');
+    
+    close(plt)
+    
+    disp(yearday)
+    
+end
 
 
 
