@@ -50,8 +50,11 @@ numTraj = 1; % use only a single trajectory per sampling event -- events at Arct
 % algorithm. Can also select which data to fit / trajectories to run as
 % Arctic and/or Atlantic.
 niter = 50;
-costFunctionType = 'meanCDFdist_Hellinger';
+% costFunctionType = 'meanCDFdist_Hellinger';
 % costFunctionType = 'meanCDFdist_HellingerFullSpectrum';
+
+costFunctionType = 'meanCDFdist_HellingerFullSpectrum_averagedEventsDepths';
+
 fitTrajectories = 'Atlantic';
 % Different cost functions may use binned size data (integrated within
 % modelled size class intervals) or may fit to the full size spectra data.
@@ -63,6 +66,7 @@ fitToFullSizeSpectra = false;
     'costFunctionType', costFunctionType, ...
     'fitTrajectories', fitTrajectories, ...
     'fitToFullSizeSpectra', fitToFullSizeSpectra);
+
 % Optional arguments (e.g. 'niter') may be included as name-value pairs,
 % otherwise default values are used.
 % It is important to specify 'costFunctionType' as one of the options
