@@ -1,8 +1,15 @@
-function [FixedParams, Params, Forc, Data] = optimisationOptions(FixedParams, Params, Forc, Data, varargin)
+function [FixedParams, Params, Forc, Data] = ... 
+    optimisationOptions(FixedParams, Params, Forc, Data, varargin)
 % Choose tuning parameters and cost function and numerical tuning algorithm
 % and any other options related to optimisation can be included here...
 
 extractVarargin(varargin)
+
+if ~exist('fitToFullSizeSpectra', 'var') || isempty(fitToFullSizeSpectra)
+    % if unspecified then by default fit model using binned size spectra data
+    fitToFullSizeSpectra = false;
+end
+FixedParams.fitToFullSizeSpectra = fitToFullSizeSpectra;
 
 %% Select parameters to optimise
 
@@ -52,8 +59,12 @@ assignin('caller', 'boundsUpper', ub)
 
 if ~exist('costFunctionType', 'var')
     % costFunctionChoices should be given shorter names...
-%     costFunctionType = costFunctionChoices{4}; % select cost function
-    costFunctionType = costFunctionChoices{6}; % select cost function
+    %     costFunctionType = costFunctionChoices{4}; % select cost function
+    %     costFunctionType = costFunctionChoices{6}; % select cost function
+    costFunctionType = 'meanCDFdist_Hellinger';
+    if ~ismember(costFunctionType, costFunctionChoices)
+        costFunctionType = costFunctionChoices{1};
+    end
 end
 FixedParams.costFunction = costFunctionType;
 assignin('caller', 'costFunctionLabel', costFunctionType)

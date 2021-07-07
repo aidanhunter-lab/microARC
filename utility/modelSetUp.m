@@ -157,6 +157,12 @@ clear F
 % Remove fitting-data samples from below the maximum modelled depth
 Data = omitDeepSamples(Data, FixedParams);
 
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% THIS CODE SECTION IS NOT ROBUST SO ANY CHANGES TO WHICH YEARS OF DATA ARE
+% USED WILL NEED TO BE MADE WITH CARE, BEARING IN MIND THAT SUBSEQUENT CODE
+% SECTIONS WILL BE AFFECTED, E.G., THE COST FUNCTION...
+
 % Select which year(s) to model and filter out unused data.
 % Function selectYears.m automatically chooses which year(s) to use based
 % upon which years are most replete with data.
@@ -164,11 +170,17 @@ Data = omitDeepSamples(Data, FixedParams);
 % Run model over a single year? If false, then multiple years of forcing 
 % data MAY be used depending on fitting-data availability
 if ~exist('useSingleYear', 'var'), useSingleYear = true; end
-% There are 2 size spectra for 2018 -- use only the Polarstern samples if true
+% In 2018 there are size spectra from 2 cruises --
+% if useSingleSizeSpectra = true then use only the Polarstern samples
 if ~exist('useSingleSizeSpectra', 'var'), useSingleSizeSpectra = true; end
 
 [Data, Forc, FixedParams] = selectYears(Data, Forc, FixedParams, ... 
     'singleYear', useSingleYear, 'singleSpectra', useSingleSizeSpectra);
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
 
 % There are lots of forcing data particle trajectories -- far too many to
 % include within a parameter optimisation procedure, so these need to be
