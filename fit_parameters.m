@@ -50,10 +50,9 @@ numTraj = 1; % use only a single trajectory per sampling event -- events at Arct
 % algorithm. Can also select which data to fit / trajectories to run as
 % Arctic and/or Atlantic.
 niter = 50;
-% costFunctionType = 'meanCDFdist_Hellinger';
+costFunctionType = 'meanCDFdist_Hellinger';
 % costFunctionType = 'meanCDFdist_HellingerFullSpectrum';
-
-costFunctionType = 'meanCDFdist_HellingerFullSpectrum_averagedEventsDepths';
+% costFunctionType = 'meanCDFdist_HellingerFullSpectrum_averagedEventsDepths';
 
 fitTrajectories = 'Atlantic';
 % Different cost functions may use binned size data (integrated within
@@ -159,7 +158,8 @@ saveParams = true;
 fileName_results = 'fittedParameters';  % choose file name
 tag = FixedParams.costFunction;         % and identifying tag
 tag = [tag '_Atlantic_quadraticMortality_singleTraj_omitSizeDataTot'];
-tag = [tag '_Atlantic_quadraticMortality_singleTraj_allSpectra'];
+% tag = [tag '_Atlantic_quadraticMortality_singleTraj_allSpectra'];
+% tag = [tag '_Atlantic_quadraticMortality_singleTraj'];
 % tag = [tag '_Arctic'];
 fileName_results = fullfile(Directories.resultsDir, ...
     [fileName_results '_' tag]);

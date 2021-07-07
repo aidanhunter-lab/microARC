@@ -26,6 +26,7 @@ fileName = 'fittedParameters';  % saved parameters file name
 % tag = 'IQD_Hellinger_groupWaterOrigin_Atlantic';
 % tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj';
 tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj_omitSizeDataTot';
+% tag = 'meanCDFdist_HellingerFullSpectrum_averagedEventsDepths_Atlantic_quadraticMortality_singleTraj';
 % tag = 'meanCDFdist_HellingerFullSpectrum_Atlantic_quadraticMortality_singleTraj_allSpectra';
 
 
@@ -96,7 +97,7 @@ tic; disp('.. started at'); disp(datetime('now'))
 toc
 
 
-FixedParams.fitToFullSizeSpectra = false; % for code compactness/slickness the action of this field should be into matchModOutput2Data rather than costCalc... kinda annoying!!
+% FixedParams.fitToFullSizeSpectra = false; % for code compactness/slickness the action of this field should be into matchModOutput2Data rather than costCalc... kinda annoying!!
 
 % Generate modelled equivalents of the data
 modData0 = matchModOutput2Data(out0, auxVars0, Data0, FixedParams, ...
