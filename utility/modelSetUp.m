@@ -157,6 +157,12 @@ clear F
 % Remove fitting-data samples from below the maximum modelled depth
 Data = omitDeepSamples(Data, FixedParams);
 
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% THIS CODE SECTION IS NOT ROBUST SO ANY CHANGES TO WHICH YEARS OF DATA ARE
+% USED WILL NEED TO BE MADE WITH CARE, BEARING IN MIND THAT SUBSEQUENT CODE
+% SECTIONS WILL BE AFFECTED, E.G., THE COST FUNCTION...
+
 % Select which year(s) to model and filter out unused data.
 % Function selectYears.m automatically chooses which year(s) to use based
 % upon which years are most replete with data.
@@ -164,11 +170,17 @@ Data = omitDeepSamples(Data, FixedParams);
 % Run model over a single year? If false, then multiple years of forcing 
 % data MAY be used depending on fitting-data availability
 if ~exist('useSingleYear', 'var'), useSingleYear = true; end
-% There are 2 size spectra for 2018 -- use only the Polarstern samples if true
+% In 2018 there are size spectra from 2 cruises --
+% if useSingleSizeSpectra = true then use only the Polarstern samples
 if ~exist('useSingleSizeSpectra', 'var'), useSingleSizeSpectra = true; end
 
 [Data, Forc, FixedParams] = selectYears(Data, Forc, FixedParams, ... 
     'singleYear', useSingleYear, 'singleSpectra', useSingleSizeSpectra);
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
 
 % There are lots of forcing data particle trajectories -- far too many to
 % include within a parameter optimisation procedure, so these need to be
@@ -209,11 +221,6 @@ Forc = Forc_; clear Forc_
 Data = omitUnmatchedEvents(Data, eventTraj, Forc);
 % [Data, eventTraj] = omitUnmatchedEvents(Data, eventTraj, Forc);
 
-% % For each trajectory, find the time of the latest sampling event.
-% % Integrations along trajectories can then be stopped at these events to
-% % reduce model run-times during parameter optimisation.
-% Forc = latestSampleTime(Forc, Data);
-
 % Group sampling events by origin of particles: Arctic or Atlantic.
 % Each individual trajectory is either of Atlantic or Arctic origin
 % (stored in Forc.waterMass).
@@ -234,7 +241,9 @@ end
 % Group size data by water origin -- find average spectra using
 % measurements from events whose trajectories all orginate from either the
 % Arctic or the Atlantic
-Data = sizeDataOrigin(Data);
+% avFun = @mean; % arithmetic or geometric mean spectra over sampe events and depths
+avFun = @geomean; % choice of average type is important! geometric mean more appropriate for these data?
+Data = sizeDataOrigin(Data, 'avFun', avFun);
 
 % For each trajectory, find the time of the latest sampling event.
 % Integrations along trajectories can then be stopped at these events to

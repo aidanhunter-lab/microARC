@@ -1,16 +1,26 @@
-function [FixedParams, Params, Forc, Data] = optimisationOptions(FixedParams, Params, Forc, Data, varargin)
+function [FixedParams, Params, Forc, Data] = ... 
+    optimisationOptions(FixedParams, Params, Forc, Data, varargin)
 % Choose tuning parameters and cost function and numerical tuning algorithm
 % and any other options related to optimisation can be included here...
 
 extractVarargin(varargin)
 
+if ~exist('fitToFullSizeSpectra', 'var') || isempty(fitToFullSizeSpectra)
+    % if unspecified then by default fit model using binned size spectra data
+    fitToFullSizeSpectra = false;
+end
+FixedParams.fitToFullSizeSpectra = fitToFullSizeSpectra;
+
 %% Select parameters to optimise
 
 % Choose from the lists: Params.scalars & Params.sizeDependent.
-parnames = {'wPOM1', 'wp_a', 'wp_b', 'rDON', 'rPON', ...
-    'aP', 'm_a', 'm2', 'Gmax_a', 'Gmax_b', 'k_G', 'pmax_a', 'pmax_b', ... 
-    'Qmin_QC_a', 'Qmin_QC_b', 'Qmax_delQ_a', 'Qmax_delQ_b', ... 
-    'Vmax_QC_a', 'Vmax_QC_b', 'aN_QC_a', 'aN_QC_b'};
+% parnames = {'wPOM1', 'wp_a', 'wp_b', 'rDON', 'rPON', ...
+%     'aP', 'm_a', 'm2', 'Gmax_a', 'Gmax_b', 'k_G', 'pmax_a', 'pmax_b', ... 
+%     'Qmin_QC_a', 'Qmin_QC_b', 'Qmax_delQ_a', 'Qmax_delQ_b', ... 
+%     'Vmax_QC_a', 'Vmax_QC_b', 'aN_QC_a', 'aN_QC_b'};
+parnames = {'wPOM1', 'rDON', 'rPON', 'aP', 'm_a', 'Gmax_a', 'Gmax_b', ... 
+    'k_G', 'pmax_a', 'pmax_b', 'Qmin_QC_a', 'Qmin_QC_b', 'Qmax_delQ_a', ... 
+    'Qmax_delQ_b', 'Vmax_QC_a', 'Vmax_QC_b', 'aN_QC_a', 'aN_QC_b'};
 
 % Check that all chosen parameters exist -- error if not
 if ~all(ismember(parnames, Params.scalarParams) | ... 
@@ -52,8 +62,12 @@ assignin('caller', 'boundsUpper', ub)
 
 if ~exist('costFunctionType', 'var')
     % costFunctionChoices should be given shorter names...
-%     costFunctionType = costFunctionChoices{4}; % select cost function
-    costFunctionType = costFunctionChoices{6}; % select cost function
+    %     costFunctionType = costFunctionChoices{4}; % select cost function
+    %     costFunctionType = costFunctionChoices{6}; % select cost function
+    costFunctionType = 'meanCDFdist_Hellinger';
+    if ~ismember(costFunctionType, costFunctionChoices)
+        costFunctionType = costFunctionChoices{1};
+    end
 end
 FixedParams.costFunction = costFunctionType;
 assignin('caller', 'costFunctionLabel', costFunctionType)

@@ -166,7 +166,7 @@ switch Type
             y_ = pdf(yDist, x_); % sample density of standardised data
             y_ = (y_ - min(y_)) ./ (max(y_) - min(y_));
             y_ = gc.YLim(1) + y_ .* diff(gc.YLim);
-            plot(x_, y_)
+            plot(x_, y_, 'Color', [0 0 0])
             nd = (2*pi)^(-0.5) * exp(-0.5 .* x_ .^ 2); % standard normal density
             nd = (nd - min(nd)) ./ (max(nd) - min(nd));
             nd = gc.YLim(1) + nd .* diff(gc.YLim);

@@ -178,7 +178,7 @@ end
 
 % This should be moved to a unique function called 'derivedQuantities.m'
 
-if (islogical(returnExtra) && returnExtra) || all(strcmp(returnExtra, 'all'))
+if (islogical(returnExtra) && returnExtra) || any(strcmp(returnExtra, 'all'))
     
     dt = unique(diff(Forc.t(:,1)));
     

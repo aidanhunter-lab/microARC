@@ -73,6 +73,12 @@ end
 % end
 
 
+if ~exist('meanType', 'var')
+    meanType = 'arithmetic';
+end
+
+
+
 
 switch Type
     case 'scalar'
@@ -182,7 +188,45 @@ switch Type
         tt_ = table(event);
         tt_ = innerjoin(tt_, tt);
         
+%         values = nan(nsize, nWaterMasses, nTrophicLevels);
+%         for i = 1:length(waterMasses)
+%             waterMass = waterMasses{i};
+%             ind = strcmp(tt_.waterMass, waterMass);
+%             for j = 1:length(trophicLevels)
+%                 trophicLevel = trophicLevels{j};
+%                 ind2 = ind & strcmp(dat.trophicLevel, trophicLevel);
+%                 % Average over events and depths to produce single spectra
+%                 % for each water mass and trophic level
+%                 events = unique(dat.Event(ind2));
+%                 nevent = length(events);
+%                 value = zeros(nsize, 1);
+%                 for k = 1:nevent
+%                     event = events(k);
+%                     ind3 = ind2 & dat.Event == event;
+%                     depths = unique(dat.Depth(ind3));
+%                     ndepth = length(depths);
+%                     value_ = zeros(nsize, 1);
+%                     for l = 1:ndepth
+%                         depth = depths(l);
+%                         ind4 = ind3 & dat.Depth == depth;
+%                         value_ = value_ + y(ind4);
+%                     end
+%                     value_ = value_ ./ ndepth;
+%                     value = value + value_;
+%                 end
+%                 value = value ./ nevent; % single size spectra for each water mass & trophic level (averaged over samples and depths)
+%                 values(:,i,j) = value;
+%             end
+%         end
+                
         values = nan(nsize, nWaterMasses, nTrophicLevels);
+        switch meanType
+            case 'arithmetic'
+                valueBase = zeros(nsize, 1);
+            case 'geometric'
+                valueBase = ones(nsize, 1);
+        end
+
         for i = 1:length(waterMasses)
             waterMass = waterMasses{i};
             ind = strcmp(tt_.waterMass, waterMass);
@@ -193,26 +237,42 @@ switch Type
                 % for each water mass and trophic level
                 events = unique(dat.Event(ind2));
                 nevent = length(events);
-                value = zeros(nsize, 1);
+                value = valueBase;
                 for k = 1:nevent
                     event = events(k);
                     ind3 = ind2 & dat.Event == event;
                     depths = unique(dat.Depth(ind3));
                     ndepth = length(depths);
-                    value_ = zeros(nsize, 1);
+                    value_ = valueBase;
                     for l = 1:ndepth
                         depth = depths(l);
                         ind4 = ind3 & dat.Depth == depth;
-                        value_ = value_ + y(ind4);
+                        switch meanType
+                            case 'arithmetic'
+                                value_ = value_ + y(ind4);
+                            case 'geometric'
+                                value_ = value_ .* y(ind4);
+                        end
                     end
-                    value_ = value_ ./ ndepth;
-                    value = value + value_;
+                    switch meanType
+                        case 'arithmetic'
+                            value_ = value_ ./ ndepth;
+                            value = value + value_;
+                        case 'geometric'
+                            value_ = value_ .^ (1 ./ ndepth);
+                            value = value .* value_;
+                    end
                 end
-                value = value ./ nevent; % single size spectra for each water mass & trophic level (averaged over samples and depths)
+                switch meanType
+                    case 'arithmetic'
+                        value = value ./ nevent; % single size spectra for each water mass & trophic level (averaged over samples and depths)
+                    case 'geometric'
+                        value = value .^ (1 ./ nevent);
+                end
                 values(:,i,j) = value;
             end
         end
-        
+
         Arctic = strcmp(waterMasses, 'Arctic');
         Atlantic = strcmp(waterMasses, 'Atlantic');
         autotroph = strcmp(trophicLevels, 'autotroph');

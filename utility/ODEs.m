@@ -224,7 +224,7 @@ if (islogical(returnExtra) && returnExtra) || ...
     % with memory by only returning a few terms then deriving more extra
     % output outside this ODEs.m function.
     
-    if ~islogical(returnExtra) && ~all(strcmp(returnExtra, 'all'))
+    if ~islogical(returnExtra) && ~any(strcmp(returnExtra, 'all'))
         % if extra output variables have been specified explicitly...
         keepVars = returnExtra;
     end

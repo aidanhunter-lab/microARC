@@ -43,14 +43,30 @@ Params = updateParameters(Params, FixedParams, pars);
 [out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, ...
     odeIntegrator, odeOptions, 'returnExtra', returnExtra);
 
-
 %% Match model outputs to data
 
 % Extract model output from times and depths matching the data, then 
 % transform it using the same functions that standardised the data. The
 % resulting 'modData' should have the same structure as, and be directly 
 % comparable to, the observations in 'Data'.
-modData = matchModOutput2Data(out, auxVars, Data, FixedParams);
+
+% When fitToFullSizeSpectra = false the modData.size struct matches the
+% binned size data, which averages over covariate information including
+% sampling events and depths -- this can be convenient and is probably (in
+% my opinion!) best for parameter-tuning.
+% When fitToFullSizeSpectra = false the full size spectra data are matched
+% within modData.size, which contains all potentially useful covariate
+% information -- any cost function using this will need to explicitly
+% handle the covariates and any associated averaging/smoothing.
+
+modData = matchModOutput2Data(out, auxVars, Data, FixedParams, ...
+    'fitToFullSizeSpectra', FixedParams.fitToFullSizeSpectra);
+
+% if FixedParams.fitToFullSizeSpectra
+%     modData = matchModOutput2Data_fullSpectrum(out, auxVars, Data, FixedParams);
+% else
+%     modData = matchModOutput2Data(out, auxVars, Data, FixedParams);
+% end
 
 
 %% Cost function

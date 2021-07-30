@@ -67,7 +67,3 @@ toc
 display(out)
 display(auxVars)
 
-
-
-
-
