@@ -221,11 +221,6 @@ Forc = Forc_; clear Forc_
 Data = omitUnmatchedEvents(Data, eventTraj, Forc);
 % [Data, eventTraj] = omitUnmatchedEvents(Data, eventTraj, Forc);
 
-% % For each trajectory, find the time of the latest sampling event.
-% % Integrations along trajectories can then be stopped at these events to
-% % reduce model run-times during parameter optimisation.
-% Forc = latestSampleTime(Forc, Data);
-
 % Group sampling events by origin of particles: Arctic or Atlantic.
 % Each individual trajectory is either of Atlantic or Arctic origin
 % (stored in Forc.waterMass).
@@ -246,7 +241,9 @@ end
 % Group size data by water origin -- find average spectra using
 % measurements from events whose trajectories all orginate from either the
 % Arctic or the Atlantic
-Data = sizeDataOrigin(Data);
+% avFun = @mean; % arithmetic or geometric mean spectra over sampe events and depths
+avFun = @geomean; % choice of average type is important! geometric mean more appropriate for these data?
+Data = sizeDataOrigin(Data, 'avFun', avFun);
 
 % For each trajectory, find the time of the latest sampling event.
 % Integrations along trajectories can then be stopped at these events to

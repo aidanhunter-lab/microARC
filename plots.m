@@ -24,11 +24,15 @@ fileName = 'fittedParameters';  % saved parameters file name
 % tag = '1';                      % and identifying tag
 
 % tag = 'IQD_Hellinger_groupWaterOrigin_Atlantic';
-% tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj';
+tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj';
 tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj_omitSizeDataTot';
+tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj_omitSizeDataTot_removeParams';
+
+tag = 'RMS_Hellinger_Atlantic_singleTraj_removeParams';
+tag = 'RMSsmooth_Hellinger_Atlantic_singleTraj_removeParams';
+
 % tag = 'meanCDFdist_HellingerFullSpectrum_averagedEventsDepths_Atlantic_quadraticMortality_singleTraj';
 % tag = 'meanCDFdist_HellingerFullSpectrum_Atlantic_quadraticMortality_singleTraj_allSpectra';
-
 
 fileName = fullfile(Directories.resultsDir, ...
     [fileName '_' tag]);
@@ -84,8 +88,7 @@ v00 = initialiseVariables(FixedParams, ParamsDefault, Forc0); % create initials 
 
 
 clear out auxVars modData0 modData
-% Generate model outputs
-% using all trajectories
+% Generate model outputs using all trajectories
 tic; disp('.. started at'); disp(datetime('now'))
 [out0, auxVars0] = integrateTrajectories(FixedParams, Params, Forc0, v00, ... 
     FixedParams.odeIntegrator, FixedParams.odeOptions);
@@ -108,6 +111,8 @@ modData = matchModOutput2Data(out, auxVars, Data, FixedParams, ...
 [cost, costComponents] = costFunction('label', FixedParams.costFunction, ...
     'Data', Data, 'modData', modData);
 
+% [cost2, costComponents2] = costFunction('label', 'RMSsmooth_Hellinger', ...
+%     'Data', Data, 'modData', modData);
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -152,11 +157,18 @@ plot_rawData('scalar', 'POC', Data0, 'pointAlpha', pointAlpha);
 plt_spectra = figure;
 plt_spectra.Units = 'inches';
 plt_spectra.Position = [0 0 8 6];
+
+% meanType = 'arithmetic';
+meanType = 'geometric';
+legendPosition = 'south';
+
 subplot(2,1,1)
-plot_rawData('sizeSpectra', 'CellConc', Data0, 'includeLegend', true, ...
-    'legendPosition', 'southwest');
+plot_rawData('sizeSpectra', 'CellConc', Data0, 'meanType', meanType, ... 
+    'includeLegend', true, 'legendPosition', legendPosition);
 subplot(2,1,2)
-plot_rawData('sizeSpectra', 'BioVol', Data0);
+plot_rawData('sizeSpectra', 'BioVol', Data0, 'meanType', meanType);
+
+
 
 % Size data - spectra multipanel plots
 Type = 'CellConc';
@@ -164,36 +176,50 @@ plt_spectra2 = figure;
 plt_spectra2.Units = 'inches';
 plt_spectra2.Position = [0 0 16 12];
 subplot(2,2,1)
-plot_rawData('sizeSpectra', Type, Data0, 'includeLegend', true, ...
-    'legendPosition', 'southwest', 'groupAutotroph', true);
+plot_rawData('sizeSpectra', Type, Data0, 'meanType', meanType, ...
+    'includeLegend', true, 'legendPosition', 'southwest', ... 
+    'groupAutotroph', true);
 subplot(2,2,3)
-plot_rawData('sizeSpectra', Type, Data0, 'includeLegend', true, ...
-    'legendPosition', 'southwest', 'groupHeterotroph', true);
+plot_rawData('sizeSpectra', Type, Data0, 'meanType', meanType, ...
+    'includeLegend', true, 'legendPosition', 'southwest', ... 
+    'groupHeterotroph', true);
 subplot(2,2,2)
-plot_rawData('sizeSpectra', Type, Data0, 'includeLegend', true, ...
-    'legendPosition', 'southwest', 'groupAtlantic', true);
+plot_rawData('sizeSpectra', Type, Data0, 'meanType', meanType, ...
+    'includeLegend', true, 'legendPosition', 'southwest', ...
+    'groupAtlantic', true);
 subplot(2,2,4)
-plot_rawData('sizeSpectra', Type, Data0, 'includeLegend', true, ...
-    'legendPosition', 'southwest', 'groupArctic', true);
+plot_rawData('sizeSpectra', Type, Data0, 'meanType', meanType, ...
+    'includeLegend', true, 'legendPosition', 'southwest', ... 
+    'groupArctic', true);
 
 Type = 'BioVol';
 plt_spectra3 = figure;
 plt_spectra3.Units = 'inches';
 plt_spectra3.Position = [0 0 16 12];
 subplot(2,2,1)
-plot_rawData('sizeSpectra', Type, Data0, 'includeLegend', true, ...
-    'legendPosition', 'southwest', 'groupAutotroph', true);
+plot_rawData('sizeSpectra', Type, Data0, 'meanType', meanType, ...
+    'includeLegend', true, 'legendPosition', 'southwest', ... 
+    'groupAutotroph', true);
 subplot(2,2,3)
-plot_rawData('sizeSpectra', Type, Data0, 'includeLegend', true, ...
-    'legendPosition', 'southwest', 'groupHeterotroph', true);
+plot_rawData('sizeSpectra', Type, Data0, 'meanType', meanType, ...
+    'includeLegend', true, 'legendPosition', 'southwest', ... 
+    'groupHeterotroph', true);
 subplot(2,2,2)
-plot_rawData('sizeSpectra', Type, Data0, 'includeLegend', true, ...
-    'legendPosition', 'southwest', 'groupAtlantic', true);
+plot_rawData('sizeSpectra', Type, Data0, 'meanType', meanType, ...
+    'includeLegend', true, 'legendPosition', 'southwest', ... 
+    'groupAtlantic', true);
 subplot(2,2,4)
-plot_rawData('sizeSpectra', Type, Data0, 'includeLegend', true, ...
-    'legendPosition', 'southwest', 'groupArctic', true);
+plot_rawData('sizeSpectra', Type, Data0, 'meanType', meanType, ...
+    'includeLegend', true, 'legendPosition', 'southwest', ... 
+    'groupArctic', true);
 
 % Size data - binned
+
+% In these plots the lower limit on the y-axis can be determined as a
+% strict biological limit... truncate y-axis at 1 cell/m^3, which can also
+% be done for biovolume...
+
+
 plt_binned = figure;
 plt_binned.Units = 'inches';
 plt_binned.Position = [0 0 8 6];
@@ -634,6 +660,254 @@ sgtitle({'Atlantic size spectra','raw samples and means'})
 % Plot representations of the cost function distance metrics.
 
 % Scalar (nutrient) data
+
+plt1 = figure;
+plt1.Units = 'inches';
+plt1.Position = [0 0 16 8];
+
+
+Vars = {'N','chl_a','PON','POC'};
+nv = length(Vars);
+
+colDat = [0, 0, 0];
+colMod = [0, 1, 0];
+% smoothFactor = 0.35;
+
+standardised = true;
+for ii = 1:nv
+    subplot(2,4,ii)
+    xvar = Vars{ii};
+    xLab = [];
+    plot_fitToData2(xvar, Data, modData, ...
+        'standardised', standardised, 'colDat', colDat, 'colMod', colMod, ...
+        'xLab', xLab);
+end
+standardised = false;
+for ii = 1:nv
+    subplot(2,4,ii+nv)
+    xvar = Vars{ii};
+    xLab = [];
+    plot_fitToData2(xvar, Data, modData, ...
+        'standardised', standardised, 'colDat', colDat, 'colMod', colMod, ...
+        'xLab', xLab);
+end
+
+
+
+% Plot residual errors
+
+plt_scalarResid = figure;
+plt_scalarResid.Units = 'inches';
+plt_scalarResid.Position = [0 0 12 8];
+
+colDat = [0.5, 0.5, 0.5];
+deepLimit = 100;
+shallowLimit = 20;
+colDeep = [0, 0, 1];
+colShallow = [0, 1, 0];
+colHighlight = [1, 0, 0];
+highlightDeep = Data.scalar.Depth >= deepLimit;
+highlightShallow = Data.scalar.Depth<= shallowLimit;
+% highlight = Data.scalar.Depth >= 100;
+plotStandardisedData = false; % plot raw or standardised data
+
+for ii = 1:nv
+    
+    subplot(2,2,ii)
+    
+    varLabel = Vars{ii};
+    ind = strcmp(Data.scalar.Variable, varLabel);
+    switch plotStandardisedData
+        case true
+            yobs = Data.scalar.scaled_Value(ind);
+            ymod = modData.scalar.scaled_Value(ind,:);
+            mainTitle = 'Residual errors: model minus standardised data';
+        case false
+            yobs = Data.scalar.Value(ind);
+            ymod = modData.scalar.Value(ind,:);
+            mainTitle = 'Residual errors: model minus data';
+    end
+        
+    n = length(yobs);
+    p = (1:n) ./ n;
+    
+    [yobs_sort, o] = sort(yobs);
+    ymod_sort = ymod(o,:);
+%     [ymod_sort, o] = sort(ymod);
+%     yobs_sort = yobs(o,:);
+    
+    res = ymod_sort - yobs_sort;
+    
+    higlightAll = false(length(res),1);
+    
+    if (exist('highlightDeep', 'var') && any(highlightDeep(ind))) || ...
+            (exist('highlightShallow', 'var') && any(highlightShallow(ind)))
+        if (exist('highlightDeep', 'var') && any(highlightDeep(ind)))
+            highlight_ = highlightDeep(ind);
+            highlight_ = highlight_(o);
+            higlightAll = higlightAll | highlight_;
+            sDeep = scatter(yobs_sort(highlight_), res(highlight_), ...
+                'MarkerEdgeColor', colDeep, 'MarkerFaceColor', colDeep);
+            hold on
+        end
+        if exist('highlightShallow', 'var') && any(highlightShallow(ind))
+            highlight_ = highlightShallow(ind);
+            highlight_ = highlight_(o);
+            higlightAll = higlightAll | highlight_;
+            sShallow = scatter(yobs_sort(highlight_), res(highlight_), ...
+                'MarkerEdgeColor', colShallow, 'MarkerFaceColor', colShallow);
+            if ~(exist('highlightDeep', 'var') && any(highlightDeep(ind)))
+                hold on
+            end
+        end
+        if ii == 1
+            leg = legend;
+        end
+    end
+    
+    scatter(yobs_sort(~higlightAll), res(~higlightAll), ... 
+        'MarkerEdgeColor', colDat, 'LineWidth', 2)
+%     scatter(1:n, res, 'MarkerEdgeColor', colDat, 'LineWidth', 2)
+%     scatter(yobs_sort, res, 'MarkerEdgeColor', colDat, 'LineWidth', 2)
+    
+%     if exist('highlight', 'var') && any(highlight(ind))
+%         highlight_ = highlight(ind);
+%         highlight_ = highlight_(o);
+%         scatter(yobs_sort(highlight_), res(highlight_), ... 
+%             'MarkerEdgeColor', colHighlight, 'MarkerFaceColor', colHighlight)
+%     end
+    
+    gc = gca;
+    xl = gc.XLim;
+    plot(xl, [0, 0], '--r')
+
+    hold off
+    
+    xlabel(varLabel)
+    ylabel('residual error')
+    
+    if ii == nv
+        sgtitle(mainTitle)
+    end
+    
+    if ii == 1
+        % legend & text on panel
+        if exist('sDeep', 'var') && exist('sShallow', 'var')
+            legString = {['> ' num2str(deepLimit) ' m'], ... 
+                ['< ' num2str(shallowLimit) ' m']};
+            leg.String = legString;
+        end
+        if exist('sDeep', 'var') && ~exist('sShallow', 'var')
+            legString = {['> ' num2str(deepLimit) ' m']};
+            leg.String = legString;
+        end
+        if ~exist('sDeep', 'var') && exist('sShallow', 'var')
+            legString = {['< ' num2str(shallowLimit) ' m']};
+            leg.String = legString;
+        end
+        % include text
+        
+        yl = gc.YLim;
+        xd = diff(gc.XLim);
+        yd = diff(gc.YLim);
+        text(xl(1) + 0.01 * xd, yl(2) - 0.05 * yd, 'overestimated', 'HorizontalAlignment', 'left')
+        text(xl(1) + 0.01 * xd, yl(1) + 0.05 * yd, 'underestimated', 'HorizontalAlignment', 'left')
+    end
+    
+end
+
+
+
+
+% Size data
+plt_sizePMFs = figure;
+plt_sizePMFs.Units = 'inches';
+plt_sizePMFs.Position = [0 0 12 6];
+
+% itraj = 1; % choose a single trajectory from those used to fit the model, or set itraj = [] to display all model realisations
+itraj = [];
+barplot = true;
+% Vector (size) data
+varLabel = 'BioVol';
+waterMass = 'Atlantic';
+ind0 = strcmp(Data.size.dataBinned.Variable, varLabel) & ... 
+    strcmp(Data.size.dataBinned.waterMass, waterMass);
+% autotrophs
+subplot(1,2,1)
+trophicLevel = 'autotroph';
+xscale = round(FixedParams.PPdia, 2, 'significant');
+ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, trophicLevel);
+yobs = Data.size.dataBinned.Value(ind);
+ymod = modData.size.Value(ind,:);
+plot_comparePMFs(yobs, ymod, varLabel, 'waterMass', waterMass, ... 
+    'trophicLevel', trophicLevel, 'itraj', itraj, 'xscale', xscale, ...
+    'barplot', barplot);
+
+% heterotrophs
+subplot(1,2,2)
+trophicLevel = 'heterotroph';
+ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, trophicLevel);
+yobs = Data.size.dataBinned.Value(ind);
+ymod = modData.size.Value(ind,:);
+plotLegend = 'false';
+plot_comparePMFs(yobs, ymod, varLabel, 'waterMass', waterMass, ... 
+    'trophicLevel', trophicLevel, 'itraj', itraj, 'xscale', xscale, ...
+    'barplot', barplot, 'plotLegend', plotLegend);
+
+
+
+
+plt_sizePMFs2 = figure;
+plt_sizePMFs2.Units = 'inches';
+plt_sizePMFs2.Position = [0 0 12 6];
+
+% itraj = 1; % choose a single trajectory from those used to fit the model, or set itraj = [] to display all model realisations
+itraj = [];
+barplot = true;
+% Vector (size) data
+varLabel = 'BioVol';
+waterMass = 'Atlantic';
+ind0 = strcmp(Data.size.dataBinned.Variable, varLabel) & ... 
+    strcmp(Data.size.dataBinned.waterMass, waterMass);
+% autotrophs
+subplot(1,2,1)
+trophicLevel = 'autotroph';
+xscale = round(FixedParams.PPdia, 2, 'significant');
+ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, trophicLevel);
+yobs = Data.size.dataBinned.Value(ind);
+ymod = modData.size.Value(ind,:);
+
+res = log10(ymod ./ yobs);
+res = (ymod - yobs);
+
+plot_comparePMFs(res(:,1), res, varLabel, 'waterMass', waterMass, ... 
+    'trophicLevel', trophicLevel, 'itraj', itraj, 'xscale', xscale, ...
+    'barplot', barplot);
+% plot_comparePMFs(yobs, ymod, varLabel, 'waterMass', waterMass, ... 
+%     'trophicLevel', trophicLevel, 'itraj', itraj, 'xscale', xscale, ...
+%     'barplot', barplot);
+
+% heterotrophs
+subplot(1,2,2)
+trophicLevel = 'heterotroph';
+ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, trophicLevel);
+yobs = Data.size.dataBinned.Value(ind);
+ymod = modData.size.Value(ind,:);
+plotLegend = 'false';
+plot_comparePMFs(yobs, ymod, varLabel, 'waterMass', waterMass, ... 
+    'trophicLevel', trophicLevel, 'itraj', itraj, 'xscale', xscale, ...
+    'barplot', barplot, 'plotLegend', plotLegend);
+
+
+
+
+
+
+
+
+
+
+
 plt_scalarCDFs = figure;
 plt_scalarCDFs.Units = 'inches';
 plt_scalarCDFs.Position = [0 0 12 8];
@@ -889,47 +1163,61 @@ save = false;
 
 % Choose one or more trajectories -- if multiple are selected then the plot
 % will average over them.
-sampleEvent = 1;
+sampleEvent = 24;
 % All trajectories used for sampleEvent
-traj = find(Data.scalar.EventTraj(sampleEvent,:));
+traj = find(Data0.scalar.EventTraj(sampleEvent,:));
 % If waterMass is either Atlantic OR Arctic then it may make sense to plot
 % average over all trajectories, although there could be unwanted smoothing
 % effects...
 % Otherwise, if waterMass is a mixture of origins, then group trajectories
 % by origin and make separate plots
-waterMass = Data.scalar.waterMass{sampleEvent};
+waterMass = Data0.scalar.waterMass{sampleEvent};
+
+
+% out0_ = out0;
+% out0_.OM = out0_.OM(:,1:end-1,:,:,:);
+% FixedParams_ = FixedParams;
+% FixedParams_.z = FixedParams.z(1:end-1);
+% FixedParams_.zw = FixedParams.zw(1:end-1);
+% FixedParams_.zwidth = FixedParams.zwidth(1:end-1);
+% 
+% plt_OM = plot_contour_DepthTime('DOM_POM', ...
+%     traj, out0_, auxVars0, FixedParams_, Forc0, 'linear', ...
+%     'Event', sampleEvent, 'waterOrigin', waterMass);
+% 
+
 
 switch waterMass
     case {'Atlantic', 'Arctic'}
         plt_Forc = plot_contour_DepthTime('forcing', ... 
-            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            traj, out0, auxVars0, FixedParams, Forc0, 'linear', ...
             'Event', sampleEvent, 'waterOrigin', waterMass);
         plt_DIN = plot_contour_DepthTime('DIN', ... 
-            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            traj, out0, auxVars0, FixedParams, Forc0, 'linear', ...
             'Event', sampleEvent, 'waterOrigin', waterMass);
         plt_OM = plot_contour_DepthTime('DOM_POM', ... 
-            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            traj, out0, auxVars0, FixedParams, Forc0, 'linear', ...
             'Event', sampleEvent, 'waterOrigin', waterMass);
         plt_P_N = plot_contour_DepthTime('phytoplankton_N', ...
-            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            traj, out0, auxVars0, FixedParams, Forc0, 'linear', ...
             'Event', sampleEvent, 'waterOrigin', waterMass);
         plt_P_Chl = plot_contour_DepthTime('phytoplankton_Chl', ... 
-            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            traj, out0, auxVars0, FixedParams, Forc0, 'linear', ...
             'Event', sampleEvent, 'waterOrigin', waterMass);
         plt_P_C = plot_contour_DepthTime('phytoplankton_C', ... 
-            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            traj, out0, auxVars0, FixedParams, Forc0, 'linear', ...
             'Event', sampleEvent, 'waterOrigin', waterMass);
         plt_P_N_C = plot_contour_DepthTime('phytoplankton_N_C', ...
-            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            traj, out0, auxVars0, FixedParams, Forc0, 'linear', ...
             'Event', sampleEvent, 'waterOrigin', waterMass);
         plt_P_Chl_N = plot_contour_DepthTime('phytoplankton_Chl_N', ... 
-            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            traj, out0, auxVars0, FixedParams, Forc0, 'linear', ...
             'Event', sampleEvent, 'waterOrigin', waterMass);
         plt_Z_C = plot_contour_DepthTime('zooplankton_C', ... 
-            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            traj, out0, auxVars0, FixedParams, Forc0, 'linear', ...
             'Event', sampleEvent, 'waterOrigin', waterMass);
         plt_Z_N = plot_contour_DepthTime('zooplankton_N', ... 
-            traj, out, auxVars, FixedParams, Forc, 'linear', ...
+            traj, out0, auxVars0, FixedParams, Forc0, 'linear', ...
             'Event', sampleEvent, 'waterOrigin', waterMass);
     case 'Arctic/Atlantic'
         if strcmp(waterMass, 'Arctic/Atlantic')
@@ -1149,13 +1437,16 @@ close all
 
 % Choose event
 sampleEvent = 1;
-if ~ismember(sampleEvent, 1:Data.scalar.nEvents), warning(['Choose event number within range (1, ' num2str(Data.scalar.nEvents) ')']); end
+if ~ismember(sampleEvent, 1:Data0.scalar.nEvents), warning(['Choose event number within range (1, ' num2str(Data0.scalar.nEvents) ')']); end
 % trajectory indices
-traj = find(Data.scalar.EventTraj(sampleEvent,:));
+traj = find(Data0.scalar.EventTraj(sampleEvent,:));
 
 highlightColour = [1 0 1];
 plotOptions = {'forcing', 'DIN', 'organicN', 'organicC', 'phytoplankton_C', ...
     'phytoplanktonStacked', 'phytoZooPlanktonStacked'};
+
+
+% SOMETHING IS WRONG WITH THESE PLOTS... CODE NEEDS UPDATED...
 
 for varIndex = 1:length(plotOptions)
     
@@ -1177,12 +1468,12 @@ for varIndex = 1:length(plotOptions)
             % diffusivity
             subplot(3,1,2)
             plot_timeSeries_trajectoryPolygon('diffusivity', ...
-                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                sampleEvent, traj, out0, auxVars0, FixedParams, Forc0, Data0, ...
                 'depth', 'mean', 'highlightColour', highlightColour, 'plotNew', false);
             % PAR
             subplot(3,1,3)
             plot_timeSeries_trajectoryPolygon('PAR', ...
-                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                sampleEvent, traj, out0, auxVars0, FixedParams, Forc0, Data0, ...
                 'depth', 'surface', 'highlightColour', highlightColour, 'plotNew', false);
             
         case 'DIN'
@@ -1193,11 +1484,11 @@ for varIndex = 1:length(plotOptions)
             
             subplot(2,1,1)
             plot_timeSeries_trajectoryPolygon('DIN', ...
-                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                sampleEvent, traj, out0, auxVars0, FixedParams, Forc0, Data0, ...
                 'depth', 'surface', 'highlightColour', highlightColour, 'plotNew', false);
             subplot(2,1,2)
             plot_timeSeries_trajectoryPolygon('DIN', ...
-                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                sampleEvent, traj, out0, auxVars0, FixedParams, Forc0, Data0, ...
                 'depth', 'mean', 'highlightColour', highlightColour, 'plotNew', false);
             
         case 'organicN'
@@ -1207,19 +1498,19 @@ for varIndex = 1:length(plotOptions)
             
             subplot(2,2,1)
             plot_timeSeries_trajectoryPolygon('DON', ...
-                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                sampleEvent, traj, out0, auxVars0, FixedParams, Forc0, Data0, ...
                 'depth', 'surface', 'highlightColour', highlightColour, 'plotNew', false);
             subplot(2,2,2)
             plot_timeSeries_trajectoryPolygon('PON', ...
-                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                sampleEvent, traj, out0, auxVars0, FixedParams, Forc0, Data0, ...
                 'depth', 'surface', 'highlightColour', highlightColour, 'plotNew', false);
             subplot(2,2,3)
             plot_timeSeries_trajectoryPolygon('DON', ...
-                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                sampleEvent, traj, out0, auxVars0, FixedParams, Forc0, Data0, ...
                 'depth', 'mean', 'highlightColour', highlightColour, 'plotNew', false);
             subplot(2,2,4)
             plot_timeSeries_trajectoryPolygon('PON', ...
-                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                sampleEvent, traj, out0, auxVars0, FixedParams, Forc0, Data0, ...
                 'depth', 'mean', 'highlightColour', highlightColour, 'plotNew', false);
             
         case 'organicC'
@@ -1229,36 +1520,36 @@ for varIndex = 1:length(plotOptions)
 
             subplot(2,2,1)
             plot_timeSeries_trajectoryPolygon('DOC', ...
-                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                sampleEvent, traj, out0, auxVars0, FixedParams, Forc0, Data0, ...
                 'depth', 'surface', 'highlightColour', highlightColour, 'plotNew', false);
             subplot(2,2,2)
             plot_timeSeries_trajectoryPolygon('POC', ...
-                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                sampleEvent, traj, out0, auxVars0, FixedParams, Forc0, Data0, ...
                 'depth', 'surface', 'highlightColour', highlightColour, 'plotNew', false);
             subplot(2,2,3)
             plot_timeSeries_trajectoryPolygon('DOC', ...
-                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                sampleEvent, traj, out0, auxVars0, FixedParams, Forc0, Data0, ...
                 'depth', 'mean', 'highlightColour', highlightColour, 'plotNew', false);
             subplot(2,2,4)
             plot_timeSeries_trajectoryPolygon('POC', ...
-                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                sampleEvent, traj, out0, auxVars0, FixedParams, Forc0, Data0, ...
                 'depth', 'mean', 'highlightColour', highlightColour, 'plotNew', false);
             
         case 'phytoplankton_C'
             plt_P_C = plot_timeSeries_trajectoryPolygon('phytoplankton_C', ...
-                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                sampleEvent, traj, out0, auxVars0, FixedParams, Forc0, Data0, ...
                 'depth', 'max', 'highlightColour', highlightColour, 'fixedYaxis', false);
             plt_P_C_fixedScale = plot_timeSeries_trajectoryPolygon('phytoplankton_C', ...
-                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data, ...
+                sampleEvent, traj, out0, auxVars0, FixedParams, Forc0, Data0, ...
                 'depth', 'max', 'highlightColour', highlightColour, 'fixedYaxis', true);
             
         case 'phytoplanktonStacked'
             plt_P_C_stacked = plot_timeSeries_trajectoryPolygon('phytoplanktonStacked', ...
-                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data);
+                sampleEvent, traj, out0, auxVars0, FixedParams, Forc0, Data0);
 
         case 'phytoZooPlanktonStacked'
             plt_P_C_stacked = plot_timeSeries_trajectoryPolygon('phytoZooPlanktonStacked', ...
-                sampleEvent, traj, out, auxVars, FixedParams, Forc, Data);
+                sampleEvent, traj, out0, auxVars0, FixedParams, Forc0, Data0);
     end
 end
 
@@ -1318,18 +1609,29 @@ plt_Arctic = plot_timeSeries_trajectoryPolygon('phytoZooPlanktonStacked', ...
 
 
 
-% axesTextSize = 16;
-% titleTextSize = 16;
-% legendTextSize = 16;
-% legendPointSize = 60;
-% plt_Atlantic = plot_timeSeries_trajectoryPolygon2('phytoZooPlanktonStacked', ...
-%     [], [], out, auxVars, FixedParams, Forc0, Data0, ...
-%     'waterMass', 'Atlantic', 'axesTextSize', axesTextSize, ... 
-%     'titleTextSize', titleTextSize, 'legendTextSize', legendTextSize, ...
-%     'legendPointSize', legendPointSize);
-% plt_Atlantic.Units = 'inches';
-% plt_Atlantic.Position = [0 0 10 4];
+axesTextSize = 16;
+titleTextSize = 16;
+legendTextSize = 16;
+legendPointSize = 60;
+plt_Atlantic = plot_timeSeries_trajectoryPolygon('phytoZooPlanktonStacked', ...
+    [], [], out0, auxVars0, FixedParams, Forc0, Data0, ...
+    'waterMass', 'Atlantic', 'axesTextSize', axesTextSize, ... 
+    'titleTextSize', titleTextSize, 'legendTextSize', legendTextSize, ...
+    'legendPointSize', legendPointSize);
+plt_Atlantic.Units = 'inches';
+plt_Atlantic.Position = [0 0 10 4];
+gc = gca;
+yl = gc.YLim;
 
+plt_Arctic = plot_timeSeries_trajectoryPolygon('phytoZooPlanktonStacked', ...
+    [], [], out0, auxVars0, FixedParams, Forc0, Data0, ...
+    'waterMass', 'Arctic', 'axesTextSize', axesTextSize, ... 
+    'titleTextSize', titleTextSize, 'legendTextSize', legendTextSize, ...
+    'legendPointSize', legendPointSize);
+plt_Arctic.Units = 'inches';
+plt_Arctic.Position = [0 0 10 4];
+gc = gca;
+gc.YLim = yl;
 
 switch save
     case true
@@ -1420,7 +1722,6 @@ subplot(2,1,2)
 plot_network('feedingFluxes', 'nitrogen', auxVars0, FixedParams, Forc0, 'Atlantic');
 
 
-
 plt_feedFlux_C = figure;
 plt_feedFlux_C.Units = 'inches';
 plt_feedFlux_C.Position = [0 0 10 7.5];
@@ -1443,6 +1744,14 @@ plot_network('OMfluxes', 'carbon', auxVars0, FixedParams, Forc0, 'Atlantic');
 subplot(2,2,4)
 plot_network('OMfluxes', 'nitrogen', auxVars0, FixedParams, Forc0, 'Atlantic');
 
+
+% plt_OM = figure;
+% plt_OM.Units = 'inches';
+% plt_OM.Position = [0 0 10 3.8];
+% subplot(1,2,1)
+% plot_network('OMfluxes', 'carbon', auxVars0, FixedParams, Forc0, 'Arctic');
+% subplot(1,2,2)
+% plot_network('OMfluxes', 'carbon', auxVars0, FixedParams, Forc0, 'Atlantic');
 
 
 switch save, case true

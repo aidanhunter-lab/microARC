@@ -13,13 +13,15 @@ addpath(genpath(fileparts(which('fit_parameters'))))
 
 rng(1) % set random seed
 
-% Store folders/filenames of data and saved parameters
-Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
-    'parFile', []);
-% Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
-%     'parFile', 'parameterInitialValues_1.mat');
+% Store folders/filenames of data and saved parameters.
 % Set parFile = [] for default initial parameter values (hard-coded, not loaded)
 % or parFile = 'filename.mat' to use saved values as the initials.
+% Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
+%     'parFile', []);
+parFile = 'parameterInitialValues_RMS_Hellinger_Atlantic_singleTraj_removeParams.mat';
+Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
+    'parFile', parFile);
+
 display(Directories)
 
 % Use default set-up to load and organise data and initialise model parameters.
@@ -50,7 +52,13 @@ numTraj = 1; % use only a single trajectory per sampling event -- events at Arct
 % algorithm. Can also select which data to fit / trajectories to run as
 % Arctic and/or Atlantic.
 niter = 50;
-costFunctionType = 'meanCDFdist_Hellinger';
+
+costFunctionType = 'RMS_Hellinger'; % fit scalar/nutrient data using least sum of errors, fit size data using Hellinger distances
+costFunctionType = 'RMSsmooth_Hellinger'; % fit scalar/nutrient data using least sum of squares (smoothed for robustness against model outliers), fit size data using Hellinger distances
+
+% costFunctionType = 'meanCDFdist_Hellinger';
+% costFunctionType = 'smoothCDFdist_Hellinger';
+
 % costFunctionType = 'meanCDFdist_HellingerFullSpectrum';
 % costFunctionType = 'meanCDFdist_HellingerFullSpectrum_averagedEventsDepths';
 
@@ -95,7 +103,7 @@ switch restartRun, case true
 %     tag = '1';                              % and identifying tag
     tag = FixedParams.costFunction;
 %     tag = [tag '_Atlantic_quadraticMortality_singleTraj_relativeSizeDataOnly'];
-    tag = [tag, '_Atlantic_quadraticMortality_singleTraj_omitSizeDataTot'];
+    tag = [tag, '_Atlantic_quadraticMortality_singleTraj_omitSizeDataTot_removeParams'];
     fileName_results = fullfile(Directories.resultsDir, ...
         [fileName_results '_' tag]);
     % Load stored results    
@@ -157,7 +165,9 @@ saveParams = true;
 
 fileName_results = 'fittedParameters';  % choose file name
 tag = FixedParams.costFunction;         % and identifying tag
-tag = [tag '_Atlantic_quadraticMortality_singleTraj_omitSizeDataTot'];
+tag = [tag '_Atlantic_singleTraj_removeParams'];
+% tag = [tag '_Atlantic_quadraticMortality_singleTraj_omitSizeDataTot_removeParams'];
+
 % tag = [tag '_Atlantic_quadraticMortality_singleTraj_allSpectra'];
 % tag = [tag '_Atlantic_quadraticMortality_singleTraj'];
 % tag = [tag '_Arctic'];
