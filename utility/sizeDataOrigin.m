@@ -1,6 +1,17 @@
-function Data = sizeDataOrigin(Data)
+function Data = sizeDataOrigin(Data, varargin)
 % Group size data measurements according to whether the trajectories
 % originate from the Arctic or Atlantic
+
+extractVarargin(varargin)
+
+if ~exist('avFun', 'var')
+    avFun = @geomean; % use geometric mean by default... this is less biased by outlying values
+end
+
+if ~exist('returnVariability', 'var')
+    returnVariability = false; % extra code section at end of script -- not needed, or finished...
+end
+
 
 dat = Data.sizeFull;
 
@@ -65,11 +76,13 @@ if any(ind)
     depth_av(depth_av == 0) = nan;
     
     % average over depths
-    v_av = mean(values, ndims(values), 'omitnan'); % average over depths
-    depth_av = mean(depth_av, ndims(depth_av), 'omitnan');
+%     v_av = mean(values, ndims(values), 'omitnan');
+    v_av = avFun(values, ndims(values), 'omitnan'); % average over depths -- use avFun for values
+    depth_av = mean(depth_av, ndims(depth_av), 'omitnan'); % use arithmetic mean for depths
     % average over events
     if nev > 1
-        v_av = mean(v_av, ndims(v_av));
+%         v_av = mean(v_av, ndims(v_av));
+        v_av = avFun(v_av, ndims(v_av));
         depth_av = mean(depth_av, ndims(depth_av));
         yearday_av = round(mean(yearday_av, ndims(yearday_av)));
     end
@@ -131,16 +144,18 @@ if any(ind)
     depth_av(depth_av == 0) = nan;
     
     % average over depths
-    v_av = mean(values, ndims(values), 'omitnan'); % average over depths
+%     v_av = mean(values, ndims(values), 'omitnan'); % average over depths
+    v_av = avFun(values, ndims(values), 'omitnan'); % average over depths
     depth_av = mean(depth_av, ndims(depth_av), 'omitnan');
     % average over events
     if nev > 1
-        v_av = mean(v_av, ndims(v_av));
+%         v_av = mean(v_av, ndims(v_av));
+        v_av = avFun(v_av, ndims(v_av));
         depth_av = mean(depth_av, ndims(depth_av));
         yearday_av = round(mean(yearday_av, ndims(yearday_av)));
     end
     
-    nrows = nsizes(2) * nvars;
+
     
     % Build data table
     dd_av = table();
@@ -212,11 +227,13 @@ if any(ind)
     depth_av(depth_av == 0) = nan;
     
     % average over depths
-    v_av = mean(values, ndims(values), 'omitnan'); % average over depths
+%     v_av = mean(values, ndims(values), 'omitnan'); % average over depths
+    v_av = avFun(values, ndims(values), 'omitnan'); % average over depths
     depth_av = mean(depth_av, ndims(depth_av), 'omitnan');
     % average over events
     if nev > 1
-        v_av = mean(v_av, ndims(v_av));
+%         v_av = mean(v_av, ndims(v_av));
+        v_av = avFun(v_av, ndims(v_av));
         depth_av = mean(depth_av, ndims(depth_av));
         yearday_av = round(mean(yearday_av, ndims(yearday_av)));
     end
@@ -278,11 +295,13 @@ if any(ind)
     depth_av(depth_av == 0) = nan;
     
     % average over depths
-    v_av = mean(values, ndims(values), 'omitnan'); % average over depths
+%     v_av = mean(values, ndims(values), 'omitnan'); % average over depths
+    v_av = avFun(values, ndims(values), 'omitnan'); % average over depths
     depth_av = mean(depth_av, ndims(depth_av), 'omitnan');
     % average over events
     if nev > 1
-        v_av = mean(v_av, ndims(v_av));
+%         v_av = mean(v_av, ndims(v_av));
+        v_av = avFun(v_av, ndims(v_av));
         depth_av = mean(depth_av, ndims(depth_av));
         yearday_av = round(mean(yearday_av, ndims(yearday_av)));
     end
@@ -350,191 +369,194 @@ Data.sizeFull.dataBinned = dat_;
 % but a total pain to reowrk the code! It would, however, make other things
 % much easier, e.g., fitting to multiple discrete depths per event.
 
-dat = Data.sizeFull;
-dat = rmfield(dat, {'dataBinned', 'obsInCostFunction', 'nSamples', ... 
-    'EventTraj', 'evTraj', 'waterMass','AtlanticOrigin','ArcticOrigin'});
-dat = struct2table(dat);
-
-datAtl = dat(ismember(dat.Event, evAtl),:);
-datArc = dat(ismember(dat.Event, evArc),:);
-
-n = length(unique(dat.ESD));
-
-% We have 4 groupings: autotrophs & heterotrophs in Arctic & Atlantic
-% waters. Store all unique size spectra for each group
-% cellDensityArc_autotroph = nan(n, 1);
-% cellDensityArc_heterotroph = nan(n, 1);
-% biovolDensityArc_autotroph = nan(n, 1);
-% biovolDensityArc_heterotroph = nan(n, 1);
-
-trophicLevels = unique(dat.trophicLevel);
-
-% We're interested in variability between sampling events within data
-% aggregated by water origin. Variability across sample depths is
-% disruptive to this process... average it out.
-for i = 1:length(evArc)
-    ev = evArc(i);
-    dati = datArc(datArc.Event == ev,:);
-    for j = 1:length(trophicLevels)
-        trophicLevel = trophicLevels(j);
-        datj = dati(strcmp(dati.trophicLevel, trophicLevel),:);
-        depths = unique(datj.Depth);
-        ndepth = length(depths);
-        if ndepth == 1, continue; end
-        depthMean = mean(depths);
-        cellDensity = nan(n,ndepth); BioVolDensity = nan(n,ndepth);
-        CellConc = nan(n,ndepth); BioVol = nan(n,ndepth);
-        for k = 1:ndepth
-            depth = depths(k);
-            datk = datj(datj.Depth == depth,:);
-            cellDensity(:,k) = datk.cellDensity;
-            BioVolDensity(:,k) = datk.BioVolDensity;
-            CellConc(:,k) = datk.CellConc;
-            BioVol(:,k) = datk.BioVol;
+switch returnVariability, case true
+    
+    
+    dat = Data.sizeFull;
+    dat = rmfield(dat, {'dataBinned', 'obsInCostFunction', 'nSamples', ...
+        'EventTraj', 'evTraj', 'waterMass','AtlanticOrigin','ArcticOrigin'});
+    dat = struct2table(dat);
+    
+    datAtl = dat(ismember(dat.Event, evAtl),:);
+    datArc = dat(ismember(dat.Event, evArc),:);
+    
+    n = length(unique(dat.ESD));
+    
+    % We have 4 groupings: autotrophs & heterotrophs in Arctic & Atlantic
+    % waters. Store all unique size spectra for each group
+    % cellDensityArc_autotroph = nan(n, 1);
+    % cellDensityArc_heterotroph = nan(n, 1);
+    % biovolDensityArc_autotroph = nan(n, 1);
+    % biovolDensityArc_heterotroph = nan(n, 1);
+    
+    trophicLevels = unique(dat.trophicLevel);
+    
+    % We're interested in variability between sampling events within data
+    % aggregated by water origin. Variability across sample depths is
+    % disruptive to this process... average it out.
+    for i = 1:length(evArc)
+        ev = evArc(i);
+        dati = datArc(datArc.Event == ev,:);
+        for j = 1:length(trophicLevels)
+            trophicLevel = trophicLevels(j);
+            datj = dati(strcmp(dati.trophicLevel, trophicLevel),:);
+            depths = unique(datj.Depth);
+            ndepth = length(depths);
+            if ndepth == 1, continue; end
+            depthMean = mean(depths);
+            cellDensity = nan(n,ndepth); BioVolDensity = nan(n,ndepth);
+            CellConc = nan(n,ndepth); BioVol = nan(n,ndepth);
+            for k = 1:ndepth
+                depth = depths(k);
+                datk = datj(datj.Depth == depth,:);
+                cellDensity(:,k) = datk.cellDensity;
+                BioVolDensity(:,k) = datk.BioVolDensity;
+                CellConc(:,k) = datk.CellConc;
+                BioVol(:,k) = datk.BioVol;
+            end
+            % Average over depth
+            cellDensity = mean(cellDensity, 2); BioVolDensity = mean(BioVolDensity, 2);
+            CellConc = mean(CellConc, 2); BioVol = mean(BioVol, 2);
+            datk.cellDensity = cellDensity;
+            datk.BioVolDensity = BioVolDensity;
+            datk.CellConc = CellConc;
+            datk.BioVol = BioVol;
+            datk{:,'Depth'} = depthMean;
+            datArc(datArc.Event == ev & strcmp(datArc.trophicLevel, trophicLevel),:) = [];
+            datArc = [datArc; datk];
         end
-        % Average over depth
-        cellDensity = mean(cellDensity, 2); BioVolDensity = mean(BioVolDensity, 2);
-        CellConc = mean(CellConc, 2); BioVol = mean(BioVol, 2);
-        datk.cellDensity = cellDensity;
-        datk.BioVolDensity = BioVolDensity;
-        datk.CellConc = CellConc;
-        datk.BioVol = BioVol;
-        datk{:,'Depth'} = depthMean;
-        datArc(datArc.Event == ev & strcmp(datArc.trophicLevel, trophicLevel),:) = [];
-        datArc = [datArc; datk];
     end
-end
-% Repeat for Atlantic
-for i = 1:length(evAtl)
-    ev = evAtl(i);
-    dati = datAtl(datAtl.Event == ev,:);
-    for j = 1:length(trophicLevels)
-        trophicLevel = trophicLevels(j);
-        datj = dati(strcmp(dati.trophicLevel, trophicLevel),:);
-        depths = unique(datj.Depth);
-        ndepth = length(depths);
-        if ndepth == 1, continue; end
-        depthMean = mean(depths);
-        cellDensity = nan(n,ndepth); BioVolDensity = nan(n,ndepth);
-        CellConc = nan(n,ndepth); BioVol = nan(n,ndepth);
-        for k = 1:ndepth
-            depth = depths(k);
-            datk = datj(datj.Depth == depth,:);
-            cellDensity(:,k) = datk.cellDensity;
-            BioVolDensity(:,k) = datk.BioVolDensity;
-            CellConc(:,k) = datk.CellConc;
-            BioVol(:,k) = datk.BioVol;
+    % Repeat for Atlantic
+    for i = 1:length(evAtl)
+        ev = evAtl(i);
+        dati = datAtl(datAtl.Event == ev,:);
+        for j = 1:length(trophicLevels)
+            trophicLevel = trophicLevels(j);
+            datj = dati(strcmp(dati.trophicLevel, trophicLevel),:);
+            depths = unique(datj.Depth);
+            ndepth = length(depths);
+            if ndepth == 1, continue; end
+            depthMean = mean(depths);
+            cellDensity = nan(n,ndepth); BioVolDensity = nan(n,ndepth);
+            CellConc = nan(n,ndepth); BioVol = nan(n,ndepth);
+            for k = 1:ndepth
+                depth = depths(k);
+                datk = datj(datj.Depth == depth,:);
+                cellDensity(:,k) = datk.cellDensity;
+                BioVolDensity(:,k) = datk.BioVolDensity;
+                CellConc(:,k) = datk.CellConc;
+                BioVol(:,k) = datk.BioVol;
+            end
+            % Average over depth
+            cellDensity = mean(cellDensity, 2); BioVolDensity = mean(BioVolDensity, 2);
+            CellConc = mean(CellConc, 2); BioVol = mean(BioVol, 2);
+            datk.cellDensity = cellDensity;
+            datk.BioVolDensity = BioVolDensity;
+            datk.CellConc = CellConc;
+            datk.BioVol = BioVol;
+            datk{:,'Depth'} = depthMean;
+            datAtl(datAtl.Event == ev & strcmp(datAtl.trophicLevel, trophicLevel),:) = [];
+            datAtl = [datAtl; datk];
         end
-        % Average over depth
-        cellDensity = mean(cellDensity, 2); BioVolDensity = mean(BioVolDensity, 2);
-        CellConc = mean(CellConc, 2); BioVol = mean(BioVol, 2);
-        datk.cellDensity = cellDensity;
-        datk.BioVolDensity = BioVolDensity;
-        datk.CellConc = CellConc;
-        datk.BioVol = BioVol;
-        datk{:,'Depth'} = depthMean;
-        datAtl(datAtl.Event == ev & strcmp(datAtl.trophicLevel, trophicLevel),:) = [];
-        datAtl = [datAtl; datk];
     end
-end
-% Recover row order of tables
-[~,o] = sort(datArc.rowIndex);
-datArc = datArc(o,:);
-[~,o] = sort(datAtl.rowIndex);
-datAtl = datAtl(o,:);
-
-% Now find variabilities across events...
-nev = length(evArc);
-for i = 1:length(trophicLevels)
-    trophicLevel = trophicLevels(i);
-    ind_i = strcmp(datArc.trophicLevel, trophicLevel);
-    dati = datArc(ind_i,:);
-    cellDensity = nan(n, nev); BioVolDensity = nan(n, nev);
-    CellConc = nan(n, nev); BioVol = nan(n, nev);
-    for j = 1:nev
-        ev = evArc(j);
-        datj = dati(dati.Event == ev,:);
-        cellDensity(:,j) = datj.cellDensity; BioVolDensity(:,j) = datj.BioVolDensity;
-        CellConc(:,j) = datj.CellConc; BioVol(:,j) = datj.BioVol;
+    % Recover row order of tables
+    [~,o] = sort(datArc.rowIndex);
+    datArc = datArc(o,:);
+    [~,o] = sort(datAtl.rowIndex);
+    datAtl = datAtl(o,:);
+    
+    % Now find variabilities across events...
+    nev = length(evArc);
+    for i = 1:length(trophicLevels)
+        trophicLevel = trophicLevels(i);
+        ind_i = strcmp(datArc.trophicLevel, trophicLevel);
+        dati = datArc(ind_i,:);
+        cellDensity = nan(n, nev); BioVolDensity = nan(n, nev);
+        CellConc = nan(n, nev); BioVol = nan(n, nev);
+        for j = 1:nev
+            ev = evArc(j);
+            datj = dati(dati.Event == ev,:);
+            cellDensity(:,j) = datj.cellDensity; BioVolDensity(:,j) = datj.BioVolDensity;
+            CellConc(:,j) = datj.CellConc; BioVol(:,j) = datj.BioVol;
+        end
+        cellDensitySD = std(cellDensity, [], 2);
+        BioVolDensitySD = std(BioVolDensity, [], 2);
+        CellConcSD = std(CellConc, [], 2);
+        BioVolSD = std(BioVol, [], 2);
+        cellDensitySE = cellDensitySD ./ sqrt(nev);
+        BioVolDensitySE = BioVolDensitySD ./ sqrt(nev);
+        CellConcSE = CellConcSD ./ sqrt(nev);
+        BioVolSE = BioVolSD ./ sqrt(nev);
+        datArc.cellDensitySD(ind_i) = repmat(cellDensitySD, [nev, 1]);
+        datArc.cellDensitySE(ind_i) = repmat(cellDensitySE, [nev, 1]);
+        datArc.BioVolDensitySD(ind_i) = repmat(BioVolDensitySD, [nev, 1]);
+        datArc.BioVolDensitySE(ind_i) = repmat(BioVolDensitySE, [nev, 1]);
+        datArc.CellConcSD(ind_i) = repmat(CellConcSD, [nev, 1]);
+        datArc.CellConcSE(ind_i) = repmat(CellConcSE, [nev, 1]);
+        datArc.BioVolSD(ind_i) = repmat(BioVolSD, [nev, 1]);
+        datArc.BioVolSE(ind_i) = repmat(BioVolSE, [nev, 1]);
     end
-    cellDensitySD = std(cellDensity, [], 2);
-    BioVolDensitySD = std(BioVolDensity, [], 2);
-    CellConcSD = std(CellConc, [], 2);
-    BioVolSD = std(BioVol, [], 2);
-    cellDensitySE = cellDensitySD ./ sqrt(nev);
-    BioVolDensitySE = BioVolDensitySD ./ sqrt(nev);
-    CellConcSE = CellConcSD ./ sqrt(nev);
-    BioVolSE = BioVolSD ./ sqrt(nev);
-    datArc.cellDensitySD(ind_i) = repmat(cellDensitySD, [nev, 1]);
-    datArc.cellDensitySE(ind_i) = repmat(cellDensitySE, [nev, 1]);
-    datArc.BioVolDensitySD(ind_i) = repmat(BioVolDensitySD, [nev, 1]);
-    datArc.BioVolDensitySE(ind_i) = repmat(BioVolDensitySE, [nev, 1]);
-    datArc.CellConcSD(ind_i) = repmat(CellConcSD, [nev, 1]);
-    datArc.CellConcSE(ind_i) = repmat(CellConcSE, [nev, 1]);
-    datArc.BioVolSD(ind_i) = repmat(BioVolSD, [nev, 1]);
-    datArc.BioVolSE(ind_i) = repmat(BioVolSE, [nev, 1]);
-end
-% Repeat for Atlantic
-nev = length(evAtl);
-for i = 1:length(trophicLevels)
-    trophicLevel = trophicLevels(i);
-    ind_i = strcmp(datAtl.trophicLevel, trophicLevel);
-    dati = datAtl(ind_i,:);
-    cellDensity = nan(n, nev); BioVolDensity = nan(n, nev);
-    CellConc = nan(n, nev); BioVol = nan(n, nev);
-    for j = 1:nev
-        ev = evAtl(j);
-        datj = dati(dati.Event == ev,:);
-        cellDensity(:,j) = datj.cellDensity; BioVolDensity(:,j) = datj.BioVolDensity;
-        CellConc(:,j) = datj.CellConc; BioVol(:,j) = datj.BioVol;
+    % Repeat for Atlantic
+    nev = length(evAtl);
+    for i = 1:length(trophicLevels)
+        trophicLevel = trophicLevels(i);
+        ind_i = strcmp(datAtl.trophicLevel, trophicLevel);
+        dati = datAtl(ind_i,:);
+        cellDensity = nan(n, nev); BioVolDensity = nan(n, nev);
+        CellConc = nan(n, nev); BioVol = nan(n, nev);
+        for j = 1:nev
+            ev = evAtl(j);
+            datj = dati(dati.Event == ev,:);
+            cellDensity(:,j) = datj.cellDensity; BioVolDensity(:,j) = datj.BioVolDensity;
+            CellConc(:,j) = datj.CellConc; BioVol(:,j) = datj.BioVol;
+        end
+        cellDensitySD = std(cellDensity, [], 2);
+        BioVolDensitySD = std(BioVolDensity, [], 2);
+        CellConcSD = std(CellConc, [], 2);
+        BioVolSD = std(BioVol, [], 2);
+        cellDensitySE = cellDensitySD ./ sqrt(nev);
+        BioVolDensitySE = BioVolDensitySD ./ sqrt(nev);
+        CellConcSE = CellConcSD ./ sqrt(nev);
+        BioVolSE = BioVolSD ./ sqrt(nev);
+        datAtl.cellDensitySD(ind_i) = repmat(cellDensitySD, [nev, 1]);
+        datAtl.cellDensitySE(ind_i) = repmat(cellDensitySE, [nev, 1]);
+        datAtl.BioVolDensitySD(ind_i) = repmat(BioVolDensitySD, [nev, 1]);
+        datAtl.BioVolDensitySE(ind_i) = repmat(BioVolDensitySE, [nev, 1]);
+        datAtl.CellConcSD(ind_i) = repmat(CellConcSD, [nev, 1]);
+        datAtl.CellConcSE(ind_i) = repmat(CellConcSE, [nev, 1]);
+        datAtl.BioVolSD(ind_i) = repmat(BioVolSD, [nev, 1]);
+        datAtl.BioVolSE(ind_i) = repmat(BioVolSE, [nev, 1]);
     end
-    cellDensitySD = std(cellDensity, [], 2);
-    BioVolDensitySD = std(BioVolDensity, [], 2);
-    CellConcSD = std(CellConc, [], 2);
-    BioVolSD = std(BioVol, [], 2);
-    cellDensitySE = cellDensitySD ./ sqrt(nev);
-    BioVolDensitySE = BioVolDensitySD ./ sqrt(nev);
-    CellConcSE = CellConcSD ./ sqrt(nev);
-    BioVolSE = BioVolSD ./ sqrt(nev);
-    datAtl.cellDensitySD(ind_i) = repmat(cellDensitySD, [nev, 1]);
-    datAtl.cellDensitySE(ind_i) = repmat(cellDensitySE, [nev, 1]);
-    datAtl.BioVolDensitySD(ind_i) = repmat(BioVolDensitySD, [nev, 1]);
-    datAtl.BioVolDensitySE(ind_i) = repmat(BioVolDensitySE, [nev, 1]);
-    datAtl.CellConcSD(ind_i) = repmat(CellConcSD, [nev, 1]);
-    datAtl.CellConcSE(ind_i) = repmat(CellConcSE, [nev, 1]);
-    datAtl.BioVolSD(ind_i) = repmat(BioVolSD, [nev, 1]);
-    datAtl.BioVolSE(ind_i) = repmat(BioVolSE, [nev, 1]);
+    
+    
+    
+    % Include variabilities within the grouped size data
+    dat = Data.sizeFull.dataBinned.groupedByOrigin;
+    
+    for i = 1:length(trophicLevels)
+        trophicLevel = trophicLevels(i);
+        ind_i = strcmp(dat.trophicLevel, trophicLevel);
+        dat.ValueSD(strcmp(dat.Variable, 'CellConc') & strcmp(dat.waterMass, 'Arctic') & ind_i,:) ...
+            = unique(datArc.CellConcSD(strcmp(datArc.trophicLevel, trophicLevel),:), 'stable');
+        dat.ValueSD(strcmp(dat.Variable, 'BioVol') & strcmp(dat.waterMass, 'Arctic') & ind_i,:) ...
+            = unique(datArc.BioVolSD(strcmp(datArc.trophicLevel, trophicLevel),:), 'stable');
+        dat.ValueSD(strcmp(dat.Variable, 'CellConc') & strcmp(dat.waterMass, 'Atlantic') & ind_i,:) ...
+            = unique(datAtl.CellConcSD(strcmp(datAtl.trophicLevel, trophicLevel),:), 'stable');
+        dat.ValueSD(strcmp(dat.Variable, 'BioVol') & strcmp(dat.waterMass, 'Atlantic') & ind_i,:) ...
+            = unique(datAtl.BioVolSD(strcmp(datAtl.trophicLevel, trophicLevel),:), 'stable');
+        dat.ValueSE(strcmp(dat.Variable, 'CellConc') & strcmp(dat.waterMass, 'Arctic') & ind_i,:) ...
+            = unique(datArc.CellConcSE(strcmp(datArc.trophicLevel, trophicLevel),:), 'stable');
+        dat.ValueSE(strcmp(dat.Variable, 'BioVol') & strcmp(dat.waterMass, 'Arctic') & ind_i,:) ...
+            = unique(datArc.BioVolSE(strcmp(datArc.trophicLevel, trophicLevel),:), 'stable');
+        dat.ValueSE(strcmp(dat.Variable, 'CellConc') & strcmp(dat.waterMass, 'Atlantic') & ind_i,:) ...
+            = unique(datAtl.CellConcSE(strcmp(datAtl.trophicLevel, trophicLevel),:), 'stable');
+        dat.ValueSE(strcmp(dat.Variable, 'BioVol') & strcmp(dat.waterMass, 'Atlantic') & ind_i,:) ...
+            = unique(datAtl.BioVolSE(strcmp(datAtl.trophicLevel, trophicLevel),:), 'stable');
+    end
+    
+    Data.sizeFull.dataBinned.groupedByOrigin = dat;
+    
 end
-
-
-
-% Include variabilities within the grouped size data
-dat = Data.sizeFull.dataBinned.groupedByOrigin;
-
-for i = 1:length(trophicLevels)
-    trophicLevel = trophicLevels(i);
-    ind_i = strcmp(dat.trophicLevel, trophicLevel);
-    dat.ValueSD(strcmp(dat.Variable, 'CellConc') & strcmp(dat.waterMass, 'Arctic') & ind_i,:) ...
-        = unique(datArc.CellConcSD(strcmp(datArc.trophicLevel, trophicLevel),:), 'stable');
-    dat.ValueSD(strcmp(dat.Variable, 'BioVol') & strcmp(dat.waterMass, 'Arctic') & ind_i,:) ...
-        = unique(datArc.BioVolSD(strcmp(datArc.trophicLevel, trophicLevel),:), 'stable');
-    dat.ValueSD(strcmp(dat.Variable, 'CellConc') & strcmp(dat.waterMass, 'Atlantic') & ind_i,:) ...
-        = unique(datAtl.CellConcSD(strcmp(datAtl.trophicLevel, trophicLevel),:), 'stable');
-    dat.ValueSD(strcmp(dat.Variable, 'BioVol') & strcmp(dat.waterMass, 'Atlantic') & ind_i,:) ...
-        = unique(datAtl.BioVolSD(strcmp(datAtl.trophicLevel, trophicLevel),:), 'stable');
-    dat.ValueSE(strcmp(dat.Variable, 'CellConc') & strcmp(dat.waterMass, 'Arctic') & ind_i,:) ...
-        = unique(datArc.CellConcSE(strcmp(datArc.trophicLevel, trophicLevel),:), 'stable');
-    dat.ValueSE(strcmp(dat.Variable, 'BioVol') & strcmp(dat.waterMass, 'Arctic') & ind_i,:) ...
-        = unique(datArc.BioVolSE(strcmp(datArc.trophicLevel, trophicLevel),:), 'stable');
-    dat.ValueSE(strcmp(dat.Variable, 'CellConc') & strcmp(dat.waterMass, 'Atlantic') & ind_i,:) ...
-        = unique(datAtl.CellConcSE(strcmp(datAtl.trophicLevel, trophicLevel),:), 'stable');
-    dat.ValueSE(strcmp(dat.Variable, 'BioVol') & strcmp(dat.waterMass, 'Atlantic') & ind_i,:) ...
-        = unique(datAtl.BioVolSE(strcmp(datAtl.trophicLevel, trophicLevel),:), 'stable');
-end
-
-Data.sizeFull.dataBinned.groupedByOrigin = dat;
-
-
 
 
 
