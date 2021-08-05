@@ -22,6 +22,7 @@ costFunctionChoices = { ...
     'LeastAbsErr_Hellinger', ...
     'RMSsmooth_Hellinger', ...
     'RMS_Hellinger', ...
+    'RMS_Hellinger2', ...
     'meanCDFdist_HellingerFullSpectrum', ...
     'meanCDFdist_HellingerFullSpectrum_averagedEventsDepths'
     };
@@ -1380,6 +1381,188 @@ else
                     crh = costComponents.([varLabel '_heterotroph_Rel']);
                 end
                 costSize(1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
+                costSize(2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
+            end
+            
+            costNutrient = zeros(1,length(Vars));
+            for i = 1:length(Vars)
+                costNutrient(i) = costComponents.(Vars{i});
+            end
+            
+            % Treat PON & POC data as a single type, POM, thereby
+            % downweighting their combined cost contribution
+            POMi = ismember(Vars, {'PON','POC'});
+            costPOM = mean(costNutrient(POMi));
+            costNutrient(POMi) = [];
+            costNutrient = [costNutrient, costPOM];
+            
+            % Average the cost across data-types (nutrient & size)
+            cost = [mean(costNutrient), mean(costSize(:))];
+            % Assign size vs nutrient weighting
+            weight_sizeVsNutrient = 1; % weighting factor of size vs nutrient data
+            weights = 2 .* [1, weight_sizeVsNutrient] ./ (weight_sizeVsNutrient+1);
+            cost = weights .* cost;
+            
+            cost = mean(cost); % finally, average cost over nutrient and size data components
+            %             cost = cost(2); % try fitting only to the size data
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        case 'RMS_Hellinger2'
+            
+            % As above, but for the total abundance in size data fit the
+            % ratio that's zooplankton. This means that the chlorophyll
+            % data should inform the phytoplankton abundance while the
+            % zooplankton abundance is constrained relative to
+            % phytoplankton.
+            
+            % Scalar data
+            for i = 1:length(Vars)
+                varLabel = Vars{i};
+                yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
+                ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
+                n = size(ymod, 1);
+                
+                % Sort observations
+                [yobs_sort, o] = sort(yobs);
+                CDFobs = [yobs_sort, ...
+                    (1:n)' ./ n]; % Empirical CDF of standardised data
+                
+%                 figure
+%                 plot(CDFobs(:,1), CDFobs(:,2)) % empirical CDF of data
+                                
+                % Reorder modelled values to match sorted data
+                ymod_sort = ymod(o,:);
+                CDFmod = [ymod_sort, CDFobs(:,2)]; % align modelled values with the smoothed CDF of the data
+                
+%                 hold on
+%                 
+%                 scatter(CDFmod(:,1), CDFmod(:,2))
+%                 for ij = 1:n
+%                     plot([CDFobs(ij,1), CDFmod(ij,1)], [CDFobs(ij,2), CDFmod(ij,2)], 'Color', [0.85, 0.85, 0.85])
+%                 end
+                
+                
+%                 plot(xx, CDFmod(:,2))
+                
+                
+%                 err2 = (CDFobs(:,1) - CDFmod(:,1)) .^ 2; % squared error
+                err = abs(CDFobs(:,1) - CDFmod(:,1)); % absolute error
+                
+%                 avFun = @mean;
+                avFun = @geomean; % Errors have skewed distributions => use geometric mean for robustness against overfitting data points that the model cannot reproduce
+                
+%                 RMS = (avFun(err2)) .^ 0.5; % average absolute error
+                RMS = avFun(err); % average absolute error
+                RMS = RMS ./ range(CDFobs(:,1)); % scale to get values more in line with Hellinger distance values... this is ad-hoc method, could be improved...
+                
+                costComponents.(varLabel) = avFun(RMS); % average over trajectory selections
+
+            end
+            
+            % Vector (size) data
+            groupedByWaterOrigin = isfield(Data.size.dataBinned, 'waterMass');
+            for i = 1:length(VarsSize)
+                varLabel = VarsSize{i};
+                ind0 = strcmp(Data.size.dataBinned.Variable, varLabel);
+                if groupedByWaterOrigin
+                    waterMasses = unique(Data.size.dataBinned.waterMass);
+                else
+                    waterMasses = {[]};
+                end
+                for w = 1:length(waterMasses)
+                    wm = waterMasses{w};
+                    ind1 = ind0;
+                    if groupedByWaterOrigin
+                        ind1 = ind0 & strcmp(Data.size.dataBinned.waterMass, wm);
+                    end
+                    if groupedByWaterOrigin
+                        label_autoRel = [varLabel '_' wm '_autotroph_Rel'];
+                        label_autoTot = [varLabel '_' wm '_autotroph_Tot'];
+                        label_heteroRel = [varLabel '_' wm '_heterotroph_Rel'];
+                        label_heteroTot = [varLabel '_' wm '_heterotroph_Tot'];
+                    else
+                        label_autoRel = [varLabel '_autotroph_Rel'];
+                        label_autoTot = [varLabel '_autotroph_Tot'];
+                        label_heteroRel = [varLabel '_heterotroph_Rel'];
+                        label_heteroTot = [varLabel '_heterotroph_Tot'];
+                    end
+                    
+                    % autotrophs
+                    ind = ind1 & strcmp(Data.size.dataBinned.trophicLevel, 'autotroph');
+                    yobs = Data.size.dataBinned.Value(ind);
+                    ymod = modData.size.Value(ind,:);
+                    nsize = size(ymod, 1);
+                    ymod = reshape(ymod(~isnan(ymod)), nsize, []); % remove NaNs ymod contains when fitting to Arctic AND Atlantic data
+                    nsample = size(ymod, 2);
+                    yobsTotP = sum(yobs);
+                    ymodTotP = sum(ymod);
+                    % Cost metric for relative abundance (vector)
+                    cdfobs = cumsum(yobs) ./ yobsTotP;
+                    pdfobs = diff([0; cdfobs]);
+                    cdfmod = cumsum(ymod) ./ ymodTotP;
+                    pdfmod = diff([zeros(1, nsample); cdfmod]);
+                    hellingerDistance = (1 - sum((pdfobs .* pdfmod) .^ 0.5)) .^ 0.5;
+                    costComponents.(label_autoRel) = mean(hellingerDistance); % average over trajectory selections
+%                     % Cost metric for total abundance (scalar)
+%                     u = abs(log(ymodTot / yobsTot));
+%                     u = exp(-a .* u);
+%                     z = (1 - u) ./ (1 + u);
+%                     costComponents.(label_autoTot) = mean(z); % average over trajectory selections
+                    
+                    % heterotrophs
+                    ind = ind1 & strcmp(Data.size.dataBinned.trophicLevel, 'heterotroph');
+                    yobs = Data.size.dataBinned.Value(ind);
+                    ymod = modData.size.Value(ind,:);
+                    nsize = size(ymod, 1);
+                    ymod = reshape(ymod(~isnan(ymod)), nsize, []); % remove NaNs ymod contains when fitting to Arctic AND Atlantic data
+                    nsample = size(ymod, 2);
+                    yobsTotZ = sum(yobs);
+                    ymodTotZ = sum(ymod);
+                    % Cost metric for relative abundance (vector)
+                    cdfobs = cumsum(yobs) ./ yobsTotZ;
+                    pdfobs = diff([0; cdfobs]);
+                    cdfmod = cumsum(ymod) ./ ymodTotZ;
+                    pdfmod = diff([zeros(1, nsample); cdfmod]);
+                    hellingerDistance = (1 - sum((pdfobs .* pdfmod) .^ 0.5)) .^ 0.5;
+                    costComponents.(label_heteroRel) = mean(hellingerDistance);
+%                     % Cost metric for total abundance (scalar)
+%                     u = abs(log(ymodTot / yobsTot));
+%                     u = exp(-a .* u);
+%                     z = (1 - u) ./ (1 + u);
+%                     costComponents.(label_heteroTot) = mean(z); % average over trajectory selections
+
+                    % Cost value for heterotroph total biovolume
+                    yobsTot = yobsTotP + yobsTotZ;
+                    ymodTot = ymodTotP + ymodTotZ;
+                    cost_totZ = abs((yobsTotZ ./ yobsTot) - (ymodTotZ ./ ymodTot)); % absolute difference of probabilities (bounded in (0,1))
+                    
+                    costComponents.(label_autoTot) = nan;
+                    costComponents.(label_heteroTot) = mean(cost_totZ);
+                    
+                end
+            end
+            
+            
+            % Within each size data group, weight relative abundance-at-size
+            % relative to total abundance.
+            weight_relVsTot = 3; % weighting factor of relative vs total abundance (relative abundance assumed more reliable)
+            costSize = zeros(2,length(waterMasses)); % store weighted costs for all size data groups
+            for i = 1:length(waterMasses)
+                wm = waterMasses{i};
+                if groupedByWaterOrigin
+%                     cta = costComponents.([varLabel '_' wm '_autotroph_Tot']);
+                    cra = costComponents.([varLabel '_' wm '_autotroph_Rel']);
+                    cth = costComponents.([varLabel '_' wm '_heterotroph_Tot']);
+                    crh = costComponents.([varLabel '_' wm '_heterotroph_Rel']);
+                else
+%                     cta = costComponents.([varLabel '_autotroph_Tot']);
+                    cra = costComponents.([varLabel '_autotroph_Rel']);
+                    cth = costComponents.([varLabel '_heterotroph_Tot']);
+                    crh = costComponents.([varLabel '_heterotroph_Rel']);
+                end
+%                 costSize(1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
+                costSize(1,i) = cra;
                 costSize(2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
             end
             
