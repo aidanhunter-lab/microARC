@@ -216,7 +216,8 @@ if (islogical(returnExtra) && returnExtra) || ...
         (~islogical(returnExtra) && ~any(strcmp(returnExtra, 'none')))
     
     out.cellDensity = B_C ./ params.Q_C;
-    out.biovolume = 1e-18 * fixedParams.sizeAll .* out.cellDensity;
+    out.biovolume = fixedParams.sizeAll .* out.cellDensity;
+%     out.biovolume = 1e-18 * fixedParams.sizeAll .* out.cellDensity;
 
     % Extra output variables retained by default when return = true or 'all'.
     keepVars = {'I', 'Q', 'V', 'G', 'lambda', 'cellDensity', 'biovolume'};

@@ -176,7 +176,7 @@ switch Type
                 Ylab = {'cell concentration density', '(cells m^{-3} log_{10}(ESD / 1\mum)^{-1})'};
             case 'BioVol'
                 y = dat.BioVolDensity;
-                Ylab = {'bio-volume density', '(m^3m^{-3} log_{10}(ESD / 1\mum)^{-1})'};
+                Ylab = {'bio-volume density', '(\mum^3m^{-3} log_{10}(ESD / 1\mum)^{-1})'};
         end
         
         waterMass = dat.waterMass;
@@ -363,10 +363,12 @@ switch Type
         if isempty(Ylim)
             switch group
                 case 'CellConc'
-                    gc.YLim(1) = 1e-4;
+                    gc.YLim(1) = 1 / diff(log10(x(1:2))); % truncate lower y-axis at 1 cell per m^3
+%                     gc.YLim(1) = 1e-4;
                     gc.YLim(2) = 10 ^ ceil(log10(max(values(:))));
                 case 'BioVol'
-                    gc.YLim(1) = 1e-12;
+                    gc.YLim(1) = min(dat.cellVolume) / diff(log10(x(1:2))); % truncate lower y-axis at 1 cell per m^3
+%                     gc.YLim(1) = 1e-12;
                     gc.YLim(2) = 10 ^ ceil(log10(max(values(:))));
             end
         elseif length(Ylim) == 2
@@ -403,21 +405,23 @@ switch Type
                 Ylab = {'cell concentration', '(cells m^{-3})'};
                 scale = 1;
             case 'BioVol'
-                Ylab = {'bio-volume', '(mm^3m^{-3})'};
-                scale = 1e3 ^ 3; % convert m^3 / m^3 to mm^3 / m^3
+                Ylab = {'bio-volume', '(\mum^3m^{-3})'};
+                scale = 1;
+%                 Ylab = {'bio-volume', '(mm^3m^{-3})'};
+%                 scale = 1e3 ^ 3; % convert m^3 / m^3 to mm^3 / m^3
         end
 
         y = dat.Value(Atlantic & autotroph & ind) * scale;        
-        scatter(x_auto, y, 'MarkerEdgeColor', colAtlantic)
+        scatter(x_auto, y, 'MarkerEdgeColor', colAtlantic, ...
+            'MarkerFaceColor', colAtlantic, 'MarkerFaceAlpha', pointAlpha)
         hold on
         y = dat.Value(Atlantic & heterotroph & ind) * scale;        
-        scatter(x_hetero, y, 'MarkerEdgeColor', colAtlantic, ... 
-            'MarkerFaceColor', colAtlantic, 'MarkerFaceAlpha', pointAlpha)
-        y = dat.Value(Arctic & autotroph & ind) * scale;
-        scatter(x_auto, y, 'MarkerEdgeColor', colArctic)
-        y = dat.Value(Arctic & heterotroph & ind) * scale;
-        scatter(x_hetero, y, 'MarkerEdgeColor', colArctic, ... 
+        scatter(x_hetero, y, 'MarkerEdgeColor', colAtlantic)
+        y = dat.Value(Arctic & autotroph & ind) * scale;        
+        scatter(x_auto, y, 'MarkerEdgeColor', colArctic, ...
             'MarkerFaceColor', colArctic, 'MarkerFaceAlpha', pointAlpha)
+        y = dat.Value(Arctic & heterotroph & ind) * scale;
+        scatter(x_hetero, y, 'MarkerEdgeColor', colArctic)
         hold off
         
         gc = gca;
@@ -426,10 +430,15 @@ switch Type
         if isempty(Ylim)
             switch group
                 case 'CellConc'
-                    gc.YLim(1) = 10 ^ floor(log10(min(dat.Value(ind)) * scale));
+                    % Truncate lower y-axis at 1 cell / m^3, which may
+                    % exclude some negligible concentrations at small/large
+                    % sizes
+                    gc.YLim(1) = 1;
+%                     gc.YLim(1) = 10 ^ floor(log10(min(dat.Value(ind)) * scale));
                     gc.YLim(2) = 10 ^ ceil(log10(max(dat.Value(ind)) * scale));
                 case 'BioVol'
-                    gc.YLim(1) = 10 ^ floor(log10(min(dat.Value(ind)) * scale));                    
+                    gc.YLim(1) = min(dat.size);
+%                     gc.YLim(1) = 10 ^ floor(log10(min(dat.Value(ind)) * scale));                    
                     gc.YLim(2) = 10 ^ ceil(log10(max(dat.Value(ind)) * scale));
             end
         elseif length(Ylim) == 2

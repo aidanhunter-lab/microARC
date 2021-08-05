@@ -363,9 +363,9 @@ switch v
                         ylab_tot = 'total cell conc. (cells m^{-3})';
                     case 'BioVol'
                         Var = 'bio-volume';
-                        ylab = 'bio-volume (m^3 m^{-3})';
+                        ylab = 'bio-volume (\mum^3 m^{-3})';
                         ylab_rel = 'relative bio-volume';
-                        ylab_tot = 'total bio-volume (m^3 m^{-3})';
+                        ylab_tot = 'total bio-volume (\mum^3 m^{-3})';
                     case 'NConc'
                         Var = 'nitrogen concentration';
                         ylab = 'N conc. (mmol N m^{-3})';
@@ -524,9 +524,9 @@ switch v
                         ylab_tot = 'total cell conc. (cells m^{-3})';
                     case 'BioVol'
                         Var = 'bio-volume';
-                        ylab = 'bio-volume (m^3 m^{-3})';
+                        ylab = 'bio-volume (\mum^3 m^{-3})';
                         ylab_rel = 'relative bio-volume';
-                        ylab_tot = 'total bio-volume (m^3 m^{-3})';
+                        ylab_tot = 'total bio-volume (\mum^3 m^{-3})';
                     case 'NConc'
                         Var = 'nitrogen concentration';
                         ylab = 'N conc. (mmol N m^{-3})';
