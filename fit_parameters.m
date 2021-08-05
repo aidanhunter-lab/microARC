@@ -18,7 +18,7 @@ rng(1) % set random seed
 % or parFile = 'filename.mat' to use saved values as the initials.
 % Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
 %     'parFile', []);
-parFile = 'parameterInitialValues_RMS_Hellinger_Atlantic_singleTraj_removeParams.mat';
+parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_removeParams.mat';
 Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
     'parFile', parFile);
 
@@ -51,14 +51,14 @@ numTraj = 1; % use only a single trajectory per sampling event -- events at Arct
 % Choose which parameters to tune, the cost function, and numerical tuning
 % algorithm. Can also select which data to fit / trajectories to run as
 % Arctic and/or Atlantic.
-niter = 50;
+niter = 50; % algorithm iterations (the process can be continued from where it stops, so this value doesn't matter that much)
+popSize = 100; % number of parameter sets evaluated per iteration
 
-costFunctionType = 'RMS_Hellinger'; % fit scalar/nutrient data using least sum of errors, fit size data using Hellinger distances
-costFunctionType = 'RMSsmooth_Hellinger'; % fit scalar/nutrient data using least sum of squares (smoothed for robustness against model outliers), fit size data using Hellinger distances
+costFunctionType = 'RMS_Hellinger2'; % fit scalar/nutrient data using least sum of errors, fit relative size data using Hellinger distances, totals in size data fit as ratio of zooplankton
 
+% costFunctionType = 'RMSsmooth_Hellinger'; % fit scalar/nutrient data using least sum of squares (smoothed for robustness against model outliers), fit size data using Hellinger distances
 % costFunctionType = 'meanCDFdist_Hellinger';
 % costFunctionType = 'smoothCDFdist_Hellinger';
-
 % costFunctionType = 'meanCDFdist_HellingerFullSpectrum';
 % costFunctionType = 'meanCDFdist_HellingerFullSpectrum_averagedEventsDepths';
 
@@ -70,6 +70,7 @@ fitToFullSizeSpectra = false;
 [FixedParams, Params, Forc, Data] = ...
     optimisationOptions(FixedParams, Params, Forc, Data, ...
     'niter', niter, ...
+    'popSize', popSize, ...
     'costFunctionType', costFunctionType, ...
     'fitTrajectories', fitTrajectories, ...
     'fitToFullSizeSpectra', fitToFullSizeSpectra);
@@ -103,7 +104,8 @@ switch restartRun, case true
 %     tag = '1';                              % and identifying tag
     tag = FixedParams.costFunction;
 %     tag = [tag '_Atlantic_quadraticMortality_singleTraj_relativeSizeDataOnly'];
-    tag = [tag, '_Atlantic_quadraticMortality_singleTraj_omitSizeDataTot_removeParams'];
+%     tag = [tag, '_Atlantic_quadraticMortality_singleTraj_omitSizeDataTot_removeParams'];
+    tag = [tag, '_Atlantic_singleTraj_removeParams'];
     fileName_results = fullfile(Directories.resultsDir, ...
         [fileName_results '_' tag]);
     % Load stored results    

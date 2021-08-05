@@ -22,17 +22,7 @@ display(Directories)
 loadFittedParams = true; % use output saved from optimisation run?
 fileName = 'fittedParameters';  % saved parameters file name
 % tag = '1';                      % and identifying tag
-
-% tag = 'IQD_Hellinger_groupWaterOrigin_Atlantic';
-tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj';
-tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj_omitSizeDataTot';
-tag = 'meanCDFdist_Hellinger_Atlantic_quadraticMortality_singleTraj_omitSizeDataTot_removeParams';
-
-tag = 'RMS_Hellinger_Atlantic_singleTraj_removeParams';
-tag = 'RMSsmooth_Hellinger_Atlantic_singleTraj_removeParams';
-
-% tag = 'meanCDFdist_HellingerFullSpectrum_averagedEventsDepths_Atlantic_quadraticMortality_singleTraj';
-% tag = 'meanCDFdist_HellingerFullSpectrum_Atlantic_quadraticMortality_singleTraj_allSpectra';
+tag = 'RMS_Hellinger2_Atlantic_singleTraj_removeParams';
 
 fileName = fullfile(Directories.resultsDir, ...
     [fileName '_' tag]);
@@ -72,6 +62,7 @@ end
 
 % Run model over entire trajectories?
 Forc.integrateFullTrajectory = true;
+Forc0.integrateFullTrajectory = true;
 % Parallelise integrations over trajectories
 poolObj = gcp('nocreate');
 if isempty(poolObj), poolObj = parpool('SpmdEnabled', false); end
@@ -81,7 +72,7 @@ if ~exist('v0', 'var') || ~isnumeric(v0)
     % NOTE: initialiseVariables.m uses the quota parameters to initialise 
     % the plankton state variables. Thus, loaded v0 values may differ from 
     % those here generated using "best-fitting" quota params...
-    v0 = initialiseVariables(FixedParams, ParamsDefault, Forc);
+    v0 = initialiseVariables(FixedParams, ParamsDefault, Forc0);
 end
 % v00 = initialiseVariables(FixedParams, Params, Forc0); % create initials for full data (Forc0)
 v00 = initialiseVariables(FixedParams, ParamsDefault, Forc0); % create initials for full data (Forc0)
@@ -100,8 +91,6 @@ tic; disp('.. started at'); disp(datetime('now'))
 toc
 
 
-% FixedParams.fitToFullSizeSpectra = false; % for code compactness/slickness the action of this field should be into matchModOutput2Data rather than costCalc... kinda annoying!!
-
 % Generate modelled equivalents of the data
 modData0 = matchModOutput2Data(out0, auxVars0, Data0, FixedParams, ...
     'fitToFullSizeSpectra', FixedParams.fitToFullSizeSpectra);
@@ -111,29 +100,21 @@ modData = matchModOutput2Data(out, auxVars, Data, FixedParams, ...
 [cost, costComponents] = costFunction('label', FixedParams.costFunction, ...
     'Data', Data, 'modData', modData);
 
-% [cost2, costComponents2] = costFunction('label', 'RMSsmooth_Hellinger', ...
-%     'Data', Data, 'modData', modData);
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 %% Plots
 
-% The above outputs are now used as arguments to various plotting 
-% functions stored in utility/plottingFunctions/...
+% Use the above outputs as arguments to plotting functions stored in utility/plottingFunctions/...
 
 folder = Directories.plotDir; % save plots here
 
+save = true;
 
 %% Display data
 
-save = true;
-
-%~~~~~~~~~
-% Raw data
-%~~~~~~~~~
-
-% Scalar data
+% Nutrient & organic matter at depth
 plt_scalar = figure;
 plt_scalar.Units = 'inches';
 plt_scalar.Position = [0 0 8 6];
@@ -153,43 +134,92 @@ subplot(2,2,4)
 plot_rawData('scalar', 'POC', Data0, 'pointAlpha', pointAlpha);
 
 
-% Size data - spectra
+% Standardised data
+plt_stnd = figure;
+plt_stnd.Units = 'inches';
+plt_stnd.Position = [0 0 8 12];
+nrows = 4; % number of rows excluding legend
+ncols = 2;
+legh = (1 / 5) * (1 / nrows); % legend height
+legFontSize = 11;
+pex = 0.025; % proportion of total plot size used for outer margins
+Ph = 1 - 2 * pex; % total plot height (all panels and legend)
+Pw = 1 - 2 * pex; % total plot width
+yex = 0.3; % proportion of panel size devoted to axis labels -- y dimension
+xex = 0.2;
+pht = (Ph - legh) / nrows; % panel height total
+ph = pht - yex * pht; % panel height excluding labels
+pwt = Pw / ncols;
+pw = pwt - xex * pwt;
+
+subplot('Position', [pex + (pwt - pw), 1 - pex - ph, pw, ph])
+plot_standardisedData('scalar', 'N', Data0, 'covariate', 'Depth', ... 
+    'pointAlpha', 0.4, 'densityCurve', true, ...
+    'includeLegend', false, 'legendPosition', 'west');
+subplot('Position', [pex + 2 * pwt - pw, 1 - pex - ph, pw, ph])
+plot_standardisedData('scalar', 'N', Data0, 'covariate', 'Event', ...
+    'pointAlpha', 0.4, 'densityCurve', true);
+subplot('Position', [pex + (pwt - pw), 1 - pex - pht - ph, pw, ph])
+plot_standardisedData('scalar', 'PON', Data0, 'covariate', 'Depth', ... 
+    'pointAlpha', 0.4, 'densityCurve', true);
+subplot('Position', [pex + 2 * pwt - pw, 1 - pex - pht - ph, pw, ph])
+plot_standardisedData('scalar', 'PON', Data0, 'covariate', 'Event', ...
+    'pointAlpha', 0.4, 'densityCurve', true);
+subplot('Position', [pex + (pwt - pw), 1 - pex - 2 * pht - ph, pw, ph])
+plot_standardisedData('scalar', 'POC', Data0, 'covariate', 'Depth', ...
+    'pointAlpha', 0.4, 'densityCurve', true);
+subplot('Position', [pex + 2 * pwt - pw, 1 - pex - 2 * pht - ph, pw, ph])
+plot_standardisedData('scalar', 'POC', Data0, 'covariate', 'Event', ...
+    'pointAlpha', 0.4, 'densityCurve', true);
+subplot('Position', [pex + (pwt - pw), 1 - pex - 3 * pht - ph, pw, ph]);
+plot_standardisedData('scalar', 'chl_a', Data0, 'covariate', 'Depth', ...
+    'pointAlpha', 0.4, 'densityCurve', true);
+subplot('Position', [pex + 2 * pwt - pw, 1 - pex - 3 * pht - ph, pw, ph]);
+plot_standardisedData('scalar', 'chl_a', Data0, 'covariate', 'Event', ...
+    'pointAlpha', 0.4, 'densityCurve', true);
+leg = legend('Arctic', 'Atlantic', 'data distribution', 'standard normal', ...
+    'Location', 'bestoutside', 'FontSize', legFontSize, ...
+    'Orientation', 'horizontal', 'NumColumns', 2, ...
+    'box', 'on');
+set(leg, 'Position', [0.25, pex, 0.5, legh])
+
+
+% Size spectra -- averaged over samples
 plt_spectra = figure;
 plt_spectra.Units = 'inches';
 plt_spectra.Position = [0 0 8 6];
-
 % meanType = 'arithmetic';
 meanType = 'geometric';
 legendPosition = 'south';
-
 subplot(2,1,1)
-plot_rawData('sizeSpectra', 'CellConc', Data0, 'meanType', meanType, ... 
-    'includeLegend', true, 'legendPosition', legendPosition);
+plot_rawData('sizeSpectra', 'CellConc', Data0, 'meanType', meanType);%, ... 
+%     'includeLegend', true, 'legendPosition', legendPosition);
 subplot(2,1,2)
-plot_rawData('sizeSpectra', 'BioVol', Data0, 'meanType', meanType);
+plot_rawData('sizeSpectra', 'BioVol', Data0, 'meanType', meanType, ...
+    'includeLegend', true, 'legendPosition', legendPosition);
 
 
-
-% Size data - spectra multipanel plots
+% Size spectra -- multipanel plots
 Type = 'CellConc';
 plt_spectra2 = figure;
 plt_spectra2.Units = 'inches';
 plt_spectra2.Position = [0 0 16 12];
+legendPosition = 'south';
 subplot(2,2,1)
 plot_rawData('sizeSpectra', Type, Data0, 'meanType', meanType, ...
-    'includeLegend', true, 'legendPosition', 'southwest', ... 
+    'includeLegend', true, 'legendPosition', legendPosition, ... 
     'groupAutotroph', true);
 subplot(2,2,3)
 plot_rawData('sizeSpectra', Type, Data0, 'meanType', meanType, ...
-    'includeLegend', true, 'legendPosition', 'southwest', ... 
+    'includeLegend', true, 'legendPosition', legendPosition, ... 
     'groupHeterotroph', true);
 subplot(2,2,2)
 plot_rawData('sizeSpectra', Type, Data0, 'meanType', meanType, ...
-    'includeLegend', true, 'legendPosition', 'southwest', ...
+    'includeLegend', true, 'legendPosition', legendPosition, ...
     'groupAtlantic', true);
 subplot(2,2,4)
 plot_rawData('sizeSpectra', Type, Data0, 'meanType', meanType, ...
-    'includeLegend', true, 'legendPosition', 'southwest', ... 
+    'includeLegend', true, 'legendPosition', legendPosition, ... 
     'groupArctic', true);
 
 Type = 'BioVol';
@@ -198,28 +228,23 @@ plt_spectra3.Units = 'inches';
 plt_spectra3.Position = [0 0 16 12];
 subplot(2,2,1)
 plot_rawData('sizeSpectra', Type, Data0, 'meanType', meanType, ...
-    'includeLegend', true, 'legendPosition', 'southwest', ... 
+    'includeLegend', true, 'legendPosition', legendPosition, ... 
     'groupAutotroph', true);
 subplot(2,2,3)
 plot_rawData('sizeSpectra', Type, Data0, 'meanType', meanType, ...
-    'includeLegend', true, 'legendPosition', 'southwest', ... 
+    'includeLegend', true, 'legendPosition', legendPosition, ... 
     'groupHeterotroph', true);
 subplot(2,2,2)
 plot_rawData('sizeSpectra', Type, Data0, 'meanType', meanType, ...
-    'includeLegend', true, 'legendPosition', 'southwest', ... 
+    'includeLegend', true, 'legendPosition', legendPosition, ... 
     'groupAtlantic', true);
 subplot(2,2,4)
 plot_rawData('sizeSpectra', Type, Data0, 'meanType', meanType, ...
-    'includeLegend', true, 'legendPosition', 'southwest', ... 
+    'includeLegend', true, 'legendPosition', legendPosition, ... 
     'groupArctic', true);
 
-% Size data - binned
 
-% In these plots the lower limit on the y-axis can be determined as a
-% strict biological limit... truncate y-axis at 1 cell/m^3, which can also
-% be done for biovolume...
-
-
+% Integrated size spectra -- binned size data
 plt_binned = figure;
 plt_binned.Units = 'inches';
 plt_binned.Position = [0 0 8 6];
@@ -229,11 +254,15 @@ plot_rawData('sizeBinned', 'CellConc', Data0, 'pointAlpha', 0.5, ...
 subplot(2,1,2)
 plot_rawData('sizeBinned', 'BioVol', Data0, 'pointAlpha', 0.5);
 
+
 switch save, case true
-    % scalar data
     if exist('plt_scalar', 'var') && isvalid(plt_scalar)
         filename = 'data_scalar.png';
         print(plt_scalar, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('plt_stnd', 'var') && isvalid(plt_stnd)
+        filename = 'data_scalarStandardised.png';
+        print(plt_stnd, fullfile(folder, filename), '-r300', '-dpng');
     end
     if exist('plt_spectra', 'var') && isvalid(plt_spectra)
         filename = 'data_sizeSpectra.png';
@@ -254,54 +283,188 @@ switch save, case true
 end
 
 
-%~~~~~~~~~~~~~~~~~~
-% Standardised data
-%~~~~~~~~~~~~~~~~~~
-
 close all
 
-plt_stnd = figure;
-plt_stnd.Units = 'inches';
-plt_stnd.Position = [0 0 16 6];
-subplot(2,4,1)
-plot_standardisedData('scalar', 'N', Data0, 'covariate', 'Depth', ... 
-    'pointAlpha', 0.4, 'densityCurve', true, ...
-    'includeLegend', false, 'legendPosition', 'west');
-subplot(2,4,5)
-plot_standardisedData('scalar', 'N', Data0, 'covariate', 'Event', ...
-    'pointAlpha', 0.4, 'densityCurve', true);
-subplot(2,4,2)
-plot_standardisedData('scalar', 'PON', Data0, 'covariate', 'Depth', ... 
-    'pointAlpha', 0.4, 'densityCurve', true);
-subplot(2,4,6)
-plot_standardisedData('scalar', 'PON', Data0, 'covariate', 'Event', ...
-    'pointAlpha', 0.4, 'densityCurve', true);
-subplot(2,4,3)
-plot_standardisedData('scalar', 'POC', Data0, 'covariate', 'Depth', ...
-    'pointAlpha', 0.4, 'densityCurve', true);
-subplot(2,4,7)
-plot_standardisedData('scalar', 'POC', Data0, 'covariate', 'Event', ...
-    'pointAlpha', 0.4, 'densityCurve', true);
-subplot(2,4,4)
-plot_standardisedData('scalar', 'chl_a', Data0, 'covariate', 'Depth', ...
-    'pointAlpha', 0.4, 'densityCurve', true);
-subplot(2,4,8)
-plot_standardisedData('scalar', 'chl_a', Data0, 'covariate', 'Event', ...
-    'pointAlpha', 0.4, 'densityCurve', true);
+
+%% Model fit to data
+
+% Nutrient (scalar) data. Multipanel summary plots for an overview of model
+% fit. Include 3 rows to display: (1) ungrouped data; (2) grouped by
+% depth; (3) grouped by event.
+standard = [true, false];
+pn = {'standardised', 'raw'};
+Vars = {'N','PON','POC','chl_a'};
+nrows = 3; % 1 row per plot type
+ncols = length(Vars); % 1 column per data type
+colDat = [0, 0, 0];
+colMod = [0, 1, 0];
+connectors = true;
+for i = 1:2
+    standardised = standard(i);
+    plotName = ['pltFit2Data_' pn{i}];
+    assignin('base', plotName, figure)
+    set(eval(plotName), 'Units', 'inches')
+    set(eval(plotName), 'Position', [0 0 16 12])
+    
+    % 1st row: ungrouped data
+    for ii = 1:ncols
+        subplot(nrows, ncols, ii)
+        xvar = Vars{ii};
+        plot_fitToNutrient_sorted(xvar, Data, modData, ...
+            'colDat', colDat, 'colMod', colMod, ...
+            'standardised', standardised, 'connectors', connectors);
+    end
+    
+    % 2nd row: grouped by depth -- boxplot
+    for ii = 1:ncols
+        subplot(nrows, ncols, ii + ncols)
+        xvar = Vars{ii};
+        plot_fitToNutrient_depth(xvar, Data, modData, ...
+            'colDat', colDat, 'colMod', colMod, ...
+            'standardised', standardised);
+    end
+    
+    % 3rd row: grouped by sample event -- boxplot
+    for ii = 1:ncols
+        subplot(nrows, ncols, ii + 2 * ncols)
+        xvar = Vars{ii};
+        plot_fitToNutrient_event(xvar, Data, modData, ...
+            'colDat', colDat, 'colMod', colMod, ...
+            'standardised', standardised);
+    end
+    sgtitle(['Model fit to ' pn{i} ' data'])
+end
+
+
+% Grouped by data type
+standardised = true;
+ap = '';
+switch standardised, case true, ap = '_standardised'; end
+nrows = 1;
+ncols = 3;
+for i = 1:length(Vars)
+    xvar = Vars{i};
+    xLab = xvar;
+    switch xvar
+        case 'N', xLab = 'DIN';
+        case 'chl_a', xLab = 'chl a';
+    end    
+    plotName = ['pltFit2Data_' xvar ap];
+    assignin('base', plotName, figure)
+    set(eval(plotName), 'Units', 'inches')
+    set(eval(plotName), 'Position', [0 0 12 4])
+    % ungrouped data
+    subplot(nrows, ncols, 1)
+    plot_fitToNutrient_sorted(xvar, Data, modData, ...
+        'colDat', colDat, 'colMod', colMod, ...
+        'standardised', standardised, 'connectors', connectors);
+    % grouped by depth -- boxplot
+    subplot(nrows, ncols, 2)
+    plot_fitToNutrient_depth(xvar, Data, modData, ...
+        'colDat', colDat, 'colMod', colMod, ...
+        'standardised', standardised);
+    % grouped by sample event -- boxplot
+    subplot(nrows, ncols, 3)
+    plot_fitToNutrient_event(xvar, Data, modData, ...
+        'colDat', colDat, 'colMod', colMod, ...
+        'standardised', standardised);
+    switch standardised
+        case false, Title = ['Model fit to ' xLab ' data'];
+        case true, Title = ['Model fit to standardised ' xLab ' data'];
+    end    
+    sgtitle(Title)
+end
 
 
 switch save, case true
-    if exist('plt_stnd', 'var') && isvalid(plt_stnd)
-        filename = 'data_scalarStandardised.png';
-        print(plt_stnd, fullfile(folder, filename), '-r300', '-dpng');
+    for i = 1:length(Vars)
+        plotName = ['pltFit2Data_' Vars{i}];
+        filename = ['fitToData_' Vars{i} '.png'];
+        if (exist(plotName, 'var') && isvalid(eval(plotName)))
+            print(eval(plotName), fullfile(folder, filename), '-r300', '-dpng');
+        end
+        plotName = ['pltFit2Data_' Vars{i} '_standardised'];
+        filename = ['fitToData_' Vars{i} '_standardised.png'];
+        if (exist(plotName, 'var') && isvalid(eval(plotName)))
+            print(eval(plotName), fullfile(folder, filename), '-r300', '-dpng');
+        end
     end
 end
 
-%~~~~~~~~~~~~~~~~~~~
-% Model fits to data
-%~~~~~~~~~~~~~~~~~~~
+
+% Size data.
+
+% Still need to include data variability in these plots...
+
+% Fit to total biovolume within size class intervals (the data used to fit 
+% the model)
+trophicGroups = {'autotroph', 'heterotroph'}; pn = {'P','Z'};
+xvar = 'BioVol';
+logScale = 'semilogx'; % for size spectra data choose logScale = 'loglog' or 'semilogx'
+waterOrigin = 'Atlantic';
+connectors = true; % lines linking data to modelled equivalents
+meanOnly = false; % display mean (over sample events) of modelled values -- for cleaner plot
+
+for i = 1:length(trophicGroups)
+    trophicGroup = trophicGroups{i};
+    
+    plotName = ['pltBioVol_Atl_' pn{i}];
+    assignin('base', plotName, figure)
+    set(eval(plotName), 'Units', 'inches')
+    set(eval(plotName), 'Position', [0 0 16 6])
+
+    subplot(1,3,1)
+    plot_fitToSizeIntegrated_relative(xvar, trophicGroup, Data, modData, ...
+        'logScale', logScale, 'waterOrigin', waterOrigin, ...
+        'colDat', colDat, 'colMod', colMod,...
+        'connectors', connectors, 'meanOnly', meanOnly, ...
+        'includeLegend', true, 'legendLocation', 'northwest');
+    
+    subplot(1,3,2)
+    plot_fitToSizeIntegrated_total(xvar, trophicGroup, Data, modData, ...
+        'waterOrigin', waterOrigin, ...
+        'colDat', colDat, 'colMod', colMod, ...
+        'connectors', connectors, 'meanOnly', meanOnly);
+    
+    subplot(1,3,3)
+    plot_fitToSizeIntegrated_absolute(xvar, trophicGroup, Data, modData, ...
+        'logScale', logScale, 'waterOrigin', waterOrigin, ...
+        'colDat', colDat, 'colMod', colMod, ...
+        'connectors', connectors, 'meanOnly', meanOnly);
+    
+    switch xvar
+        case 'BioVol', Xvar = 'biovolume';
+        case 'CellConc', Xvar = 'cell concentration';
+    end
+    sgtitle(['Model fit to ' trophicGroup ' ' Xvar ' data'])
+    
+end
+
+
+switch save, case true
+    if exist('pltBioVol_Arc_P', 'var') && isvalid(pltBioVol_Arc_P)
+        filename = 'fitToData_BioVolSpectra_Arc_P.png';
+        print(pltBioVol_Arc_P, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('pltBioVol_Arc_Z', 'var') && isvalid(pltBioVol_Arc_Z)
+        filename = 'fitToData_BioVolSpectra_Arc_Z.png';
+        print(pltBioVol_Arc_Z, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('pltBioVol_Atl_P', 'var') && isvalid(pltBioVol_Atl_P)
+        filename = 'fitToData_BioVolSpectra_Atl_P.png';
+        print(pltBioVol_Atl_P, fullfile(folder, filename), '-r300', '-dpng');
+    end
+    if exist('pltBioVol_Atl_Z', 'var') && isvalid(pltBioVol_Atl_Z)
+        filename = 'fitToData_BioVolSpectra_Atl_Z.png';
+        print(pltBioVol_Atl_Z, fullfile(folder, filename), '-r300', '-dpng');
+    end
+end
+
 
 close all
+
+%~~~~~~~~~~~~~~~~~~~~
+% Older plotting code...
 
 % Summary plots displaying model fit to data
 logPlot = true; % for scalar data choose logPlot = true or false
@@ -315,19 +478,6 @@ pltN = plot_fitToData('N', Data, modData, logPlot); pause(0.25)
 logPlot = 'semilogx'; % for size spectra data choose logPlot = 'loglog' or 'semilogx'
 
 % Comment out Arctic plots because we're fitting to Atlantic data
-% pltCellConc_Atl_P = plot_fitToData('CellConc', Data, modData, logPlot, ... 
-%     'trophicGroup', 'autotroph', 'waterOrigin', 'Atlantic', ...
-%     'errorBars', true); pause(0.25)
-
-pltCellConc_Atl_P = plot_fitToData('CellConc', Data, modData, logPlot, ... 
-    'trophicGroup', 'autotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
-% pltCellConc_Arc_P = plot_fitToData('CellConc', Data, modData, logPlot, ... 
-%     'trophicGroup', 'autotroph', 'waterOrigin', 'Arctic'); pause(0.25)
-pltCellConc_Atl_Z = plot_fitToData('CellConc', Data, modData, logPlot, ... 
-    'trophicGroup', 'heterotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
-% pltCellConc_Arc_Z = plot_fitToData('CellConc', Data, modData, logPlot, ... 
-%     'trophicGroup', 'heterotroph', 'waterOrigin', 'Arctic'); pause(0.25)
-
 pltBioVol_Atl_P = plot_fitToData('BioVol', Data, modData, logPlot, ... 
     'trophicGroup', 'autotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
 % pltBioVol_Arc_P = plot_fitToData('BioVol', Data, modData, logPlot, ... 
@@ -337,6 +487,8 @@ pltBioVol_Atl_Z = plot_fitToData('BioVol', Data, modData, logPlot, ...
 % pltBioVol_Arc_Z = plot_fitToData('BioVol', Data, modData, logPlot, ... 
 %     'trophicGroup', 'heterotroph', 'waterOrigin', 'Arctic'); pause(0.25)
 
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 switch save, case true
@@ -359,23 +511,6 @@ switch save, case true
     end
     
     % size data
-    if exist('pltCellConc_Arc_P', 'var') && isvalid(pltCellConc_Arc_P)
-        filename = 'fitToData_CellConcSpectra_Arc_P.png';
-        print(pltCellConc_Arc_P, fullfile(folder, filename), '-r300', '-dpng');
-    end
-    if exist('pltCellConc_Arc_Z', 'var') && isvalid(pltCellConc_Arc_Z)
-        filename = 'fitToData_CellConcSpectra_Arc_Z.png';
-        print(pltCellConc_Arc_Z, fullfile(folder, filename), '-r300', '-dpng');
-    end
-    if exist('pltCellConc_Atl_P', 'var') && isvalid(pltCellConc_Atl_P)
-        filename = 'fitToData_CellConcSpectra_Atl_P.png';
-        print(pltCellConc_Atl_P, fullfile(folder, filename), '-r300', '-dpng');
-    end
-    if exist('pltCellConc_Atl_Z', 'var') && isvalid(pltCellConc_Atl_Z)
-        filename = 'fitToData_CellConcSpectra_Atl_Z.png';
-        print(pltCellConc_Atl_Z, fullfile(folder, filename), '-r300', '-dpng');
-    end
-    
     if exist('pltBioVol_Arc_P', 'var') && isvalid(pltBioVol_Arc_P)
         filename = 'fitToData_BioVolSpectra_Arc_P.png';
         print(pltBioVol_Arc_P, fullfile(folder, filename), '-r300', '-dpng');
@@ -396,305 +531,12 @@ switch save, case true
 end
 
 
-% Simpler plots -- boxplots against depth
-
-close all
-
-plt = figure;
-subplot(2,2,1)
-logPlot = false;
-plot_fitToData_depthBoxplot('N', Data, modData, logPlot); pause(0.25)
-logPlot = true; % for scalar data choose logPlot = true or false
-subplot(2,2,2)
-plot_fitToData_depthBoxplot('chl_a', Data, modData, logPlot); pause(0.25)
-subplot(2,2,3)
-plot_fitToData_depthBoxplot('POC', Data, modData, logPlot); pause(0.25)
-subplot(2,2,4)
-plot_fitToData_depthBoxplot('PON', Data, modData, logPlot); pause(0.25)
-plt.Units = 'inches';
-plt.Position = [0 0 8 8];
-
-switch save, case true
-    if exist('plt', 'var') && isvalid(plt)
-        filename = 'fitToData_depthBoxplot.png';
-        print(plt, fullfile(folder, filename), '-r300', '-dpng');
-    end
-end
-
-
-
-
-
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% Different plots needed if fitting to all uniquely measured size spectra.
-% Use a separate panel for each spectra, a separate column for each sample
-% event, and split sample depths by row.
-ESD = unique(Data.size.ESD);
-trophicLevels = unique(Data.size.trophicLevel);
-Events = unique(Data.size.Event);
-nEvents = length(Events);
-eventDepths = nan(1,  nEvents);
-for i = 1:nEvents
-    depths = unique(Data.size.Depth(Data.size.Event == Events(i)));
-    ndepths = length(depths);
-    eventDepths(1:ndepths, i) = depths;
-end
-eventDepths(eventDepths == 0) = nan;
-nrows = size(eventDepths, 1);
-ncols = nEvents;
-
-trophicLevel = trophicLevels{1};
-ind0 = strcmp(Data.size.trophicLevel, trophicLevel);
-
-plotFun = @loglog;
-plotFun = @semilogx;
-
-ymin = 1e-6; % truncate plots at ymin
-
-sizeFit = figure;
-sizeFit.Units = 'inches';
-sizeFit.Position = [0 0 16 6];
-
-subplot(nrows, ncols, 1)
-ind = ind0 & Data.size.Event == Events(1) & Data.size.Depth == eventDepths(1,1);
-ydat = Data.size.BioVolDensity(ind);
-ymod = modData.size.BioVolDensity(ind);
-ydat = ydat ./ sum(ydat);
-ymod = ymod ./ sum(ymod);
-plotFun(ESD, ydat)
-hold on
-plotFun(ESD, ymod)
-hold off
-gc = gca;
-gc.YLim(1) = ymin;
-title(['Sample event ' num2str(Events(1)) ': ' num2str(eventDepths(1,1)) ' m'])
-xlabel('ESD (\mum)')
-ylabel({'Shallow','relative biovolume'})
-legend('data','model', 'box', 'off')
-
-subplot(nrows, ncols, 2)
-ind = ind0 & Data.size.Event == Events(2) & Data.size.Depth == eventDepths(1,2);
-ydat = Data.size.BioVolDensity(ind);
-ymod = modData.size.BioVolDensity(ind);
-ydat = ydat ./ sum(ydat);
-ymod = ymod ./ sum(ymod);
-plotFun(ESD, ydat)
-hold on
-plotFun(ESD, ymod)
-hold off
-gc = gca;
-gc.YLim(1) = ymin;
-title(['Sample event ' num2str(Events(2)) ': ' num2str(eventDepths(1,2)) ' m'])
-xlabel('ESD (\mum)')
-ylabel('relative biovolume')
-legend('data','model', 'box', 'off')
-
-subplot(nrows, ncols, 3)
-ind = ind0 & Data.size.Event == Events(3) & Data.size.Depth == eventDepths(1,3);
-ydat = Data.size.BioVolDensity(ind);
-ymod = modData.size.BioVolDensity(ind);
-ydat = ydat ./ sum(ydat);
-ymod = ymod ./ sum(ymod);
-plotFun(ESD, ydat)
-hold on
-plotFun(ESD, ymod)
-hold off
-gc = gca;
-gc.YLim(1) = ymin;
-title(['Sample event ' num2str(Events(3)) ': ' num2str(eventDepths(1,3)) ' m'])
-xlabel('ESD (\mum)')
-ylabel('relative biovolume')
-legend('data','model', 'box', 'off')
-
-subplot(nrows, ncols, 4)
-ind = ind0 & Data.size.Event == Events(4) & Data.size.Depth == eventDepths(1,4);
-ydat = Data.size.BioVolDensity(ind);
-ymod = modData.size.BioVolDensity(ind);
-ydat = ydat ./ sum(ydat);
-ymod = ymod ./ sum(ymod);
-plotFun(ESD, ydat)
-hold on
-plotFun(ESD, ymod)
-hold off
-gc = gca;
-gc.YLim(1) = ymin;
-title(['Sample event ' num2str(Events(4)) ': ' num2str(eventDepths(1,4)) ' m'])
-xlabel('ESD (\mum)')
-ylabel('relative biovolume')
-legend('data','model', 'box', 'off')
-
-subplot(nrows, ncols, 5)
-ind = ind0 & Data.size.Event == Events(1) & Data.size.Depth == eventDepths(2,1);
-ydat = Data.size.BioVolDensity(ind);
-ymod = modData.size.BioVolDensity(ind);
-ydat = ydat ./ sum(ydat);
-ymod = ymod ./ sum(ymod);
-plotFun(ESD, ydat)
-hold on
-plotFun(ESD, ymod)
-hold off
-gc = gca;
-gc.YLim(1) = ymin;
-title(['Sample event ' num2str(Events(1)) ': ' num2str(eventDepths(2,1)) ' m'])
-xlabel('ESD (\mum)')
-ylabel({'Deep','relative biovolume'})
-legend('data','model', 'box', 'off')
-
-subplot(nrows, ncols, 6)
-ind = ind0 & Data.size.Event == Events(2) & Data.size.Depth == eventDepths(2,2);
-ydat = Data.size.BioVolDensity(ind);
-ymod = modData.size.BioVolDensity(ind);
-ydat = ydat ./ sum(ydat);
-ymod = ymod ./ sum(ymod);
-plotFun(ESD, ydat)
-hold on
-plotFun(ESD, ymod)
-hold off
-gc = gca;
-gc.YLim(1) = ymin;
-title(['Sample event ' num2str(Events(2)) ': ' num2str(eventDepths(2,2)) ' m'])
-xlabel('ESD (\mum)')
-ylabel('relative biovolume')
-legend('data','model', 'box', 'off')
-
-subplot(nrows, ncols, 7)
-ind = ind0 & Data.size.Event == Events(3) & Data.size.Depth == eventDepths(2,3);
-ydat = Data.size.BioVolDensity(ind);
-ymod = modData.size.BioVolDensity(ind);
-ydat = ydat ./ sum(ydat);
-ymod = ymod ./ sum(ymod);
-plotFun(ESD, ydat)
-hold on
-plotFun(ESD, ymod)
-hold off
-gc = gca;
-gc.YLim(1) = ymin;
-title(['Sample event ' num2str(Events(3)) ': ' num2str(eventDepths(2,3)) ' m'])
-xlabel('ESD (\mum)')
-ylabel('relative biovolume')
-legend('data','model', 'box', 'off')
-
-subplot(nrows, ncols, 8)
-ind = ind0 & Data.size.Event == Events(4) & Data.size.Depth == eventDepths(2,4);
-ydat = Data.size.BioVolDensity(ind);
-ymod = modData.size.BioVolDensity(ind);
-ydat = ydat ./ sum(ydat);
-ymod = ymod ./ sum(ymod);
-plotFun(ESD, ydat)
-hold on
-plotFun(ESD, ymod)
-hold off
-gc = gca;
-gc.YLim(1) = ymin;
-title(['Sample event ' num2str(Events(4)) ': ' num2str(eventDepths(2,4)) ' m'])
-xlabel('ESD (\mum)')
-ylabel('relative biovolume')
-legend('data','model', 'box', 'off')
-
-
-% Plot the same data, but combine over events... then maybe smooth to
-% reduce event-dependent variability
-
-sizeFit2 = figure;
-sizeFit2.Units = 'inches';
-sizeFit2.Position = [0 0 4 6];
-
-nESD = length(ESD);
-
-subplot(nrows, 1, 1)
-ydat = nan(nESD, nEvents);
-ymod = nan(nESD, nEvents);
-for i = 1:nEvents
-    ind = ind0 & Data.size.Event == Events(i) & Data.size.Depth == eventDepths(1,i);
-    ydat(:,i) = Data.size.BioVolDensity(ind);
-    ymod(:,i) = modData.size.BioVolDensity(ind);
-    ydat(:,i) = ydat(:,i) ./ sum(ydat(:,i));
-    ymod(:,i) = ymod(:,i) ./ sum(ymod(:,i));
-end
-ydat_mean = mean(ydat, 2);
-ymod_mean = mean(ymod, 2);
-
-plotFun(ESD, ydat)
-hold on
-plotFun(ESD, ydat_mean, 'Color', [0 0 0], 'LineWidth', 2)
-hold off
-gc = gca;
-gc.YLim(1) = ymin;
-% xlabel('ESD (\mum)')
-ylabel({'Shallow', 'relative biovolume'})
-
-subplot(nrows, 1, 2)
-ydat = nan(nESD, nEvents);
-ymod = nan(nESD, nEvents);
-for i = 1:nEvents
-    ind = ind0 & Data.size.Event == Events(i) & Data.size.Depth == eventDepths(2,i);
-    ydat(:,i) = Data.size.BioVolDensity(ind);
-    ymod(:,i) = modData.size.BioVolDensity(ind);
-    ydat(:,i) = ydat(:,i) ./ sum(ydat(:,i));
-    ymod(:,i) = ymod(:,i) ./ sum(ymod(:,i));
-end
-ydat_mean = mean(ydat, 2);
-ymod_mean = mean(ymod, 2);
-
-plotFun(ESD, ydat)
-hold on
-plotFun(ESD, ydat_mean, 'Color', [0 0 0], 'LineWidth', 2)
-hold off
-gc = gca;
-gc.YLim(1) = ymin;
-xlabel('ESD (\mum)')
-ylabel({'Deep', 'relative biovolume'})
-
-sgtitle({'Atlantic size spectra','raw samples and means'})
-
-
-
-
 
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
-% Plot representations of the cost function distance metrics.
-
-% Scalar (nutrient) data
-
-plt1 = figure;
-plt1.Units = 'inches';
-plt1.Position = [0 0 16 8];
-
-
-Vars = {'N','chl_a','PON','POC'};
-nv = length(Vars);
-
-colDat = [0, 0, 0];
-colMod = [0, 1, 0];
-% smoothFactor = 0.35;
-
-standardised = true;
-for ii = 1:nv
-    subplot(2,4,ii)
-    xvar = Vars{ii};
-    xLab = [];
-    plot_fitToData2(xvar, Data, modData, ...
-        'standardised', standardised, 'colDat', colDat, 'colMod', colMod, ...
-        'xLab', xLab);
-end
-standardised = false;
-for ii = 1:nv
-    subplot(2,4,ii+nv)
-    xvar = Vars{ii};
-    xLab = [];
-    plot_fitToData2(xvar, Data, modData, ...
-        'standardised', standardised, 'colDat', colDat, 'colMod', colMod, ...
-        'xLab', xLab);
-end
-
-
-
-% Plot residual errors
+% Residual errors -- put this code into a stand-alone function...
 
 plt_scalarResid = figure;
 plt_scalarResid.Units = 'inches';
@@ -709,12 +551,11 @@ colHighlight = [1, 0, 0];
 highlightDeep = Data.scalar.Depth >= deepLimit;
 highlightShallow = Data.scalar.Depth<= shallowLimit;
 % highlight = Data.scalar.Depth >= 100;
-plotStandardisedData = false; % plot raw or standardised data
+plotStandardisedData = true; % plot raw or standardised data
+nv = length(Vars);
 
 for ii = 1:nv
-    
     subplot(2,2,ii)
-    
     varLabel = Vars{ii};
     ind = strcmp(Data.scalar.Variable, varLabel);
     switch plotStandardisedData
@@ -727,19 +568,14 @@ for ii = 1:nv
             ymod = modData.scalar.Value(ind,:);
             mainTitle = 'Residual errors: model minus data';
     end
-        
     n = length(yobs);
     p = (1:n) ./ n;
-    
     [yobs_sort, o] = sort(yobs);
     ymod_sort = ymod(o,:);
 %     [ymod_sort, o] = sort(ymod);
 %     yobs_sort = yobs(o,:);
-    
     res = ymod_sort - yobs_sort;
-    
     higlightAll = false(length(res),1);
-    
     if (exist('highlightDeep', 'var') && any(highlightDeep(ind))) || ...
             (exist('highlightShallow', 'var') && any(highlightShallow(ind)))
         if (exist('highlightDeep', 'var') && any(highlightDeep(ind)))
@@ -764,12 +600,10 @@ for ii = 1:nv
             leg = legend;
         end
     end
-    
     scatter(yobs_sort(~higlightAll), res(~higlightAll), ... 
         'MarkerEdgeColor', colDat, 'LineWidth', 2)
 %     scatter(1:n, res, 'MarkerEdgeColor', colDat, 'LineWidth', 2)
 %     scatter(yobs_sort, res, 'MarkerEdgeColor', colDat, 'LineWidth', 2)
-    
 %     if exist('highlight', 'var') && any(highlight(ind))
 %         highlight_ = highlight(ind);
 %         highlight_ = highlight_(o);
@@ -780,16 +614,12 @@ for ii = 1:nv
     gc = gca;
     xl = gc.XLim;
     plot(xl, [0, 0], '--r')
-
     hold off
-    
     xlabel(varLabel)
     ylabel('residual error')
-    
     if ii == nv
         sgtitle(mainTitle)
     end
-    
     if ii == 1
         % legend & text on panel
         if exist('sDeep', 'var') && exist('sShallow', 'var')
@@ -806,20 +636,18 @@ for ii = 1:nv
             leg.String = legString;
         end
         % include text
-        
         yl = gc.YLim;
         xd = diff(gc.XLim);
         yd = diff(gc.YLim);
         text(xl(1) + 0.01 * xd, yl(2) - 0.05 * yd, 'overestimated', 'HorizontalAlignment', 'left')
         text(xl(1) + 0.01 * xd, yl(1) + 0.05 * yd, 'underestimated', 'HorizontalAlignment', 'left')
     end
-    
 end
 
 
 
 
-% Size data
+% Size data - histograms .... see plots2.m
 plt_sizePMFs = figure;
 plt_sizePMFs.Units = 'inches';
 plt_sizePMFs.Position = [0 0 12 6];
@@ -853,150 +681,6 @@ plotLegend = 'false';
 plot_comparePMFs(yobs, ymod, varLabel, 'waterMass', waterMass, ... 
     'trophicLevel', trophicLevel, 'itraj', itraj, 'xscale', xscale, ...
     'barplot', barplot, 'plotLegend', plotLegend);
-
-
-
-
-plt_sizePMFs2 = figure;
-plt_sizePMFs2.Units = 'inches';
-plt_sizePMFs2.Position = [0 0 12 6];
-
-% itraj = 1; % choose a single trajectory from those used to fit the model, or set itraj = [] to display all model realisations
-itraj = [];
-barplot = true;
-% Vector (size) data
-varLabel = 'BioVol';
-waterMass = 'Atlantic';
-ind0 = strcmp(Data.size.dataBinned.Variable, varLabel) & ... 
-    strcmp(Data.size.dataBinned.waterMass, waterMass);
-% autotrophs
-subplot(1,2,1)
-trophicLevel = 'autotroph';
-xscale = round(FixedParams.PPdia, 2, 'significant');
-ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, trophicLevel);
-yobs = Data.size.dataBinned.Value(ind);
-ymod = modData.size.Value(ind,:);
-
-res = log10(ymod ./ yobs);
-res = (ymod - yobs);
-
-plot_comparePMFs(res(:,1), res, varLabel, 'waterMass', waterMass, ... 
-    'trophicLevel', trophicLevel, 'itraj', itraj, 'xscale', xscale, ...
-    'barplot', barplot);
-% plot_comparePMFs(yobs, ymod, varLabel, 'waterMass', waterMass, ... 
-%     'trophicLevel', trophicLevel, 'itraj', itraj, 'xscale', xscale, ...
-%     'barplot', barplot);
-
-% heterotrophs
-subplot(1,2,2)
-trophicLevel = 'heterotroph';
-ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, trophicLevel);
-yobs = Data.size.dataBinned.Value(ind);
-ymod = modData.size.Value(ind,:);
-plotLegend = 'false';
-plot_comparePMFs(yobs, ymod, varLabel, 'waterMass', waterMass, ... 
-    'trophicLevel', trophicLevel, 'itraj', itraj, 'xscale', xscale, ...
-    'barplot', barplot, 'plotLegend', plotLegend);
-
-
-
-
-
-
-
-
-
-
-
-plt_scalarCDFs = figure;
-plt_scalarCDFs.Units = 'inches';
-plt_scalarCDFs.Position = [0 0 12 8];
-markerSize = 5;
-showTrueDataCDF = true;
-colDat = [0, 0, 0];
-colMod = [0, 1, 0];
-colMod_ = rgb2hsv(colMod);
-colMod_(2) = 0.5;
-colMod = hsv2rgb(colMod_);
-plotTitle = false;
-legendPosition = 'southeast';
-itraj = [];
-% itraj = 1;
-
-subplot(2,2,1)
-varLabel = 'N';
-yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
-ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
-plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
-    'plotTitle', plotTitle, 'legendPosition', legendPosition, ...
-    'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
-    'itraj', itraj);
-subplot(2,2,2)
-plotLegend = 'false';
-varLabel = 'PON';
-yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
-ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
-plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
-    'plotTitle', plotTitle, 'plotLegend', plotLegend, ...
-    'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
-    'itraj', itraj);
-subplot(2,2,4)
-varLabel = 'POC';
-yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
-ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
-plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
-    'plotTitle', plotTitle, 'plotLegend', plotLegend, ...
-    'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
-    'itraj', itraj);
-subplot(2,2,3)
-varLabel = 'chl_a';
-yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
-ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
-plot_compareCDFs(yobs, ymod, varLabel, 'showTrueDataCDF', showTrueDataCDF, ...
-    'plotTitle', plotTitle, 'plotLegend', plotLegend, ...
-    'markerSize', markerSize, 'colDat', colDat, 'colMod', colMod, ...
-    'itraj', itraj);
-titleText = 'Data distributions vs modelled equivalents';
-sgtitle(titleText)
-
-
-% Size data
-plt_sizePMFs = figure;
-plt_sizePMFs.Units = 'inches';
-plt_sizePMFs.Position = [0 0 12 6];
-
-% itraj = 1; % choose a single trajectory from those used to fit the model, or set itraj = [] to display all model realisations
-itraj = [];
-barplot = true;
-% Vector (size) data
-varLabel = 'BioVol';
-waterMass = 'Atlantic';
-ind0 = strcmp(Data.size.dataBinned.Variable, varLabel) & ... 
-    strcmp(Data.size.dataBinned.waterMass, waterMass);
-% autotrophs
-subplot(1,2,1)
-trophicLevel = 'autotroph';
-xscale = round(FixedParams.PPdia, 2, 'significant');
-ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, trophicLevel);
-yobs = Data.size.dataBinned.Value(ind);
-ymod = modData.size.Value(ind,:);
-plot_comparePMFs(yobs, ymod, varLabel, 'waterMass', waterMass, ... 
-    'trophicLevel', trophicLevel, 'itraj', itraj, 'xscale', xscale, ...
-    'barplot', barplot);
-
-% heterotrophs
-subplot(1,2,2)
-trophicLevel = 'heterotroph';
-ind = ind0 & strcmp(Data.size.dataBinned.trophicLevel, trophicLevel);
-yobs = Data.size.dataBinned.Value(ind);
-ymod = modData.size.Value(ind,:);
-plotLegend = 'false';
-plot_comparePMFs(yobs, ymod, varLabel, 'waterMass', waterMass, ... 
-    'trophicLevel', trophicLevel, 'itraj', itraj, 'xscale', xscale, ...
-    'barplot', barplot, 'plotLegend', plotLegend);
-
-
-
 
 
 %% Fitted parameters
@@ -1018,9 +702,11 @@ close all
 
 %% Map plots
 
-close all
-
 % Particle trajectories from physical model
+
+% Also see plots2.m
+
+% ENSURE THAT THE FULL UNFILTERED FORCING DATA IS LOADED...
 
 projection = 'lambert';
 % projection = 'miller';
@@ -1172,19 +858,6 @@ traj = find(Data0.scalar.EventTraj(sampleEvent,:));
 % Otherwise, if waterMass is a mixture of origins, then group trajectories
 % by origin and make separate plots
 waterMass = Data0.scalar.waterMass{sampleEvent};
-
-
-% out0_ = out0;
-% out0_.OM = out0_.OM(:,1:end-1,:,:,:);
-% FixedParams_ = FixedParams;
-% FixedParams_.z = FixedParams.z(1:end-1);
-% FixedParams_.zw = FixedParams.zw(1:end-1);
-% FixedParams_.zwidth = FixedParams.zwidth(1:end-1);
-% 
-% plt_OM = plot_contour_DepthTime('DOM_POM', ...
-%     traj, out0_, auxVars0, FixedParams_, Forc0, 'linear', ...
-%     'Event', sampleEvent, 'waterOrigin', waterMass);
-% 
 
 
 switch waterMass
@@ -1427,13 +1100,14 @@ switch save, case true
 end
 
 
+close all
+
+
 %% Time evolution
 
 % These polygon plots should be extended to show water masses of Atlantic
 % and of Arctic orgin because some sampling events use trajectories
 % originating from both oceans... red for Atlantic blue for Arctic
-
-close all
 
 % Choose event
 sampleEvent = 1;
@@ -1607,31 +1281,29 @@ plt_Arctic = plot_timeSeries_trajectoryPolygon('phytoZooPlanktonStacked', ...
     [], [], out0, auxVars0, FixedParams, Forc0, Data0, ...
     'waterMass', 'Arctic');
 
-
-
-axesTextSize = 16;
-titleTextSize = 16;
-legendTextSize = 16;
-legendPointSize = 60;
-plt_Atlantic = plot_timeSeries_trajectoryPolygon('phytoZooPlanktonStacked', ...
-    [], [], out0, auxVars0, FixedParams, Forc0, Data0, ...
-    'waterMass', 'Atlantic', 'axesTextSize', axesTextSize, ... 
-    'titleTextSize', titleTextSize, 'legendTextSize', legendTextSize, ...
-    'legendPointSize', legendPointSize);
-plt_Atlantic.Units = 'inches';
-plt_Atlantic.Position = [0 0 10 4];
-gc = gca;
-yl = gc.YLim;
-
-plt_Arctic = plot_timeSeries_trajectoryPolygon('phytoZooPlanktonStacked', ...
-    [], [], out0, auxVars0, FixedParams, Forc0, Data0, ...
-    'waterMass', 'Arctic', 'axesTextSize', axesTextSize, ... 
-    'titleTextSize', titleTextSize, 'legendTextSize', legendTextSize, ...
-    'legendPointSize', legendPointSize);
-plt_Arctic.Units = 'inches';
-plt_Arctic.Position = [0 0 10 4];
-gc = gca;
-gc.YLim = yl;
+% axesTextSize = 16;
+% titleTextSize = 16;
+% legendTextSize = 16;
+% legendPointSize = 60;
+% plt_Atlantic = plot_timeSeries_trajectoryPolygon('phytoZooPlanktonStacked', ...
+%     [], [], out0, auxVars0, FixedParams, Forc0, Data0, ...
+%     'waterMass', 'Atlantic', 'axesTextSize', axesTextSize, ... 
+%     'titleTextSize', titleTextSize, 'legendTextSize', legendTextSize, ...
+%     'legendPointSize', legendPointSize);
+% plt_Atlantic.Units = 'inches';
+% plt_Atlantic.Position = [0 0 10 4];
+% gc = gca;
+% yl = gc.YLim;
+% 
+% plt_Arctic = plot_timeSeries_trajectoryPolygon('phytoZooPlanktonStacked', ...
+%     [], [], out0, auxVars0, FixedParams, Forc0, Data0, ...
+%     'waterMass', 'Arctic', 'axesTextSize', axesTextSize, ... 
+%     'titleTextSize', titleTextSize, 'legendTextSize', legendTextSize, ...
+%     'legendPointSize', legendPointSize);
+% plt_Arctic.Units = 'inches';
+% plt_Arctic.Position = [0 0 10 4];
+% gc = gca;
+% gc.YLim = yl;
 
 switch save
     case true
@@ -1646,70 +1318,14 @@ switch save
 end
 
 
-
-% plt = plot_timeSeries_barplot('phytoZooPlankton',sampleEvent,traj,out,FixedParams,Forc,Data);
-% 
-% switch save
-%     case true
-%         if exist('plt', 'var') && isvalid(plt)
-%             filename = ['barplot_timeSeries_plankton_sampleEvent' num2str(sampleEvent) '.png'];
-%             print(plt, fullfile(folder, filename), '-r300', '-dpng');
-%         end
-% end
-% 
-
-
-
-% Make animated plots showing fluctuations in abundance, and possibly
-% predator cycles, and probably increased variability within the smallest
-% size classes
-
-% work in progress...
-
-folderAnimate = '/home/aidan/Desktop/temp/meeting/animate';
-
-ESDp = FixedParams.PPdia;
-ESDz = FixedParams.ZPdia;
-xp = auxVars.biovolume(FixedParams.phytoplankton,:,:,1);
-xz = auxVars.biovolume(FixedParams.zooplankton,:,:,1);
-xp = squeeze(sum(xp,2));
-xz = squeeze(sum(xz,2));
-
-% normalise abundances over size
-xp = xp ./ sum(xp);
-xz = xz ./ sum(xz);
-
-% plotFun = @semilogx;
-plotFun = @loglog;
-
-for yearday = min(Forc.Yearday(:)):max(Forc.Yearday(:))
-    
-    plt = figure;
-    plotFun(ESDp, xp(:,yearday), '-o')
-    hold on
-    plotFun(ESDz, xz(:,yearday), '-o')
-    hold off
-    xlabel('ESD (\mum)')
-    ylabel('Relative bio-volume')
-    legend('autotrophs', 'heterotrophs')
-    title(['Day ' num2str(yearday) ': 2018'])
-    
-    filename = ['relativeBiovolume_day' num2str(yearday) '.png'];
-    print(plt, fullfile(folderAnimate, filename), '-r300', '-dpng');
-    
-    close(plt)
-    
-    disp(yearday)
-    
-end
-
-
-
+close all
 
 
 %% Network plots -- fluxes, production
 
-close all
+% Ome of these network plots are too busy -- too many overlapping
+% connections. The same information can be displayed differently as
+% 'heatmaps' or tables...
 
 % Feeding fluxes
 
@@ -1771,71 +1387,6 @@ end
 
 
 
-
-%% Parameter plots -- correlations, sensitivities
-
-parNames = results.parNames;
-popHist = results.populationHistory;
-costHist = results.scoreHistory;
-
-size(popHist)
-size(costHist)
-
-% plot cost against parameter values to gauge sensitivity
-ip = 1;
-
-for ip = 1:length(parNames)
-    pn = parNames(ip);
-    p = popHist(:,ip,:);
-    figure
-    scatter(p(:), costHist(:))
-    xlabel(pn); ylabel('cost')
-end
-
-
-
-
-
-
-
-
-% index parameter sets within 15% of best cost
-optCost = min(costHist(:));
-costInd = costHist <= optCost + 0.5 * optCost;
-costInd = reshape(costInd, [100, 1, 40]);
-% costInd = repmat(reshape(costInd, [100, 1, 40]), [1, length(parNames), 1]);
-
-
-Gmax_a_i = strcmp(parNames, 'Gmax_a');
-k_G_i = strcmp(parNames, 'k_G');
-m_a_i = strcmp(parNames, 'm_a');
-
-Gmax_a = popHist(:,Gmax_a_i,:);
-k_G = popHist(:,k_G_i,:);
-m_a = popHist(:,m_a_i,:);
-
-figure
-scatter(Gmax_a(costInd), k_G(costInd))
-scatter(m_a(costInd), Gmax_a(costInd))
-
-
-figure
-scatter(Gmax_a(:), costHist(:))
-
-figure
-Gmax_b_i = strcmp(parNames, 'Gmax_b');
-Gmax_b = -exp(popHist(:,Gmax_b_i,:));
-scatter(Gmax_b(:), costHist(:))
-
-
-figure
-m_b_i = strcmp(parNames, 'm_b');
-m_b = -exp(popHist(:,m_b_i,:));
-scatter(m_b(:), costHist(:))
-
-
-
-
 %% Plot groups of trajectories corresponding to each event
 
 % These plots need improved... better to run model over ALL available
@@ -1859,60 +1410,4 @@ outputPlot('trajectoryLine_LatLong','phytoplankton_N',ie,kk,out,FixedParams,Forc
 
 
 close all
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-% %### in progress...
-% 
-% ie = 1; % sampling event
-% kk = find(Data.scalar.EventTraj(ie,:)); % all trajectories for selected event
-% k = kk(7); % single trajectory
-% 
-% % x = out.N(:,:,:,:);
-% x = out.N(:,:,:,k);
-% 
-% xmin = squeeze(min(x));
-% xmax = squeeze(max(x));
-% % tt = yearday(Forc.t(:,:));
-% tt = yearday(Forc.t(:,k));
-% n = size(tt, 1);
-% 
-% lat = Forc.y(:,k); % latitude
-% % lat = Forc.y(:,:); % latitude
-% % plot colour changing with latitude along line..?
-% 
-% xmin = reshape(xmin, [1 n]);
-% xmax = reshape(xmax, [1 n]);
-% tt = reshape(tt, [1 n]);
-% lat = reshape(lat, [1 n]);
-% z = zeros(size(xmin));
-% 
-% figure
-% surface([tt;tt], [xmin;xmin], [z;z], [lat;lat], ...
-%     'facecol', 'no', 'edgecol', 'interp', 'linew', 2)
-% hold on
-% surface([tt;tt], [xmax;xmax], [z;z], [lat;lat], ...
-%     'facecol', 'no', 'edgecol', 'interp', 'linew', 2)
-% hold off
-% cb = colorbar();
-% deg = char(176);
-% cb.Label.String = ['latitude (' deg 'N)'];
-% xlabel('day of year')
-% ylabel(['DIN (mmol N m^{-3})'])
-% title('max and min DIN over time')
-% 
-% 
-% colormap(plasma)
-% 
-% % ###
-% % Aggregate trajectories originating from Atlantic and Arctic waters then
-% % make summmary plots displaying typical (across-trajectories) results...
-% 
-% pltN = TimeEvolution_ColByLat_GroupTrajectories(out, Forc, FixedParams, 'DIN', 'minmax');
-% 
-% pltOM_N = TimeEvolution_ColByLat_GroupTrajectories(out, Forc, FixedParams, 'OM_N', 'max');
-% pltOM_C = TimeEvolution_ColByLat_GroupTrajectories(out, Forc, FixedParams, 'OM_C', 'max');
-% 
-% now do the zooplanton... save phyto till last...
-% 
 
