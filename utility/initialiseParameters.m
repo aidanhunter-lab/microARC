@@ -294,6 +294,11 @@ if (isfield(Params, 'm_a') && isfield(Params, 'm_b')) && ...
     Params.m = Params.m_func(Params.m_a, Params.m_b, Vol);
 end
 
+if isfield(Params, 'K_m_coef') && ~isempty(Params.K_m_coef) && ...
+        ~isempty(Params.Q_C)
+    Params.K_m = Params.K_m_func(Params.K_m_coef, Params.Q_C);
+end
+
 if (isfield(Params, 'wp_a') && isfield(Params, 'wp_b')) && ...
         ~(isempty(Params.wp_a) || isempty(Params.wp_b))
     nz = FixedParams.nz;

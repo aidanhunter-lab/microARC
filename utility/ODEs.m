@@ -73,6 +73,12 @@ out.gammaT = exp(params.A .* (T - params.Tref));
 % Background mortality
 % out.mortality = params.m .* B;
 out.mortality = (params.m + params.m2 .* B) .* B;
+if isfield(params, 'K_m') && any(params.K_m > 0)
+    % hyperbolic term reduces mortality at very low abundance
+    out.mortality = (B ./ (params.K_m + B)) .* out.mortality;
+end
+    
+
 
 %~~~~~~~~~~~
 % Autotrophy
