@@ -60,7 +60,10 @@ if ~isempty(varargin)
             Params.wk = Params.wk_func(Params.wDOM, Params.wPOM);
         end
         
-                
+        if any(strcmp('sigG', parnames))
+            Params.phi = Params.phi_func(Params.delta_opt, Params.sigG, FixedParams.delta);
+        end
+        
     else % if new params are passed as name-values pairs
         
         extractVarargin(varargin)
@@ -141,6 +144,10 @@ if ~isempty(varargin)
         
         if exist('wDOM1', 'var') || exist('wPOM1', 'var')
             Params.wk = Params.wk_func(Params.wDOM, Params.wPOM);
+        end
+        
+        if exist('sigG', 'var')
+            Params.phi = Params.phi_func(Params.delta_opt, Params.sigG, FixedParams.delta);
         end
         
     end

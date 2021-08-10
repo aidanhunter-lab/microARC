@@ -233,6 +233,8 @@ Params.Gmax = [];
 % Params.k_G = [];
 
 % prey size preferences
+Params.phi_func = @(delta_opt, sigG, delta) ... 
+    exp(-log(delta ./ delta_opt) .^ 2 ./ (2 .* sigG .^ 2));
 Params.phi = [];
 
 % background mortality -- linear
