@@ -148,6 +148,7 @@ Params.vectorParams = {
     'Gmax_b'
     'm_a'
     'm_b'
+    'K_m_coef'
     'beta1'
     'beta2'
     'beta3'
@@ -242,6 +243,14 @@ Params.m_b = 0; % mortality size-exponent
 % Params.m_b = -0.1; % mortality size-exponent
 Params.m_b = log(-Params.m_b); % estimate on negative log scale
 Params.m = [];
+
+% Hyperbolic term in mortality expression may be used to prevent extremely
+% low abundances/extinction during prolonged poor growth conditions.
+% Setting K_m_coef=0 removes this effect.
+Params.K_m_func = @(K_m_coef, Q_C) K_m_coef .* Q_C; % I'm not convinced that multiplying Q_C is a good approach... but just now I cant think of a better and principled method...
+% Params.K_m_coef = 1; % Params.K_m_coef = 1 is equivalent to mortality 'half-saturation' at concentration of 1 cell / m^3
+Params.K_m_coef = 0;
+Params.K_m = [];
 
 % sinking plankton (parameter sensitivity assessment suggests omitting
 % plankton sinking => set to zero)
@@ -356,6 +365,9 @@ Bounds.Lambda     = [-1.5, -0.5];
 Bounds.lambda_max = [0.5, 0.9];
 Bounds.wDOM1      = [0, 0];
 
+% Bounds.K_m_coef   = [1, 1];
+Bounds.K_m_coef   = [0, 0];
+
 % The POM sinking speed has proven to be an awkward parameter... I think
 % thath including both PON and POC data within the cost function is
 % problematic as these combined data create undesirable local minama. I
@@ -461,6 +473,7 @@ end
 function vol = d2vol(d)
 vol = 4 ./ 3 .* pi .* (0.5 .* d) .^ 3;
 end
+% d2vol = @(z) 4 ./ 3 .* pi .* (0.5 .* z) .^ 3;
 
 % function d = vol2d(vol)
 % d = 2 .* (vol .* (3 ./ 4 ./ pi)) .^ (1/3);
@@ -469,3 +482,4 @@ end
 function y = powerFunction(a,b,x)
 y = a .* x .^ b;
 end
+% powerFunction = @(a,b,x) a .* x .^ b;
