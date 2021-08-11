@@ -176,7 +176,9 @@ end
 % These could be returned from the ODEs.m script but it's more
 % memory-efficient to calculate quantities here...
 
-if (islogical(returnExtra) && returnExtra) || all(strcmp(returnExtra, 'all'))
+% This should be moved to a unique function called 'derivedQuantities.m'
+
+if (islogical(returnExtra) && returnExtra) || any(strcmp(returnExtra, 'all'))
     
     dt = unique(diff(Forc.t(:,1)));
     
@@ -223,7 +225,8 @@ if (islogical(returnExtra) && returnExtra) || all(strcmp(returnExtra, 'all'))
         find(size(auxVars.OM_mess_POM_depthInt) == nt));    
     % Mortality
     B = [out.P(:,:,~FixedParams.PP_Chl_index,:,:); out.Z];
-    mortality = Params.m .* B;
+    mortality = (Params.m + Params.m2 .* B) .* B;
+%     mortality = Params.m .* B;
     auxVars.OM_mort_DOM = Params.beta .* mortality;
     auxVars.OM_mort_POM = mortality - auxVars.OM_mort_DOM;
     auxVars.OM_mort_DOM_depthInt = sum(reshape(FixedParams.zwidth, [1, nz]) .* ...

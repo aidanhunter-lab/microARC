@@ -301,18 +301,21 @@ end
 
 % Convert units of original data into units used in model (keep all
 % elemental concentrations in mmol)
-dat_size.cellDensity = 1e3 * dat_size.cellDensity; % cells/L -> cells/m^3
-dat_size.cellDensitySD = 1e3 * dat_size.cellDensitySD; % cells/L -> cells/m^3
-dat_size.cellDensitySE = 1e3 * dat_size.cellDensitySE; % cells/L -> cells/m^3
-dat_size.cellDensityCImin = 1e3 * dat_size.cellDensityCImin; % cells/L -> cells/m^3
-dat_size.cellDensityCImax = 1e3 * dat_size.cellDensityCImax; % cells/L -> cells/m^3
+dat_size.cellDensity = 1e3 * dat_size.cellDensity; % cells/L/log10(ESD) -> cells/m^3/log10(ESD)
+dat_size.cellDensitySD = 1e3 * dat_size.cellDensitySD; % cells/L/log10(ESD) -> cells/m^3/log10(ESD)
+dat_size.cellDensitySE = 1e3 * dat_size.cellDensitySE; % cells/L/log10(ESD) -> cells/m^3/log10(ESD)
+dat_size.cellDensityCImin = 1e3 * dat_size.cellDensityCImin; % cells/L/log10(ESD) -> cells/m^3/log10(ESD)
+dat_size.cellDensityCImax = 1e3 * dat_size.cellDensityCImax; % cells/L/log10(ESD) -> cells/m^3/log10(ESD)
 for i = 1:ne
     % nitrogen per cell: pg N / cell -> mmol N / cell
     dat_size.(['NperCell_' NsizeEqs{i}]) = ... 
         (1/14) * 1e-9 * dat_size.(['NperCell_' NsizeEqs{i}]);
 end
 
-dat_size.BioVolDensity = 1e-18 * dat_size.cellVolume .* dat_size.cellDensity; % m^3 / m^3
+% Derive bio-volume variable
+scaleFactor = 1; % may alter biovolume density units using scaleFactor... scaleFactor = 1 => units = (mu m)^3 / m^3 /log10(ESD)
+dat_size.BioVolDensity = scaleFactor .* dat_size.cellVolume .* dat_size.cellDensity;
+dat_size.BioVolDensitySD = abs(scaleFactor .* dat_size.cellVolume) .* dat_size.cellDensitySD;
 
 for i = 1:ne
     % nitrogen density: mug N / L -> mmol N / m^3
@@ -327,7 +330,7 @@ dat_size.Ndensity = mean(dat_size{:,strcat('Ndensity_', NsizeEqs)}, 2);
 % Remove unnecessary variables
 % scenarios = unique(dat_size.scenario)'; % data collected from different cruises/years
 keepVars = [{'scenario', 'season', 'regime', 'trophicLevel', 'ESD', 'cellVolume', ...
-    'cellDensity', 'cellDensitySD', 'BioVolDensity'}, strcat('Ndensity_', NsizeEqs), 'Ndensity'];
+    'cellDensity', 'cellDensitySD', 'BioVolDensity', 'BioVolDensitySD'}, strcat('Ndensity_', NsizeEqs), 'Ndensity'];
 dat_size = dat_size(:,keepVars);
 
 
@@ -341,8 +344,8 @@ dat_size_all = readtable(fullfile(obsDir, sizeSpectraObsFile), 'Format', 'auto')
 
 % Convert units of original data into units used in model (keep all
 % elemental concentrations in mmol)
-dat_size_all.cellDensity = 1e3 * dat_size_all.cellDensity; % cells/L -> cells/m^3
-dat_size_all.BioVolDensity = 1e-18 * dat_size_all.cellVol .* dat_size_all.cellDensity; % m^3 / m^3
+dat_size_all.cellDensity = 1e3 * dat_size_all.cellDensity; % cells/L/log10(ESD) -> cells/m^3/log10(ESD)
+dat_size_all.BioVolDensity = scaleFactor * dat_size_all.cellVol .* dat_size_all.cellDensity; % (mu m)^3 / m^3 / log10(ESD) if scaleFactor = 1
 
 % Reformat labels
 dat_size_all.Properties.VariableNames({'PangaeaEventLabel','depth','lat','long','date'}) = ...
@@ -391,17 +394,20 @@ nutrition = unique(dat_size_all.nutrition, 'stable');
 
 %~~~
 % optional plots
-plotCellConcSpectra = exist('plotCellConcSpectra', 'var') && plotCellConcSpectra;
-plotBioVolSpectra = exist('plotBioVolSpectra', 'var') && plotBioVolSpectra;
-plotNconcSpectra = exist('plotNconcSpectra', 'var') && plotNconcSpectra;
-
-% makePlots = table(plotNconcSpectra, plotCellConcSpectra, plotBioVolSpectra);
-% makePlots.Properties.VariableNames = {'Ndensity', 'cellDensity', 'BioVolDensity'};
+if ~exist('plotCellConcSpectra', 'var')
+    plotCellConcSpectra = false;
+end
+if ~exist('plotBioVolSpectra', 'var')
+    plotBioVolSpectra = false;
+end
+if ~exist('plotNconcSpectra', 'var')
+    plotNconcSpectra = false;
+end
 
 makePlots = table();
-if plotNconcSpectra, makePlots.Ndensity = true; end
-if plotCellConcSpectra, makePlots.cellDensity = true; end
-if plotBioVolSpectra, makePlots.BioVolDensity = true; end
+switch plotNconcSpectra, case true ,makePlots.Ndensity = true; end
+switch plotCellConcSpectra, case true, makePlots.cellDensity = true; end
+switch plotBioVolSpectra, case true, makePlots.BioVolDensity = true; end
 
 cluster = unique(dat_size_all.cluster);
 cols = [[0 0 1]; [1 0 0]]; % Colour plot lines by water temperature
@@ -449,9 +455,9 @@ if ~isempty(makePlots)
                         yunit = 'cells m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
                         Title = 'Cell conc. density spectra: all sampling events';
                     case 'BioVolDensity'
-                        gc.YLim(1) = 1e-3 * 1e-6;
+                        gc.YLim(1) = min(d.cellVol);
                         ylab = 'bio vol density';
-                        yunit = 'm$^3\,$m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
+                        yunit = '$\mu$m$^3\,$m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
                         Title = 'Bio-volume density spectra: all sampling events';
                 end
                 gc.YLim(2) = 2 * max(dat_size_all.(pv));
@@ -517,9 +523,10 @@ if ~isempty(makePlots)
                         yunit = 'cells m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
                         Title = 'Cell conc. density spectra:  warm/cold regime averages';
                     case 'BioVolDensity'
-                        gc.YLim(1) = 1e-3 * 1e-6;
+                        gc.YLim(1) = min(d.cellVol);
+%                         gc.YLim(1) = 1e-3 * 1e-6;
                         ylab = 'bio vol density';
-                        yunit = 'm$^3\,$m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
+                        yunit = '$\mu$m$^3\,$m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
                         Title = 'Bio-volume density spectra:  warm/cold regime averages';
                 end
                 gc.YLim(2) = 2 * max(dat_size_all.(pv));
@@ -533,7 +540,7 @@ if ~isempty(makePlots)
                 end
                 
                 if ir == 1 && ic ==1
-                    lgd = legend(cluster, 'Location', 'northeast');
+                    lgd = legend(cluster, 'Location', 'south');
                     title(lgd, 'Regime')
                 end
 

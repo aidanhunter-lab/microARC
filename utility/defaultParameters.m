@@ -15,17 +15,25 @@ FixedParams.years = []; % number of modelled years (determined from forcing and 
 %~~~~~~~~~~~~~
 % Depth layers
 %~~~~~~~~~~~~~
-% FixedParams.nz     = 15;                                                   % number of modelled depth layers
+% Modelled layer width increases with depth => model has greater resolution
+% near surface waters. Define 2 depth zones: from the surface to depth
+% Hmain; and from depth Hmain to Htot. The 1st of these zones should be set
+% where the interesting plankton dynamics occurs -- where there's
+% sufficient light. Within this zone, the depth layer widths increase with
+% depth. The 2nd zone is included to model variables at depths below the 
+% nitrocline, and should be set with reference to nutrient data. This zone
+% is simply a single extra wide modelled layer.
 FixedParams.nz     = 9;                                                    % number of modelled depth layers
-% FixedParams.Htot   = 150;                                                  % total modelled depth
-FixedParams.Htot   = 80;                                                   % total modelled depth
+FixedParams.Hmain = 100;
+FixedParams.Htot  = 300;                                                   % total modelled depth
 FixedParams.dzmin  = 5;                                                    % minimum layer width (dzmin <= Htot/(nz-1))
-FixedParams.dzmax  = 2 * FixedParams.Htot / FixedParams.nz - ... 
+FixedParams.dzmax  = 2 * FixedParams.Hmain / (FixedParams.nz - 1) - ... 
     FixedParams.dzmin;                                                     % maximum layer width
 FixedParams.zwidth = linspace(FixedParams.dzmin, FixedParams.dzmax, ... 
-    FixedParams.nz)';                                                      % widths of depth layers
+    FixedParams.nz - 1)';                                                  % widths of depth layers
+FixedParams.zwidth = [FixedParams.zwidth; ... 
+    FixedParams.Htot - FixedParams.Hmain];
 FixedParams.zw     = [0; -cumsum(FixedParams.zwidth)];                     % depth of layer edges
-FixedParams.zwidth = FixedParams.zw(1:end-1) - FixedParams.zw(2:end);      % widths of depth layers
 FixedParams.z      = [];                                                   % midpoints of depth layers
 FixedParams.delz   = [];                                                   % distance between centres of adjacent depth layers
 
@@ -99,15 +107,16 @@ maxDepthLayerClearRate = 0.1;                              % max rate at which d
 FixedParams.maxSinkSpeed_P = maxDepthLayerClearRate .* ...
     min(FixedParams.zwidth);                               % max sinking speed of plankton (when this is too great the model becomes unstable because cells clear from depth layers too quickly)
 FixedParams.POM_is_lost  = true;                           % is POM lost from the system by sinking below bottom modelled depth layer
-
+FixedParams.NclineDepth = 110;                             % depth of N-cline -- in-situ data sampled below NclineDepth should not vary much with depth, check plots of data to set this parameter.
 
 %% Variable parameters
 
-% List names of all parameters that may be numerically optimised
+% List names of all parameters that MAY be numerically optimised
 Params.scalarParams = {
     'Tref'
     'A'
     'h'
+    'm2'
     'aP'
     'theta'
     'xi'
@@ -139,6 +148,7 @@ Params.vectorParams = {
     'Gmax_b'
     'm_a'
     'm_b'
+    'K_m_coef'
     'beta1'
     'beta2'
     'beta3'
@@ -223,20 +233,34 @@ Params.Gmax = [];
 % Params.k_G = [];
 
 % prey size preferences
+Params.phi_func = @(delta_opt, sigG, delta) ... 
+    exp(-log(delta ./ delta_opt) .^ 2 ./ (2 .* sigG .^ 2));
 Params.phi = [];
 
-% background mortality
+% background mortality -- linear
 % Params.m_func = @(a,b,V) powerFunction(a,b,V);
 Params.m_func = @(a,b,V) powerFunction(a,-exp(b),V);
 Params.m_a = 0.05; % mortality for cell volume = 1 mu m ^ 3
-Params.m_b = -0.1; % mortality size-exponent
+Params.m_b = 0; % mortality size-exponent
+% Params.m_b = -0.1; % mortality size-exponent
 Params.m_b = log(-Params.m_b); % estimate on negative log scale
 Params.m = [];
 
-% sinking plankton
+% Hyperbolic term in mortality expression may be used to prevent extremely
+% low abundances/extinction during prolonged poor growth conditions.
+% Setting K_m_coef=0 removes this effect.
+Params.K_m_func = @(K_m_coef, Q_C) K_m_coef .* Q_C; % I'm not convinced that multiplying Q_C is a good approach... but just now I cant think of a better and principled method...
+% Params.K_m_coef = 1; % Params.K_m_coef = 1 is equivalent to mortality 'half-saturation' at concentration of 1 cell / m^3
+Params.K_m_coef = 0;
+Params.K_m = [];
+
+% sinking plankton (parameter sensitivity assessment suggests omitting
+% plankton sinking => set to zero)
 Params.wp_func = @(a,b,V) powerFunction(a,b,V);
-Params.wp_a = 1e-5; % intercept = 0 => no sinking at any size
-Params.wp_b = 0.33;
+% Params.wp_a = 1e-5; % intercept = 0 => no sinking at any size
+Params.wp_a = 0; % intercept = 0 => no sinking at any size
+% Params.wp_b = 0.33;
+Params.wp_b = 0;
 Params.wp = [];
 
 % partitioning of dead matter into DOM and POM,  initial values from Ward et al. (2016)
@@ -248,7 +272,9 @@ Params.beta3 = 2.0;
 Params.beta = [];
 
 % Size-independent
-Params.aP = 0.0277;           % initial slope of photosynthesis(metabolism)-irradiance curve [mmol C / (mg Chl mu Ein / m^2)]
+% Params.m2 = 1e-5;           % quadratic, density-dependent, term in background mortality (1/day)
+Params.m2 = 0;              % param sensitivity analysis suggests setting quadratic mortality term to zero...
+Params.aP = 3.83e-7;        % initial slope of photosynthesis-irradiance curve [(mmol C m^2) / (mg Chl mu Ein)]
 Params.theta = 4.2;         % maximum chl:N ratio [mg Chl / mmol N], Geider et al., 1998
 Params.xi = 2.33;           % cost of photosynthesis (mmol C / mmol N)
 Params.Tref = 20;           % reference temperature (degrees C)
@@ -300,7 +326,7 @@ switch FixedParams.depthDependentPOMsinkSpeed
     case false
         % POM sink speed is constant over depth
         Params.wPOM_func = @(wPOM1, nz) wPOM1 .* ones(nz,1);
-        Params.wPOM1 = 1; % this is set far lower than Ward (2012, 2016), but it POM sink speed needs to be this low to fit the data, unless remineralisation rates are made far greater...
+        Params.wPOM1 = 1; % this is set far lower than Ward (2012, 2016), but POM sink speed needs to be this low to fit the data, unless remineralisation rates are made far greater...
         Params.wPOM = [];
     case true
         % Allow reduction of POM sinking speed near surface for low values of
@@ -327,15 +353,28 @@ Params.wk = [];
 Bounds.Tref       = [20, 20];
 Bounds.A          = [0.01, 0.2];
 Bounds.h          = [5, 15];
-Bounds.aP         = [0, 0.5];
+Bounds.m2         = [0, 1e-3];
+% Bounds.aP         = [7.66e-8, 5.75e-6];
+Bounds.aP         = [1e-10, 5.75e-6];
+% Bounds.aP         = [0, 0.5];
 Bounds.theta      = [3, 5];
 Bounds.xi         = [1.5, 5];
-Bounds.k_G        = [0.5, 10];
-Bounds.sigG        = [0.25, 2.5];
+% Bounds.k_G        = [0.5, 10];
+Bounds.k_G        = [0.5, 30];
+Bounds.sigG       = [0.25, 2.5];
 Bounds.delta_opt  = [10, 10];
 Bounds.Lambda     = [-1.5, -0.5];
 Bounds.lambda_max = [0.5, 0.9];
-Bounds.wDOM1       = [0, 0];
+Bounds.wDOM1      = [0, 0];
+
+% Bounds.K_m_coef   = [1, 1];
+Bounds.K_m_coef   = [0, 0];
+
+% The POM sinking speed has proven to be an awkward parameter... I think
+% thath including both PON and POC data within the cost function is
+% problematic as these combined data create undesirable local minama. I
+% think that excluding the POC data from the cost function could be useful,
+% or perhaps just fixing wPOM1 to constant value...
 switch FixedParams.depthDependentPOMsinkSpeed
     case false
         Bounds.wPOM1 = [0.5, FixedParams.maxSinkSpeed_POM];
@@ -363,6 +402,7 @@ Bounds.Qmin_QC_a = max(0, Bounds.Qmin_QC_a); % required Qmin_QC_a > 0
 
 Bounds.Qmin_QC_b = -Params.Q_C_b + [0.77, 0.92];
 Bounds.Qmin_QC_b = max(Bounds.Qmin_QC_b, -Params.Q_C_b); % required Qmin_QC_b > - Q_C_b
+Bounds.Qmin_QC_b(2) = 2.5 * Bounds.Qmin_QC_b(2); % Param sensitivity analysis suggest extending upper bound could be useful...
 
 Bounds.Qmax_delQ_a = [10^(-1.78 - (-0.99)), 10^(-1.26 - (-1.35))];
 Bounds.Qmax_delQ_a = min(1, max(0, Bounds.Qmax_delQ_a)); % required 0 < Qmax_delQ_a < 1
@@ -373,6 +413,8 @@ Bounds.Qmax_delQ_b = sort(log(-Bounds.Qmax_delQ_b)); % estimate on log negative 
 
 Bounds.Vmax_QC_a = 24 / 14 * 1e-9 / Params.Q_C_a * [10^-3.18, 10^-2.78]; % Vmax bounds from Maranon (2013)
 Bounds.Vmax_QC_b = -Params.Q_C_b + [0.89, 1.06];
+Bounds.Vmax_QC_b(2) = 3 * Bounds.Vmax_QC_b(2); % param sensitivity suggests extending upper bound could be useful...
+
 
 % Bounds.aN_QC_a = Bounds.Vmax_QC_a ./ [10^-0.44, 10^-1.2]; % N affinity bounds from Edwards et al. (2015)
 % Bounds.aN_QC_b = Bounds.Vmax_QC_b -[0.45, 0.24];
@@ -382,7 +424,10 @@ Bounds.Vmax_QC_b = -Params.Q_C_b + [0.89, 1.06];
 
 % try these more restrictive bounds for affinity -- I think the above provided too much freedom...
 Bounds.aN_QC_a = Params.Vmax_QC_a ./ [10^-0.44, 10^-1.2]; % N affinity bounds from Edwards et al. (2015)
+Bounds.aN_QC_a(2) = 3 * Bounds.aN_QC_a(2); % param sensitivity suggests extending upper bound could be useful...
+
 Bounds.aN_QC_b = Params.Vmax_QC_b -[0.45, 0.24];
+Bounds.aN_QC_b(2) = -0.025; % param sensitivity suggests extending upper bound could be useful (although size dependency of N affinity should be significant!)
 Bounds.aN_QC_b = sort(log(-Bounds.aN_QC_b)); % estimate on negative log scale
 
 
@@ -402,9 +447,10 @@ Bounds.Gmax_b = sort(log(-Bounds.Gmax_b)); % esimated on negative log scale
 % Bounds.k_G_a = [0, 10];
 % Bounds.k_G_b = [0, 1];
 
-Bounds.m_a = [FixedParams.m_min, 0.1];
-Bounds.m_b = [-1, -1e-2]; % negativity ensures that mortality rate decreases with size
-Bounds.m_b = sort(log(-Bounds.m_b)); % estiamte on negative log scale
+Bounds.m_a = [2 .* FixedParams.m_min, 0.1]; % if m_a=m_min then m_b becomes totally irrelevant => set lower bound of m_a > m_min
+Bounds.m_b = [-1, 0]; % negativity ensures that mortality rate decreases with size
+% Bounds.m_b = [-1, -1e-2]; % negativity ensures that mortality rate decreases with size
+Bounds.m_b = sort(log(-Bounds.m_b)); % estimate on negative log scale
 
 Bounds.beta1 = [0.5, 1];
 Bounds.beta2 = [0, 0.9];
@@ -429,6 +475,7 @@ end
 function vol = d2vol(d)
 vol = 4 ./ 3 .* pi .* (0.5 .* d) .^ 3;
 end
+% d2vol = @(z) 4 ./ 3 .* pi .* (0.5 .* z) .^ 3;
 
 % function d = vol2d(vol)
 % d = 2 .* (vol .* (3 ./ 4 ./ pi)) .^ (1/3);
@@ -437,3 +484,4 @@ end
 function y = powerFunction(a,b,x)
 y = a .* x .^ b;
 end
+% powerFunction = @(a,b,x) a .* x .^ b;

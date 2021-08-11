@@ -1,4 +1,22 @@
-function plt = plot_network(Type, nutrient, auxVars, FixedParams, Forc, traj)
+function plt = plot_network(Type, nutrient, auxVars, FixedParams, Forc, traj, varargin)
+
+extractVarargin(varargin)
+
+if ~exist('axesTextSize', 'var')
+    axesTextSize = 12;
+end
+if ~exist('titleTextSize', 'var')
+    titleTextSize = 12;
+end
+if ~exist('legendTextSize', 'var')
+    legendTextSize = 12;
+end
+if ~exist('legendPointSize', 'var')
+    legendPointSize = 36;
+end
+
+
+
 
 % plt = figure;
 
@@ -22,7 +40,7 @@ switch Type
         
         % primary production
         uptake = squeeze(auxVars.PP_uptake_tot(:,:,:,:,traj));
-        uptake = mean(uptake, 3); % average over trajectories
+        uptake = mean(uptake, 3, 'omitnan'); % average over trajectories
         nodes.uptake_C = [uptake(:,FixedParams.PP_C_index); ...
             zeros(FixedParams.nZP_size, 1)]; % mmol C / m2 / year(simulation time)
         nodes.uptake_N = [uptake(:,FixedParams.PP_N_index); ...
@@ -30,7 +48,7 @@ switch Type
         
         % grazing gains
         predation = squeeze(auxVars.predation_gains_tot(:,:,:,:,:,traj));
-        predation = mean(predation, 3); % average over trajectories
+        predation = mean(predation, 3, 'omitnan'); % average over trajectories
         nodes.grazeGains_C = [zeros(FixedParams.nPP_size, 1); ...
             predation(:,FixedParams.ZP_C_index)];
         nodes.grazeGains_N = [zeros(FixedParams.nPP_size, 1); ...
@@ -43,11 +61,12 @@ switch Type
         end
         
         pred_losses = squeeze(auxVars.predation_losses_tot(:,:,:,:,:,traj));
-        pred_losses = mean(pred_losses, 4); % average over trajectories
+        pred_losses = mean(pred_losses, 4, 'omitnan'); % average over trajectories
         
         % For each prey class, set to zero any feeding flux that accounts for less
         % than x% of the total losses.
-        x = 1;
+%         x = 1;
+        x = 5;
         nearZero = pred_losses ./ sum(pred_losses) < (x / 100);
         pred_losses(nearZero) = 0;
         pred_losses = [zeros(FixedParams.nPP_size, FixedParams.nPP_size + FixedParams.nZP_size, size(pred_losses, 3)); ...
@@ -91,6 +110,8 @@ switch Type
         
         plt.Parent.YTick = [];
         plt.Parent.YTickLabel = [];
+        
+        set(gca, 'FontSize', axesTextSize)
         
         xnat = [linspace(0.1, 1, 10), linspace(2, 10, 9), linspace(20, 100, 9), linspace(200, 1000, 9)];
         xlog = log10(xnat);
@@ -143,14 +164,14 @@ switch Type
         xl = plt.Parent.XLim;
         yl = plt.Parent.YLim;
         
-        text(xl(1) + 0.05 * diff(xl), yl(2) - 0.05 * diff(yl), 'autotrophs')
-        text(xl(1) + 0.05 * diff(xl), yl(2) - 0.1 * diff(yl), 'heterotrophs')
+        text(xl(1) + 0.05 * diff(xl), yl(2) - 0.05 * diff(yl), 'autotrophs', 'FontSize', legendTextSize)
+        text(xl(1) + 0.05 * diff(xl), yl(2) - 0.15 * diff(yl), 'heterotrophs', 'FontSize', legendTextSize)
         
         hold on
         scatter(xl(1) + 0.025 * diff(xl), yl(2) - 0.05 * diff(yl), ...
-            'MarkerFaceColor', green, 'MarkerEdgeColor', green)
-        scatter(xl(1) + 0.025 * diff(xl), yl(2) - 0.1 * diff(yl), ...
-            'MarkerFaceColor', red, 'MarkerEdgeColor', red)
+            'MarkerFaceColor', green, 'MarkerEdgeColor', green, 'SizeData', legendPointSize)
+        scatter(xl(1) + 0.025 * diff(xl), yl(2) - 0.15 * diff(yl), ...
+            'MarkerFaceColor', red, 'MarkerEdgeColor', red, 'SizeData', legendPointSize)
         hold off
         
         plt.ArrowSize = 16;
@@ -162,9 +183,9 @@ switch Type
                 titleText = 'Nitrogen uptake and feeding fluxes (mmol N / m^2/ yr)';
         end
         if isempty(trajLabel)
-            title(titleText)
+            title(titleText, 'FontSize', titleTextSize)
         else
-            title({titleText, [trajLabel ' waters']})
+            title({titleText, [trajLabel ' waters']}, 'FontSize', titleTextSize)
         end
     
         
@@ -191,8 +212,8 @@ switch Type
         % OM production comprises mortality (from P and Z) & messy feeding (from Z)
         OM_mort_DOM_tot = squeeze(auxVars.OM_mort_DOM_tot(:,:,:,:,traj));
         OM_mort_POM_tot = squeeze(auxVars.OM_mort_POM_tot(:,:,:,:,traj));
-        OM_mort_DOM_tot = mean(OM_mort_DOM_tot, 3); % average over trajectories
-        OM_mort_POM_tot = mean(OM_mort_POM_tot, 3); % average over trajectories
+        OM_mort_DOM_tot = mean(OM_mort_DOM_tot, 3, 'omitnan'); % average over trajectories
+        OM_mort_POM_tot = mean(OM_mort_POM_tot, 3, 'omitnan'); % average over trajectories
         
         % Define mortality links and sum over size classes
         PtoDOM_mort = sum(OM_mort_DOM_tot(FixedParams.phytoplankton,:));
@@ -202,8 +223,8 @@ switch Type
         
         OM_mess_DOM_tot = squeeze(auxVars.OM_mess_DOM_tot(:,:,:,:,:,traj));
         OM_mess_POM_tot = squeeze(auxVars.OM_mess_POM_tot(:,:,:,:,:,traj));
-        OM_mess_DOM_tot = mean(OM_mess_DOM_tot, 3); % average over trajectories
-        OM_mess_POM_tot = mean(OM_mess_POM_tot, 3); % average over trajectories
+        OM_mess_DOM_tot = mean(OM_mess_DOM_tot, 3, 'omitnan'); % average over trajectories
+        OM_mess_POM_tot = mean(OM_mess_POM_tot, 3, 'omitnan'); % average over trajectories
         
         % Define messy feeding links and sum over size classes
         ZtoDOM_mess = sum(OM_mess_DOM_tot);

@@ -3,6 +3,10 @@ function plt = plot_fitToData(v, Data, modData, logPlot, varargin)
 
 extractVarargin(varargin)
 
+if ~exist('errorBars', 'var')
+    errorBars = false;
+end
+
 plt = figure;
 
 % Default colours
@@ -359,9 +363,9 @@ switch v
                         ylab_tot = 'total cell conc. (cells m^{-3})';
                     case 'BioVol'
                         Var = 'bio-volume';
-                        ylab = 'bio-volume (m^3 m^{-3})';
+                        ylab = 'bio-volume (\mum^3 m^{-3})';
                         ylab_rel = 'relative bio-volume';
-                        ylab_tot = 'total bio-volume (m^3 m^{-3})';
+                        ylab_tot = 'total bio-volume (\mum^3 m^{-3})';
                     case 'NConc'
                         Var = 'nitrogen concentration';
                         ylab = 'N conc. (mmol N m^{-3})';
@@ -520,9 +524,9 @@ switch v
                         ylab_tot = 'total cell conc. (cells m^{-3})';
                     case 'BioVol'
                         Var = 'bio-volume';
-                        ylab = 'bio-volume (m^3 m^{-3})';
+                        ylab = 'bio-volume (\mum^3 m^{-3})';
                         ylab_rel = 'relative bio-volume';
-                        ylab_tot = 'total bio-volume (m^3 m^{-3})';
+                        ylab_tot = 'total bio-volume (\mum^3 m^{-3})';
                     case 'NConc'
                         Var = 'nitrogen concentration';
                         ylab = 'N conc. (mmol N m^{-3})';
@@ -532,9 +536,11 @@ switch v
                 
                 %% Relative abundances
                 subplot(1,3,1)
-                
-                dat = Data.sizeFull.dataBinned.groupedByOrigin;
-                modDat = modData.sizeFull;
+
+                dat = Data.size.dataBinned;
+%                 dat = Data.sizeFull.dataBinned.groupedByOrigin;
+                modDat = modData.size;
+%                 modDat = modData.sizeFull;
                 
                 ind = strcmp(dat.Variable, v) & strcmp(dat.waterMass, waterOrigin);
                 
@@ -544,7 +550,8 @@ switch v
                 
                 x = unique(dat.size(ind));
                 ydat = dat.Value(ind); % observation
-                ymod = modDat.(['Value_' waterOrigin])(ind,:); % modelled equivalents
+                ymod = modDat.Value(ind,:); % modelled equivalents
+%                 ymod = modDat.(['Value_' waterOrigin])(ind,:); % modelled equivalents
 
                 ydat_tot = sum(ydat);
                 ymod_tot = sum(ymod);
@@ -562,6 +569,15 @@ switch v
                     if i == 1, hold on; end
                 end
                 plotFun(x, ydat_rel, '-o', 'Color', coldat)
+                
+                % GET BACK TO THIS... 
+%                 switch errorBars, case true
+%                     ydatSE = dat.ValueSE(ind); % observation
+%                     
+%                     
+%                 end
+
+                
                 gc = gca;
                 xlabel('ESD (\mum)')
                 ylabel(ylab_rel)
