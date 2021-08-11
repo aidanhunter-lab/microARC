@@ -153,7 +153,7 @@ end
 delta_pred = reshape(FixedParams.ZPdia, [FixedParams.nZP_size, 1]);
 delta_prey = [reshape(FixedParams.PPdia, [1 FixedParams.nPP_size]), ...
     reshape(FixedParams.ZPdia, [1 FixedParams.nZP_size])];
-FixedParams.delta = delta_pred ./ delta_prey; % predator:prey size (radii) ratios
+FixedParams.delta = delta_pred ./ delta_prey; % predator:prey size (diameter) ratios
 
 % delta_pred = reshape(FixedParams.ZPsize, [FixedParams.nZP_size, 1]);
 % delta_prey = [reshape(FixedParams.PPsize, [1 FixedParams.nPP_size]), ... 
@@ -319,9 +319,11 @@ if isfield(Params, 'rPOC') && isfield(Params, 'rPOC_func')
     Params.rPOC = Params.rPOC_func(Params.rPON);
 end
 
-if (isfield(Params, 'delta_opt') && isfield(Params, 'sigG') && isfield(Params, 'phi')) && ...
-        ~(isempty(Params.delta_opt) && isempty(Params.sigG) && isempty(Params.phi))
-    Params.phi = exp(-log(FixedParams.delta ./ Params.delta_opt) .^ 2 ./ (2 .* Params.sigG .^ 2));
+
+if (isfield(Params, 'delta_opt') && isfield(Params, 'sigG')) && ...
+        ~(isempty(Params.delta_opt) || isempty(Params.sigG))
+    Params.phi = Params.phi_func(Params.delta_opt, Params.sigG, FixedParams.delta);
+%     Params.phi = exp(-log(FixedParams.delta ./ Params.delta_opt) .^ 2 ./ (2 .* Params.sigG .^ 2));
     % Standardise so that each predator may optimally graze some prey class.
     % Otherwise the small predators cannot optimally graze so their
     % experienced prey saturation is always low.
@@ -422,8 +424,9 @@ end
 % end
 
 function vol = d2vol(d)
-vol = 4 ./ 3 .* pi .* (0.5 .* d) .^ 3;
+vol = 1 ./ 6 .* pi .* d .^ 3;
 end
+% d2vol = @(d) 1 ./ 6 .* pi .* d .^ 3;
 
 % function d = vol2d(vol)
 % d = 2 .* (vol .* (3 ./ 4 ./ pi)) .^ (1/3);
