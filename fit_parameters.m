@@ -16,8 +16,7 @@ rng(1) % set random seed
 % Store folders/filenames of data and saved parameters.
 % Set parFile = [] for default initial parameter values (hard-coded, not loaded)
 % or parFile = 'filename.mat' to use saved values as the initials.
-% Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
-%     'parFile', []);
+% parFile = [];
 parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_removeParams.mat';
 Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
     'parFile', parFile);
@@ -168,11 +167,10 @@ saveParams = true;
 fileName_results = 'fittedParameters';  % choose file name
 tag = FixedParams.costFunction;         % and identifying tag
 tag = [tag '_Atlantic_singleTraj_removeParams'];
-% tag = [tag '_Atlantic_quadraticMortality_singleTraj_omitSizeDataTot_removeParams'];
 
-% tag = [tag '_Atlantic_quadraticMortality_singleTraj_allSpectra'];
-% tag = [tag '_Atlantic_quadraticMortality_singleTraj'];
-% tag = [tag '_Arctic'];
+tag = [tag '_Atlantic_singleTraj_adjustParBounds'];
+
+
 fileName_results = fullfile(Directories.resultsDir, ...
     [fileName_results '_' tag]);
 

@@ -175,7 +175,8 @@ Params.Q_C = [];
 % min and max cellular nitrogen quota [mmol N / cell], scaled by C quota [mmol N / mmol C], Maranon et al. (2013)
 Params.Qmin_QC_func = @(a,b,V) powerFunction(a,b,V);
 Params.Qmin_QC_a = (1/14) * 1e-9 * 10^-1.47 / Params.Q_C_a;
-Params.Qmin_QC_b = 0.84 - Params.Q_C_b;
+% Params.Qmin_QC_b = 0.84 - Params.Q_C_b;
+Params.Qmin_QC_b = 0; % minimum N:C ratio expected to have same size dependence as C-quota => set Qmin_QC_b = 0
 Params.Qmin_QC = [];
 
 % max quota
@@ -200,11 +201,11 @@ Params.Vmax_QC_b = 0.97 - Params.Q_C_b;
 Params.Vmax_QC = [];
 
 % cellular affinity for nitrogen scaled by QC [m^3 / mmol C / day], derived using half saturation from Litchmann et al. (2007)
-% Params.aN_QC_func = @(a,b,V) powerFunction(a,b,V);
-Params.aN_QC_func = @(a,b,V) powerFunction(a,-exp(b),V); % estimate b on negative log scale
+Params.aN_QC_func = @(a,b,V) powerFunction(a,b,V);
+% Params.aN_QC_func = @(a,b,V) powerFunction(a,-exp(b),V); % estimate b on negative log scale
 Params.aN_QC_a = Params.Vmax_QC_a / 10^-0.77;
 Params.aN_QC_b = Params.Vmax_QC_b -0.27;
-Params.aN_QC_b = log(-Params.aN_QC_b); % estimate on log negative scale
+% Params.aN_QC_b = log(-Params.aN_QC_b); % estimate on log negative scale
 Params.aN_QC = [];
 
 % half saturation
@@ -371,7 +372,7 @@ Bounds.wDOM1      = [0, 0];
 Bounds.K_m_coef   = [0, 0];
 
 % The POM sinking speed has proven to be an awkward parameter... I think
-% thath including both PON and POC data within the cost function is
+% that including both PON and POC data within the cost function is
 % problematic as these combined data create undesirable local minama. I
 % think that excluding the POC data from the cost function could be useful,
 % or perhaps just fixing wPOM1 to constant value...
@@ -402,7 +403,7 @@ Bounds.Qmin_QC_a = max(0, Bounds.Qmin_QC_a); % required Qmin_QC_a > 0
 
 Bounds.Qmin_QC_b = -Params.Q_C_b + [0.77, 0.92];
 Bounds.Qmin_QC_b = max(Bounds.Qmin_QC_b, -Params.Q_C_b); % required Qmin_QC_b > - Q_C_b
-Bounds.Qmin_QC_b(2) = 2.5 * Bounds.Qmin_QC_b(2); % Param sensitivity analysis suggest extending upper bound could be useful...
+% Bounds.Qmin_QC_b(2) = 2.5 * Bounds.Qmin_QC_b(2); % Param sensitivity analysis suggest extending upper bound could be useful...
 
 Bounds.Qmax_delQ_a = [10^(-1.78 - (-0.99)), 10^(-1.26 - (-1.35))];
 Bounds.Qmax_delQ_a = min(1, max(0, Bounds.Qmax_delQ_a)); % required 0 < Qmax_delQ_a < 1
@@ -413,22 +414,21 @@ Bounds.Qmax_delQ_b = sort(log(-Bounds.Qmax_delQ_b)); % estimate on log negative 
 
 Bounds.Vmax_QC_a = 24 / 14 * 1e-9 / Params.Q_C_a * [10^-3.18, 10^-2.78]; % Vmax bounds from Maranon (2013)
 Bounds.Vmax_QC_b = -Params.Q_C_b + [0.89, 1.06];
-Bounds.Vmax_QC_b(2) = 3 * Bounds.Vmax_QC_b(2); % param sensitivity suggests extending upper bound could be useful...
+% Bounds.Vmax_QC_b(2) = 3 * Bounds.Vmax_QC_b(2); % param sensitivity suggests extending upper bound could be useful...
 
 
 % Bounds.aN_QC_a = Bounds.Vmax_QC_a ./ [10^-0.44, 10^-1.2]; % N affinity bounds from Edwards et al. (2015)
 % Bounds.aN_QC_b = Bounds.Vmax_QC_b -[0.45, 0.24];
 
-% Bounds.aN_QC_a = 1e-3 .* 10 .^ [-9, -7.4] / Params.Q_C_a; % N affinity bounds from Edwards et al. (2015)
-% Bounds.aN_QC_b = -Params.Q_C_b + [0.58, 0.98];
+Bounds.aN_QC_a = 1e-3 .* 10 .^ [-9, -7.4] / Params.Q_C_a; % N affinity bounds from Edwards et al. (2015)
+Bounds.aN_QC_b = -Params.Q_C_b + [0.58, 0.98];
 
-% try these more restrictive bounds for affinity -- I think the above provided too much freedom...
-Bounds.aN_QC_a = Params.Vmax_QC_a ./ [10^-0.44, 10^-1.2]; % N affinity bounds from Edwards et al. (2015)
-Bounds.aN_QC_a(2) = 3 * Bounds.aN_QC_a(2); % param sensitivity suggests extending upper bound could be useful...
-
-Bounds.aN_QC_b = Params.Vmax_QC_b -[0.45, 0.24];
-Bounds.aN_QC_b(2) = -0.025; % param sensitivity suggests extending upper bound could be useful (although size dependency of N affinity should be significant!)
-Bounds.aN_QC_b = sort(log(-Bounds.aN_QC_b)); % estimate on negative log scale
+% % try these more restrictive bounds for affinity -- I think the above provided too much freedom...
+% Bounds.aN_QC_a = Params.Vmax_QC_a ./ [10^-0.44, 10^-1.2]; % N affinity bounds from Edwards et al. (2015)
+% Bounds.aN_QC_a(2) = 3 * Bounds.aN_QC_a(2); % param sensitivity suggests extending upper bound could be useful...
+% Bounds.aN_QC_b = Params.Vmax_QC_b -[0.45, 0.24];
+% Bounds.aN_QC_b(2) = -0.025; % param sensitivity suggests extending upper bound could be useful (although size dependency of N affinity should be significant!)
+% Bounds.aN_QC_b = sort(log(-Bounds.aN_QC_b)); % estimate on negative log scale
 
 
 % Bounds.pmax_a = [1.8, 24];  % pmax bounds guessed from mu_inf CIs given in Ward (2017)
