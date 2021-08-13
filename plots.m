@@ -12,19 +12,19 @@ clear; close all; delete(gcp('nocreate')); clc
 addpath(genpath(fileparts(which('fit_parameters'))))
 
 % Store folders/filenames of data and saved parameters
+parFile = [];
+% parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_removeParams.mat';
 Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
-    'parFile', []);
-% Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
-%     'parFile', 'parameterInitialValues_1.mat');
+    'parFile', parFile);
 display(Directories)
 
 % Load saved outputs from optimisation runs or choose default set-up
 loadFittedParams = true; % use output saved from optimisation run?
-fileName = 'fittedParameters';  % saved parameters file name
-% tag = '1';                      % and identifying tag
-
-tag = 'RMS_Hellinger2_Atlantic_singleTraj_removeParams';
-tag = 'RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds';
+% Saved parameters file name and identifying tag
+fileName = 'fittedParameters';
+% tag = 'RMS_Hellinger2_Atlantic_singleTraj_removeParams';
+% tag = 'RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds';
+tag = 'RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2';
 
 fileName = fullfile(Directories.resultsDir, ...
     [fileName '_' tag]);
@@ -106,132 +106,6 @@ modData = matchModOutput2Data(out, auxVars, Data, FixedParams, ...
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
-QUICK PLOT OF PHOTOSYNTHESIS-IRRADIANCE CURVE... SHOULD aP UPPER BOUND BE INCREASED? DUNNO... SEND TO BEN
-
-parNames = results.parNames;
-optPar = results.optPar;
-aP = optPar(strcmp(parNames, 'aP'));
-pmax_a = optPar(strcmp(parNames, 'pmax_a'));
-pmax_b = optPar(strcmp(parNames, 'pmax_b'));
-pmax = Params.pmax_func(pmax_a, pmax_b, FixedParams.sizeAll);
-pmax = pmax(FixedParams.phytoplankton);
-
-
-Qchl = squeeze(auxVars.Q(1:FixedParams.nPP_size,:,FixedParams.PP_Chl_index,:,:));
-I = auxVars.I; % experienced irradiances -- all depths and times
-
-I_ = repmat(I, [FixedParams.nPP_size, 1]);
-PI = pmax .* (1 - exp(-aP .* Qchl .* I ./ (pmax)));
-
-tt = 140; % threshold day pre/post bloom start
-ti = 1; % choose trajectory index
-
-% plot all depth layers separately
-figure
-for di = 1:9
-    
-    subplot(3,3,di)
-    
-    depth = abs(FixedParams.z(di));
-    
-    I_ti = I_(:,di,1:tt,ti);
-    PI_ti = PI(:,di,1:tt,ti);
-    scatter(I_ti(:), PI_ti(:))
-    
-    hold on
-    
-    I_ti = I_(:,di,tt:250,ti);
-    PI_ti = PI(:,di,tt:250,ti);
-    scatter(I_ti(:), PI_ti(:))
-    
-    hold off
-    
-    legend(['days 1-' num2str(tt)], ['days ' num2str(tt) '-250'], 'Location', 'northwest')
-    
-    xlabel('I (\muEin d^{-1} m^{-2})')
-    ylabel('photosynthetic rate (d^{-1})')
-
-    title(['depth ' num2str(round(depth, 2, 'significant')) ' m'])
-    
-    if di == 1
-        % use axis scales of shallowest layer
-        xl = get(gca, 'XLim');
-        yl = get(gca, 'YLim');
-    end
-    set(gca, 'XLim', xl)
-    set(gca, 'YLim', yl)
-%     
-%     text(mean(xl), yl(2) - 0.05 * diff(yl), ['depth ' num2str(round(depth, 2)) ' m'])
-    
-end
-
-
-MAKE A SIMILAR PLOT FOR THE NUTRIENT UPTAKE
-
-
-
-aP = optPar(strcmp(parNames, 'aP'));
-pmax_a = optPar(strcmp(parNames, 'pmax_a'));
-pmax_b = -exp(optPar(strcmp(parNames, 'pmax_b')));
-pmax = pmax_a .* FixedParams.PPsize .^ pmax_b;
-Qchl = squeeze(auxVars.Q(1:FixedParams.nPP_size,:,FixedParams.PP_Chl_index,:,:));
-I = auxVars.I; % experienced irradiances -- all depths and times
-
-I_ = repmat(I, [FixedParams.nPP_size, 1]);
-PI = pmax .* (1 - exp(-aP .* Qchl .* I ./ (pmax)));
-
-tt = 140; % threshold day pre/post bloom start
-
-% plot all depth layers separately
-figure
-for di = 1:9
-    
-    subplot(3,3,di)
-    
-    depth = abs(FixedParams.z(di));
-    
-    I_ti = I_(:,di,1:tt,ti);
-    PI_ti = PI(:,di,1:tt,ti);
-    scatter(I_ti(:), PI_ti(:))
-    
-    hold on
-    
-    I_ti = I_(:,di,tt:250,ti);
-    PI_ti = PI(:,di,tt:250,ti);
-    scatter(I_ti(:), PI_ti(:))
-    
-    hold off
-    
-    legend(['days 1-' num2str(tt)], ['days ' num2str(tt) '-250'], 'Location', 'northwest')
-    
-    xlabel('I (\muEin d^{-1} m^{-2})')
-    ylabel('photosynthetic rate (d^{-1})')
-
-    title(['depth ' num2str(round(depth, 2, 'significant')) ' m'])
-    
-    if di == 1
-        % use axis scales of shallowest layer
-        xl = get(gca, 'XLim');
-        yl = get(gca, 'YLim');
-    end
-    set(gca, 'XLim', xl)
-    set(gca, 'YLim', yl)
-%     
-%     text(mean(xl), yl(2) - 0.05 * diff(yl), ['depth ' num2str(round(depth, 2)) ' m'])
-    
-end
-
-
-
-
-
-
-
-
-
-
-
 %% Plots
 
 % Use the above outputs as arguments to plotting functions stored in utility/plottingFunctions/...
@@ -262,57 +136,6 @@ subplot(2,2,4)
 plot_rawData('scalar', 'POC', Data0, 'pointAlpha', pointAlpha);
 
 
-% % Standardised data
-% plt_stnd = figure;
-% plt_stnd.Units = 'inches';
-% plt_stnd.Position = [0 0 8 12];
-% nrows = 4; % number of rows excluding legend
-% ncols = 2;
-% legh = (1 / 5) * (1 / nrows); % legend height
-% legFontSize = 11;
-% pex = 0.025; % proportion of total plot size used for outer margins
-% Ph = 1 - 2 * pex; % total plot height (all panels and legend)
-% Pw = 1 - 2 * pex; % total plot width
-% yex = 0.3; % proportion of panel size devoted to axis labels -- y dimension
-% xex = 0.2;
-% pht = (Ph - legh) / nrows; % panel height total
-% ph = pht - yex * pht; % panel height excluding labels
-% pwt = Pw / ncols;
-% pw = pwt - xex * pwt;
-% 
-% 
-% subplot('Position', [pex + (pwt - pw), 1 - pex - ph, pw, ph])
-% plot_standardisedData('scalar', 'N', Data0, 'covariate', 'Depth', ... 
-%     'pointAlpha', 0.4, 'densityCurve', true, ...
-%     'includeLegend', false, 'legendPosition', 'west');
-% subplot('Position', [pex + 2 * pwt - pw, 1 - pex - ph, pw, ph])
-% plot_standardisedData('scalar', 'N', Data0, 'covariate', 'Event', ...
-%     'pointAlpha', 0.4, 'densityCurve', true);
-% subplot('Position', [pex + (pwt - pw), 1 - pex - pht - ph, pw, ph])
-% plot_standardisedData('scalar', 'PON', Data0, 'covariate', 'Depth', ... 
-%     'pointAlpha', 0.4, 'densityCurve', true);
-% subplot('Position', [pex + 2 * pwt - pw, 1 - pex - pht - ph, pw, ph])
-% plot_standardisedData('scalar', 'PON', Data0, 'covariate', 'Event', ...
-%     'pointAlpha', 0.4, 'densityCurve', true);
-% subplot('Position', [pex + (pwt - pw), 1 - pex - 2 * pht - ph, pw, ph])
-% plot_standardisedData('scalar', 'POC', Data0, 'covariate', 'Depth', ...
-%     'pointAlpha', 0.4, 'densityCurve', true);
-% subplot('Position', [pex + 2 * pwt - pw, 1 - pex - 2 * pht - ph, pw, ph])
-% plot_standardisedData('scalar', 'POC', Data0, 'covariate', 'Event', ...
-%     'pointAlpha', 0.4, 'densityCurve', true);
-% subplot('Position', [pex + (pwt - pw), 1 - pex - 3 * pht - ph, pw, ph]);
-% plot_standardisedData('scalar', 'chl_a', Data0, 'covariate', 'Depth', ...
-%     'pointAlpha', 0.4, 'densityCurve', true);
-% subplot('Position', [pex + 2 * pwt - pw, 1 - pex - 3 * pht - ph, pw, ph]);
-% plot_standardisedData('scalar', 'chl_a', Data0, 'covariate', 'Event', ...
-%     'pointAlpha', 0.4, 'densityCurve', true);
-% leg = legend('Arctic', 'Atlantic', 'data distribution', 'standard normal', ...
-%     'Location', 'bestoutside', 'FontSize', legFontSize, ...
-%     'Orientation', 'horizontal', 'NumColumns', 2, ...
-%     'box', 'on');
-% set(leg, 'Position', [0.25, pex, 0.5, legh])
-
-
 % Standardised data -- sized for paper
 plt_stnd = figure;
 plt_stnd.Units = 'inches';
@@ -330,7 +153,6 @@ pht = (Ph - legh) / nrows; % panel height total
 ph = pht - yex * pht; % panel height excluding labels
 pwt = Pw / ncols;
 pw = pwt - xex * pwt;
-
 
 subplot('Position', [pex + (pwt - pw), 1 - pex - ph, pw, ph])
 plot_standardisedData('scalar', 'N', Data0, 'covariate', 'Depth', ... 
@@ -362,9 +184,6 @@ leg = legend('Arctic', 'Atlantic', 'data distribution', 'standard normal', ...
     'Orientation', 'horizontal', 'NumColumns', 2, ...
     'box', 'on');
 set(leg, 'Position', [0.25, pex, 0.5, legh])
-
-
-
 
 
 % Size spectra -- averaged over samples
@@ -520,7 +339,7 @@ end
 
 
 % Grouped by data type
-standardised = true;
+standardised = false;
 ap = '';
 switch standardised, case true, ap = '_standardised'; end
 nrows = 1;
@@ -871,13 +690,6 @@ plot_comparePMFs(yobs, ymod, varLabel, 'waterMass', waterMass, ...
 % Display fitted parameters in relation to their bounding values (in the
 % table, columns widths shoukd be adjustable).
 
-% I NEED TO IMPROVE THIS PLOT SO THAT THE TABLE SHOWS THE TRUE PARAMETER
-% VALUES RATHER THAN VALUES ON THE ESTIMATION SCALE -- FOR EFFICIENCY SOME 
-% PARAMETERS ARE ESTIMATED ON A TRANSFORMED SCALE...
-% BUT BEFORE DOING THIS I SHOULD IMPROVE THE REST OF THE CODE TO MAKE IT
-% MORE EASILY INTERPRETABLE BECAUSE THE TRANSFORMED SCALES ARE CONFUSING
-
-
 plt = plot_fittedParameters(results.optPar_summary);
 
 switch save, case true
@@ -1040,7 +852,7 @@ save = false;
 
 % Choose one or more trajectories -- if multiple are selected then the plot
 % will average over them.
-sampleEvent = 10;
+sampleEvent = 1;
 % All trajectories used for sampleEvent
 traj = find(Data0.scalar.EventTraj(sampleEvent,:));
 % If waterMass is either Atlantic OR Arctic then it may make sense to plot

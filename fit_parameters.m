@@ -66,14 +66,16 @@ fitTrajectories = 'Atlantic';
 % modelled size class intervals) or may fit to the full size spectra data.
 % This choice affects how model outputs are extracted to match data.
 fitToFullSizeSpectra = false;
+rescaleForOptim = true; % Should parameters be estimated within some transformed space? See optimisationOptions for details -- this could probably be usefully extended to limit estimation problems realted to parameter correlations/pathologic parameter space
+
 [FixedParams, Params, Forc, Data] = ...
     optimisationOptions(FixedParams, Params, Forc, Data, ...
     'niter', niter, ...
     'popSize', popSize, ...
     'costFunctionType', costFunctionType, ...
     'fitTrajectories', fitTrajectories, ...
-    'fitToFullSizeSpectra', fitToFullSizeSpectra);
-
+    'fitToFullSizeSpectra', fitToFullSizeSpectra, ...
+    'rescaleForOptim', rescaleForOptim);
 % Optional arguments (e.g. 'niter') may be included as name-value pairs,
 % otherwise default values are used.
 % It is important to specify 'costFunctionType' as one of the options
@@ -104,7 +106,8 @@ switch restartRun, case true
     tag = FixedParams.costFunction;
 %     tag = [tag '_Atlantic_quadraticMortality_singleTraj_relativeSizeDataOnly'];
 %     tag = [tag, '_Atlantic_quadraticMortality_singleTraj_omitSizeDataTot_removeParams'];
-    tag = [tag, '_Atlantic_singleTraj_removeParams'];
+%     tag = [tag, '_Atlantic_singleTraj_removeParams'];
+    tag = [tag, '_Atlantic_singleTraj_adjustParBounds2'];
     fileName_results = fullfile(Directories.resultsDir, ...
         [fileName_results '_' tag]);
     % Load stored results    
@@ -164,12 +167,11 @@ displayFittedParameters(results)
 % Save output
 saveParams = true;
 
-fileName_results = 'fittedParameters';  % choose file name
-tag = FixedParams.costFunction;         % and identifying tag
-tag = [tag '_Atlantic_singleTraj_removeParams'];
-
-tag = [tag '_Atlantic_singleTraj_adjustParBounds'];
-
+% Choose file name
+fileName_results = 'fittedParameters';
+% and identifying tag
+tag = 'Atlantic_singleTraj_adjustParBounds2';
+tag = [FixedParams.costFunction '_' tag];
 
 fileName_results = fullfile(Directories.resultsDir, ...
     [fileName_results '_' tag]);

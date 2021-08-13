@@ -15,6 +15,13 @@ switch optimiser
             J = J(i);
         end
         
+        for i = 1:length(FixedParams.tunePars)
+            % Convert from parameter search space to natural space
+            pn = FixedParams.tunePars{i};
+            func = FixedParams.tuneParsInvTransform.(pn);
+            populationhistory(:,i,:) = func(populationhistory(:,i,:));
+        end
+        
         optPar = populationhistory(I,:,J);
         
         output.parNames = FixedParams.tunePars;
