@@ -12,17 +12,19 @@ clear; close all; delete(gcp('nocreate')); clc
 addpath(genpath(fileparts(which('fit_parameters'))))
 
 % Store folders/filenames of data and saved parameters
+parFile = [];
+% parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_removeParams.mat';
 Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
-    'parFile', []);
-% Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
-%     'parFile', 'parameterInitialValues_1.mat');
+    'parFile', parFile);
 display(Directories)
 
 % Load saved outputs from optimisation runs or choose default set-up
 loadFittedParams = true; % use output saved from optimisation run?
-fileName = 'fittedParameters';  % saved parameters file name
-% tag = '1';                      % and identifying tag
-tag = 'RMS_Hellinger2_Atlantic_singleTraj_removeParams';
+% Saved parameters file name and identifying tag
+fileName = 'fittedParameters';
+% tag = 'RMS_Hellinger2_Atlantic_singleTraj_removeParams';
+% tag = 'RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds';
+tag = 'RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2';
 
 fileName = fullfile(Directories.resultsDir, ...
     [fileName '_' tag]);
@@ -134,10 +136,10 @@ subplot(2,2,4)
 plot_rawData('scalar', 'POC', Data0, 'pointAlpha', pointAlpha);
 
 
-% Standardised data
+% Standardised data -- sized for paper
 plt_stnd = figure;
 plt_stnd.Units = 'inches';
-plt_stnd.Position = [0 0 8 12];
+plt_stnd.Position = [0 0 6 9];
 nrows = 4; % number of rows excluding legend
 ncols = 2;
 legh = (1 / 5) * (1 / nrows); % legend height
@@ -337,7 +339,7 @@ end
 
 
 % Grouped by data type
-standardised = true;
+standardised = false;
 ap = '';
 switch standardised, case true, ap = '_standardised'; end
 nrows = 1;
@@ -403,7 +405,7 @@ xvar = 'BioVol';
 logScale = 'semilogx'; % for size spectra data choose logScale = 'loglog' or 'semilogx'
 waterOrigin = 'Atlantic';
 connectors = true; % lines linking data to modelled equivalents
-meanOnly = false; % display mean (over sample events) of modelled values -- for cleaner plot
+meanOnly = true; % display mean (over sample events) of modelled values -- for cleaner plot
 
 for i = 1:length(trophicGroups)
     trophicGroup = trophicGroups{i};
@@ -687,6 +689,7 @@ plot_comparePMFs(yobs, ymod, varLabel, 'waterMass', waterMass, ...
 
 % Display fitted parameters in relation to their bounding values (in the
 % table, columns widths shoukd be adjustable).
+
 plt = plot_fittedParameters(results.optPar_summary);
 
 switch save, case true
@@ -849,7 +852,7 @@ save = false;
 
 % Choose one or more trajectories -- if multiple are selected then the plot
 % will average over them.
-sampleEvent = 24;
+sampleEvent = 1;
 % All trajectories used for sampleEvent
 traj = find(Data0.scalar.EventTraj(sampleEvent,:));
 % If waterMass is either Atlantic OR Arctic then it may make sense to plot
@@ -1323,7 +1326,7 @@ close all
 
 %% Network plots -- fluxes, production
 
-% Ome of these network plots are too busy -- too many overlapping
+% Some of these network plots are too busy -- too many overlapping
 % connections. The same information can be displayed differently as
 % 'heatmaps' or tables...
 
@@ -1384,6 +1387,28 @@ switch save, case true
             print(plt_OM, fullfile(folder, filename), '-r300', '-dpng');
         end
 end
+
+
+
+
+% Try representing the feeding fluxes as a heatmap
+Type = 'feedingFluxes';
+nutrient = 'nitrogen';
+traj = 'Atlantic';
+
+plt_feedFlux_N = figure;
+plt_feedFlux_N.Units = 'inches';
+plt_feedFlux_N.Position = [0 0 10 7.5];
+
+subplot(2,1,1)
+plot_network_heatmap('feedingFluxes', 'nitrogen', auxVars0, FixedParams, Forc0, 'Atlantic');
+
+
+
+subplot(2,1,2)
+plot_network('feedingFluxes', 'nitrogen', auxVars0, FixedParams, Forc0, 'Atlantic');
+
+
 
 
 

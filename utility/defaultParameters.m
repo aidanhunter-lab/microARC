@@ -175,7 +175,8 @@ Params.Q_C = [];
 % min and max cellular nitrogen quota [mmol N / cell], scaled by C quota [mmol N / mmol C], Maranon et al. (2013)
 Params.Qmin_QC_func = @(a,b,V) powerFunction(a,b,V);
 Params.Qmin_QC_a = (1/14) * 1e-9 * 10^-1.47 / Params.Q_C_a;
-Params.Qmin_QC_b = 0.84 - Params.Q_C_b;
+% Params.Qmin_QC_b = 0.84 - Params.Q_C_b;
+Params.Qmin_QC_b = 0; % minimum N:C ratio expected to have same size dependence as C-quota => set Qmin_QC_b = 0
 Params.Qmin_QC = [];
 
 % max quota
@@ -186,11 +187,11 @@ Params.Qmax_QC = [];
 Params.delQ_QC_func = @(Qmin_QC, Qmax_QC) Qmax_QC - Qmin_QC;
 Params.delQ_QC = [];
 
-% Params.Qmax_delQ_func = @(a,b,V) 1 ./ (1 - (a .* V .^ b));
-Params.Qmax_delQ_func = @(a,b,V) 1 ./ (1 - (a .* V .^ -exp(b))); % estimate b on negative log scale
+Params.Qmax_delQ_func = @(a,b,V) 1 ./ (1 - (a .* V .^ b));
+% Params.Qmax_delQ_func = @(a,b,V) 1 ./ (1 - (a .* V .^ -exp(b))); % estimate b on negative log scale
 Params.Qmax_delQ_a = 10^(-1.47+1.26);
 Params.Qmax_delQ_b = 0.84 - 0.93;
-Params.Qmax_delQ_b = log(-Params.Qmax_delQ_b); % estimate on log negative scale
+% Params.Qmax_delQ_b = log(-Params.Qmax_delQ_b); % estimate on log negative scale
 Params.Qmax_delQ = [];
 
 % maximum nitrogen uptake rate Vmax [mmol N/cell/day] scaled by C quota, Vmax_over_QC [mmol N / mmol C / day], Maranon et al. (2013)
@@ -200,11 +201,11 @@ Params.Vmax_QC_b = 0.97 - Params.Q_C_b;
 Params.Vmax_QC = [];
 
 % cellular affinity for nitrogen scaled by QC [m^3 / mmol C / day], derived using half saturation from Litchmann et al. (2007)
-% Params.aN_QC_func = @(a,b,V) powerFunction(a,b,V);
-Params.aN_QC_func = @(a,b,V) powerFunction(a,-exp(b),V); % estimate b on negative log scale
+Params.aN_QC_func = @(a,b,V) powerFunction(a,b,V);
+% Params.aN_QC_func = @(a,b,V) powerFunction(a,-exp(b),V); % estimate b on negative log scale
 Params.aN_QC_a = Params.Vmax_QC_a / 10^-0.77;
 Params.aN_QC_b = Params.Vmax_QC_b -0.27;
-Params.aN_QC_b = log(-Params.aN_QC_b); % estimate on log negative scale
+% Params.aN_QC_b = log(-Params.aN_QC_b); % estimate on log negative scale
 Params.aN_QC = [];
 
 % half saturation
@@ -212,19 +213,19 @@ Params.kN_func = @(Vmax_QC, aN_QC) Vmax_QC ./ aN_QC;
 Params.kN = [];
 
 % maximum photosynthetic rate [1/day]
-% Params.pmax_func = @(a,b,V) powerFunction(a,b,V);
-Params.pmax_func = @(a,b,V) powerFunction(a,-exp(b),V); % b estimated on negative scale
+Params.pmax_func = @(a,b,V) powerFunction(a,b,V);
+% Params.pmax_func = @(a,b,V) powerFunction(a,-exp(b),V); % b estimated on negative scale
 Params.pmax_a = 2.5;
 Params.pmax_b = -0.15;
-Params.pmax_b = log(-Params.pmax_b); % estimate on negative log scale
+% Params.pmax_b = log(-Params.pmax_b); % estimate on negative log scale
 Params.pmax = [];
 
 % maximum grazing rate
-% Params.Gmax_func = @(a,b,V) powerFunction(a,b,V);
-Params.Gmax_func = @(a,b,V) powerFunction(a,-exp(b),V); % b estimated on negative scale
+Params.Gmax_func = @(a,b,V) powerFunction(a,b,V);
+% Params.Gmax_func = @(a,b,V) powerFunction(a,-exp(b),V); % b estimated on negative scale
 Params.Gmax_a = 21;
 Params.Gmax_b = -0.16;
-Params.Gmax_b = log(-Params.Gmax_b); % estimate on negative log scale
+% Params.Gmax_b = log(-Params.Gmax_b); % estimate on negative log scale
 Params.Gmax = [];
 
 % % half-saturation prey concentration (mmol N / m^3) for grazing uptake
@@ -238,12 +239,12 @@ Params.phi_func = @(delta_opt, sigG, delta) ...
 Params.phi = [];
 
 % background mortality -- linear
-% Params.m_func = @(a,b,V) powerFunction(a,b,V);
-Params.m_func = @(a,b,V) powerFunction(a,-exp(b),V);
+Params.m_func = @(a,b,V) powerFunction(a,b,V);
+% Params.m_func = @(a,b,V) powerFunction(a,-exp(b),V);
 Params.m_a = 0.05; % mortality for cell volume = 1 mu m ^ 3
 Params.m_b = 0; % mortality size-exponent
 % Params.m_b = -0.1; % mortality size-exponent
-Params.m_b = log(-Params.m_b); % estimate on negative log scale
+% Params.m_b = log(-Params.m_b); % estimate on negative log scale
 Params.m = [];
 
 % Hyperbolic term in mortality expression may be used to prevent extremely
@@ -371,7 +372,7 @@ Bounds.wDOM1      = [0, 0];
 Bounds.K_m_coef   = [0, 0];
 
 % The POM sinking speed has proven to be an awkward parameter... I think
-% thath including both PON and POC data within the cost function is
+% that including both PON and POC data within the cost function is
 % problematic as these combined data create undesirable local minama. I
 % think that excluding the POC data from the cost function could be useful,
 % or perhaps just fixing wPOM1 to constant value...
@@ -402,47 +403,47 @@ Bounds.Qmin_QC_a = max(0, Bounds.Qmin_QC_a); % required Qmin_QC_a > 0
 
 Bounds.Qmin_QC_b = -Params.Q_C_b + [0.77, 0.92];
 Bounds.Qmin_QC_b = max(Bounds.Qmin_QC_b, -Params.Q_C_b); % required Qmin_QC_b > - Q_C_b
-Bounds.Qmin_QC_b(2) = 2.5 * Bounds.Qmin_QC_b(2); % Param sensitivity analysis suggest extending upper bound could be useful...
+% Bounds.Qmin_QC_b(2) = 2.5 * Bounds.Qmin_QC_b(2); % Param sensitivity analysis suggest extending upper bound could be useful...
 
 Bounds.Qmax_delQ_a = [10^(-1.78 - (-0.99)), 10^(-1.26 - (-1.35))];
 Bounds.Qmax_delQ_a = min(1, max(0, Bounds.Qmax_delQ_a)); % required 0 < Qmax_delQ_a < 1
 
 Bounds.Qmax_delQ_b = [0.77 - 0.96, 0.92 - 0.83];
-Bounds.Qmax_delQ_b = min(-1e-3, Bounds.Qmax_delQ_b); % required Qmax_delQ_b < 0
-Bounds.Qmax_delQ_b = sort(log(-Bounds.Qmax_delQ_b)); % estimate on log negative scale
+Bounds.Qmax_delQ_b = min(0, Bounds.Qmax_delQ_b); % required Qmax_delQ_b < 0
+% Bounds.Qmax_delQ_b = min(-1e-3, Bounds.Qmax_delQ_b); % required Qmax_delQ_b < 0
+% Bounds.Qmax_delQ_b = sort(log(-Bounds.Qmax_delQ_b)); % estimate on log negative scale
 
 Bounds.Vmax_QC_a = 24 / 14 * 1e-9 / Params.Q_C_a * [10^-3.18, 10^-2.78]; % Vmax bounds from Maranon (2013)
 Bounds.Vmax_QC_b = -Params.Q_C_b + [0.89, 1.06];
-Bounds.Vmax_QC_b(2) = 3 * Bounds.Vmax_QC_b(2); % param sensitivity suggests extending upper bound could be useful...
+% Bounds.Vmax_QC_b(2) = 3 * Bounds.Vmax_QC_b(2); % param sensitivity suggests extending upper bound could be useful...
 
 
 % Bounds.aN_QC_a = Bounds.Vmax_QC_a ./ [10^-0.44, 10^-1.2]; % N affinity bounds from Edwards et al. (2015)
 % Bounds.aN_QC_b = Bounds.Vmax_QC_b -[0.45, 0.24];
 
-% Bounds.aN_QC_a = 1e-3 .* 10 .^ [-9, -7.4] / Params.Q_C_a; % N affinity bounds from Edwards et al. (2015)
-% Bounds.aN_QC_b = -Params.Q_C_b + [0.58, 0.98];
+Bounds.aN_QC_a = 1e-3 .* 10 .^ [-9, -7.4] / Params.Q_C_a; % N affinity bounds from Edwards et al. (2015)
+Bounds.aN_QC_b = -Params.Q_C_b + [0.58, 0.98];
 
-% try these more restrictive bounds for affinity -- I think the above provided too much freedom...
-Bounds.aN_QC_a = Params.Vmax_QC_a ./ [10^-0.44, 10^-1.2]; % N affinity bounds from Edwards et al. (2015)
-Bounds.aN_QC_a(2) = 3 * Bounds.aN_QC_a(2); % param sensitivity suggests extending upper bound could be useful...
-
-Bounds.aN_QC_b = Params.Vmax_QC_b -[0.45, 0.24];
-Bounds.aN_QC_b(2) = -0.025; % param sensitivity suggests extending upper bound could be useful (although size dependency of N affinity should be significant!)
-Bounds.aN_QC_b = sort(log(-Bounds.aN_QC_b)); % estimate on negative log scale
+% % try these more restrictive bounds for affinity -- I think the above provided too much freedom...
+% Bounds.aN_QC_a = Params.Vmax_QC_a ./ [10^-0.44, 10^-1.2]; % N affinity bounds from Edwards et al. (2015)
+% Bounds.aN_QC_a(2) = 3 * Bounds.aN_QC_a(2); % param sensitivity suggests extending upper bound could be useful...
+% Bounds.aN_QC_b = Params.Vmax_QC_b -[0.45, 0.24];
+% Bounds.aN_QC_b(2) = -0.025; % param sensitivity suggests extending upper bound could be useful (although size dependency of N affinity should be significant!)
+% Bounds.aN_QC_b = sort(log(-Bounds.aN_QC_b)); % estimate on negative log scale
 
 
 % Bounds.pmax_a = [1.8, 24];  % pmax bounds guessed from mu_inf CIs given in Ward (2017)
 % Bounds.pmax_a = [5, 100];
 Bounds.pmax_a = [0.5, 5];
-% Bounds.pmax_b = [-0.7, -0.09];
-Bounds.pmax_b = [-0.5, -1e-2];
-Bounds.pmax_b = sort(log(-Bounds.pmax_b)); % estimate on negative log scale
+Bounds.pmax_b = [-0.5, 0];
+% Bounds.pmax_b = [-0.5, -1e-2];
+% Bounds.pmax_b = sort(log(-Bounds.pmax_b)); % estimate on negative log scale
 
 % Bounds.Gmax_a = [0, 100];
 Bounds.Gmax_a = [5, 35];
-% Bounds.Gmax_b = [-3, 0];
-Bounds.Gmax_b = [-0.5, -1e-2];
-Bounds.Gmax_b = sort(log(-Bounds.Gmax_b)); % esimated on negative log scale
+Bounds.Gmax_b = [-0.5, 0];
+% Bounds.Gmax_b = [-0.5, -1e-2];
+% Bounds.Gmax_b = sort(log(-Bounds.Gmax_b)); % esimated on negative log scale
 
 % Bounds.k_G_a = [0, 10];
 % Bounds.k_G_b = [0, 1];
@@ -450,7 +451,7 @@ Bounds.Gmax_b = sort(log(-Bounds.Gmax_b)); % esimated on negative log scale
 Bounds.m_a = [2 .* FixedParams.m_min, 0.1]; % if m_a=m_min then m_b becomes totally irrelevant => set lower bound of m_a > m_min
 Bounds.m_b = [-1, 0]; % negativity ensures that mortality rate decreases with size
 % Bounds.m_b = [-1, -1e-2]; % negativity ensures that mortality rate decreases with size
-Bounds.m_b = sort(log(-Bounds.m_b)); % estimate on negative log scale
+% Bounds.m_b = sort(log(-Bounds.m_b)); % estimate on negative log scale
 
 Bounds.beta1 = [0.5, 1];
 Bounds.beta2 = [0, 0.9];
@@ -473,9 +474,9 @@ end
 %% auxiliarly functions
 % Sphere diameter & volume conversions
 function vol = d2vol(d)
-vol = 4 ./ 3 .* pi .* (0.5 .* d) .^ 3;
+vol = 1 ./ 6 .* pi .* d .^ 3;
 end
-% d2vol = @(z) 4 ./ 3 .* pi .* (0.5 .* z) .^ 3;
+% d2vol = @(z) 1 ./ 6 .* pi .* z .^ 3;
 
 % function d = vol2d(vol)
 % d = 2 .* (vol .* (3 ./ 4 ./ pi)) .^ (1/3);
