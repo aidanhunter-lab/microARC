@@ -32,7 +32,7 @@ end
 %     'Qmin_QC_a', 'Qmin_QC_b', 'Qmax_delQ_a', 'Qmax_delQ_b', ... 
 %     'Vmax_QC_a', 'Vmax_QC_b', 'aN_QC_a', 'aN_QC_b'};
 parnames = {'wPOM1', 'rDON', 'rPON', 'aP', 'm_a', 'Gmax_a', 'Gmax_b', ... 
-    'k_G', 'pmax_a', 'pmax_b', 'Qmin_QC_a', 'Qmin_QC_b', 'Qmax_delQ_a', ...
+    'k_G', 'pmax_a', 'pmax_b', 'Qmin_QC_a', 'Qmax_delQ_a', 'Qmax_delQ_b', ...
     'Vmax_QC_a', 'Vmax_QC_b', 'aN_QC_a', 'aN_QC_b'};
 
 % Check that all chosen parameters exist -- error if not
@@ -83,28 +83,7 @@ end
 FixedParams.tuneParsTransform = tuneParsTransform;
 FixedParams.tuneParsInvTransform = tuneParsInvTransform;
 
-
 % Assign parameter bounds to workspace -- transformed if required
-% switch rescaleForOptim
-%     case true
-%         for i = 1:length(logNegPars)
-%             if ismember(logNegPars{i}, parnames)
-%                 func = tuneParsTransform.(logNegPars{i});
-%                 ind = strcmp(parnames, logNegPars{i});
-%                 % Add small number to any zeros to be log-transformed --
-%                 % cannot have infinities.
-%                 if ub(ind) == 0 && lb(ind) < 0
-%                     ub(ind) = -abs(ub(ind) - lb(ind)) / 1e4;
-%                 end
-%                 lb(ind) = func(lb(ind));
-%                 ub(ind) = func(ub(ind));
-%             end
-%         end
-% end
-% assignin('caller', 'npars', npars)
-% assignin('caller', 'boundsLower', lb)
-% assignin('caller', 'boundsUpper', ub)
-
 switch rescaleForOptim
     case true
         for i = 1:length(logNegPars)

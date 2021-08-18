@@ -17,7 +17,11 @@ rng(1) % set random seed
 % Set parFile = [] for default initial parameter values (hard-coded, not loaded)
 % or parFile = 'filename.mat' to use saved values as the initials.
 % parFile = [];
-parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_removeParams.mat';
+
+parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2.mat';
+parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2_filterData.mat';
+
+% parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_removeParams.mat';
 Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
     'parFile', parFile);
 
@@ -29,7 +33,7 @@ display(Directories)
 % name-value pairs for modelSetUp.m include: useTraj, ESDmin, ESDmax, nsizes
 % [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
 %     'displayAllOutputs', true); % default set-up -- no plots
-numTraj = 1; % use only a single trajectory per sampling event -- events at Arctic-Atlantic water boundaries are not easily descernable when using only one trajectory
+numTraj = 1; % For optimisation efficiency use only a single trajectory per sampling event
 [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
     'displayAllOutputs', true, 'numTraj', numTraj);
 
@@ -100,6 +104,9 @@ v0 = initialiseVariables(FixedParams, Params, Forc);
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 restartRun = true; % restart algorithm from a saved prior run?
+fp = false; % true = restart using full population from prior run; false = restart with random population and best param set from prior run
+ni = false; % true = use v0 values generated (above) using loaded parameters; false = load v0 values used to initialise previous optimisation run (v0 possibly generated using sub-optimal params)
+
 switch restartRun, case true
     fileName_results = 'fittedParameters';  % saved parameters file name
 %     tag = '1';                              % and identifying tag
@@ -107,23 +114,52 @@ switch restartRun, case true
 %     tag = [tag '_Atlantic_quadraticMortality_singleTraj_relativeSizeDataOnly'];
 %     tag = [tag, '_Atlantic_quadraticMortality_singleTraj_omitSizeDataTot_removeParams'];
 %     tag = [tag, '_Atlantic_singleTraj_removeParams'];
-    tag = [tag, '_Atlantic_singleTraj_adjustParBounds2'];
+    
+%     tag = [tag, '_Atlantic_singleTraj_adjustParBounds2'];
+    tag = [tag, '_Atlantic_singleTraj_adjustParBounds2_filterData'];
+    
     fileName_results = fullfile(Directories.resultsDir, ...
         [fileName_results '_' tag]);
-    % Load stored results    
-    [~, results, ~, ~, boundsLower, boundsUpper, Data, Forc, FixedParams, Params, v0] = ...
-        loadOptimisationRun(fileName_results);
+    % Load stored results
+    switch ni
+        case true
+            [~, results, ~, ~, boundsLower, boundsUpper, Data, Forc, FixedParams, Params] = ...
+                loadOptimisationRun(fileName_results);
+        case false
+            [~, results, ~, ~, boundsLower, boundsUpper, Data, Forc, FixedParams, Params, v0] = ...
+                loadOptimisationRun(fileName_results);            
+%             [~, results, ~, ~, ~, ~, ~, ~, ~, ~, v0] = ...
+%                 loadOptimisationRun(fileName_results);
+    end
     populationOld = results.populationHistory(:,:,end);
     scoresOld = results.scoreHistory(:,end);
-    optimiserOptions = results.optimiserOptions;
+    switch fp
+        case true
+            optimiserOptions = results.optimiserOptions;
+            optimiserOptions.InitialPopulationMatrix = populationOld;
+            optimiserOptions.InitialScoresMatrix = scoresOld;
+        case false
+            optimiserOptions.InitialPopulationMatrix = x;
+    end    
     optimiserOptions.MaxGenerations = niter;
-    optimiserOptions.InitialPopulationMatrix = populationOld;
-    optimiserOptions.InitialScoresMatrix = scoresOld;
 end
 
 % Parallelise integrations over trajectories
 poolObj = gcp('nocreate');
 if isempty(poolObj), poolObj = parpool('SpmdEnabled', false); end
+
+
+% results.parNames
+% FixedParams.tunePars
+% 
+% x = results.optPar_searchSpace;
+% x(strcmp(results.parNames, 'Qmin_QC_b')) = [];
+% x = [x(1:12) nan x(13:end)];
+% x(isnan(x)) = FixedParams.tuneParsTransform.Qmax_delQ_b(Params.Qmax_delQ_b);
+% 
+% costCalc(x, FixedParams, Params, Forc, Data, v0, FixedParams.odeIntegrator, ...
+%     FixedParams.odeOptions, 'selectFunction', costFunctionLabel)
+
 
 % Call optimiser
 tic; disp('.. started at'); disp(datetime('now'))
@@ -152,6 +188,7 @@ results_ = storeTunedOutput(FixedParams.optimiser, gapopulationhistory, ...
 % results into the loaded 'results' struct.
 appendResults = exist('results', 'var');
 if appendResults
+    results.optPar_searchSpace = results_.optPar_searchSpace;
     results.optPar = results_.optPar;
     results.optPar_summary = results_.optPar_summary;
     results.populationHistory = cat(3, results.populationHistory, ... 
@@ -170,7 +207,8 @@ saveParams = true;
 % Choose file name
 fileName_results = 'fittedParameters';
 % and identifying tag
-tag = 'Atlantic_singleTraj_adjustParBounds2';
+% tag = 'Atlantic_singleTraj_adjustParBounds2';
+tag = 'Atlantic_singleTraj_adjustParBounds2_filterData';
 tag = [FixedParams.costFunction '_' tag];
 
 fileName_results = fullfile(Directories.resultsDir, ...

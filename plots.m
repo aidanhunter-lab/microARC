@@ -13,7 +13,7 @@ addpath(genpath(fileparts(which('fit_parameters'))))
 
 % Store folders/filenames of data and saved parameters
 parFile = [];
-% parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_removeParams.mat';
+% parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2_filterData.mat';
 Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
     'parFile', parFile);
 display(Directories)
@@ -24,7 +24,9 @@ loadFittedParams = true; % use output saved from optimisation run?
 fileName = 'fittedParameters';
 % tag = 'RMS_Hellinger2_Atlantic_singleTraj_removeParams';
 % tag = 'RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds';
+
 tag = 'RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2';
+tag = 'RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2_filterData';
 
 fileName = fullfile(Directories.resultsDir, ...
     [fileName '_' tag]);
