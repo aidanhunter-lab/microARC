@@ -60,6 +60,10 @@ if ~isempty(varargin)
             Params.wk = Params.wk_func(Params.wDOM, Params.wPOM);
         end
         
+        if ismember('Gmax_a', parnames) || ismember('aG', parnames)
+            Params.k_G = Params.k_G_func(Params.Gmax_a, Params.aG);
+        end
+
         if any(strcmp('sigG', parnames))
             Params.phi = Params.phi_func(Params.delta_opt, Params.sigG, FixedParams.delta);
         end
@@ -146,6 +150,10 @@ if ~isempty(varargin)
             Params.wk = Params.wk_func(Params.wDOM, Params.wPOM);
         end
         
+        if exist('Gmax_a', 'var') || exist('aG', 'var')
+            Params.k_G = Params.k_G_func(Params.Gmax_a, Params.aG);
+        end
+
         if exist('sigG', 'var')
             Params.phi = Params.phi_func(Params.delta_opt, Params.sigG, FixedParams.delta);
         end

@@ -105,7 +105,7 @@ v0 = initialiseVariables(FixedParams, Params, Forc);
 
 restartRun = true; % restart algorithm from a saved prior run?
 fp = false; % true = restart using full population from prior run; false = restart with random population and best param set from prior run
-ni = false; % true = use v0 values generated (above) using loaded parameters; false = load v0 values used to initialise previous optimisation run (v0 possibly generated using sub-optimal params)
+ni = true; % true = use v0 values generated (above) using loaded parameters; false = load v0 values used to initialise previous optimisation run (v0 possibly generated using sub-optimal params)
 
 switch restartRun, case true
     fileName_results = 'fittedParameters';  % saved parameters file name
@@ -139,7 +139,7 @@ switch restartRun, case true
             optimiserOptions.InitialPopulationMatrix = populationOld;
             optimiserOptions.InitialScoresMatrix = scoresOld;
         case false
-            optimiserOptions.InitialPopulationMatrix = x;
+            optimiserOptions.InitialPopulationMatrix = results.optPar_searchSpace;
     end    
     optimiserOptions.MaxGenerations = niter;
 end
@@ -147,19 +147,6 @@ end
 % Parallelise integrations over trajectories
 poolObj = gcp('nocreate');
 if isempty(poolObj), poolObj = parpool('SpmdEnabled', false); end
-
-
-% results.parNames
-% FixedParams.tunePars
-% 
-% x = results.optPar_searchSpace;
-% x(strcmp(results.parNames, 'Qmin_QC_b')) = [];
-% x = [x(1:12) nan x(13:end)];
-% x(isnan(x)) = FixedParams.tuneParsTransform.Qmax_delQ_b(Params.Qmax_delQ_b);
-% 
-% costCalc(x, FixedParams, Params, Forc, Data, v0, FixedParams.odeIntegrator, ...
-%     FixedParams.odeOptions, 'selectFunction', costFunctionLabel)
-
 
 % Call optimiser
 tic; disp('.. started at'); disp(datetime('now'))

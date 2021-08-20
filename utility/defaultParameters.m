@@ -120,7 +120,8 @@ Params.scalarParams = {
     'aP'
     'theta'
     'xi'
-    'k_G'
+    'aG'
+%     'k_G'
     'delta_opt'
     'sigG'
     'Lambda'
@@ -228,7 +229,7 @@ Params.Gmax_b = -0.16;
 % Params.Gmax_b = log(-Params.Gmax_b); % estimate on negative log scale
 Params.Gmax = [];
 
-% % half-saturation prey concentration (mmol N / m^3) for grazing uptake
+% % half-saturation prey concentration (mmol C / m^3) for grazing uptake
 % Params.k_G_a = 0.5;
 % Params.k_G_b = 0.18;
 % Params.k_G = [];
@@ -282,7 +283,10 @@ Params.Tref = 20;           % reference temperature (degrees C)
 Params.A = 0.05;            % temperature dependence (unitless)
 Params.h = 10;              % curvature on quota uptake limitation
 % Params.m = 0.05;            % linear plankton mortality (1/day)
-Params.k_G = 5;             % half-saturation prey concentration (mmol C / m^3) for grazing uptake
+Params.aG = 4; % grazing 'clearance' rate -- initial slope of grazing rate-prey availability curve (m^3 / (day mmol C))
+Params.k_G_func = @(Gmax_a, aG) Gmax_a ./ aG; % half-saturation prey concentration (mmol C / m^3) for grazing uptake -- not estimated directly
+Params.k_G = [];
+% Params.k_G = 5;             % half-saturation prey concentration (mmol C / m^3) for grazing uptake
 % Params.Gmax = 5;            % maximum grazing rate
 Params.delta_opt = 10;      % optimal predator:prey size ratio maximising feeding fluxes
 if strcmp(bioModel, 'singlePredatorClass')
@@ -361,7 +365,8 @@ Bounds.aP         = [1e-10, 5.75e-6];
 Bounds.theta      = [3, 5];
 Bounds.xi         = [1.5, 5];
 % Bounds.k_G        = [0.5, 10];
-Bounds.k_G        = [0.5, 30];
+Bounds.aG = [5/30, 35/1];
+% Bounds.k_G        = [0.5, 30];
 Bounds.sigG       = [0.25, 2.5];
 Bounds.delta_opt  = [10, 10];
 Bounds.Lambda     = [-1.5, -0.5];
