@@ -399,6 +399,11 @@ if (isfield(Params, 'Vmax_QC') && isfield(Params, 'aN_QC')) && ...
     Params.kN = Params.kN_func(Params.Vmax_QC, Params.aN_QC);
 end
 
+if (isfield(Params, 'Gmax_a') && isfield(Params, 'aG')) && ...
+        ~(isempty(Params.Gmax_a) || isempty(Params.aG))
+    Params.k_G = Params.k_G_func(Params.Gmax_a, Params.aG);
+end
+
 % Params.beta(FixedParams.nPP_size+1) = Params.beta(FixedParams.nPP_size); % assume beta for zooplankton is equivalent to largest phytoplankton size class
 
 
