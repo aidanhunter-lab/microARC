@@ -54,6 +54,21 @@ Data = prepareFittingData(obsDir, ...
     'plotCellConcSpectra', plotCellConcSpectra, ...
     'plotBioVolSpectra', plotBioVolSpectra);
 
+% Chlorophyll samples from deep water cannot be replicated by the model
+% unless modelled plankton sink -- light does not penetrate deeply enough 
+% to permit growth and diffusion is too weak. Unless plankton sinking is
+% modelled then the deep water chlorophyll samples should not be used when
+% fitting model parameters.
+ds = Data.scalar;
+ds = rmfield(ds, {'nSamples','nEvents'});
+ds = struct2table(ds);
+ds(strcmp(ds.Variable, 'chl_a') & ds.Depth >= 100,:) = [];
+ds = table2struct(ds, 'ToScalar', true);
+ds.nSamples = length(ds.Value);
+ds.nEvents = length(unique(ds.Event));
+Data.scalar = ds;
+clear ds
+
 % Choose number of modelled size class intervals using function
 % setSizeClassIntervals.m
 % min/max sizes to retain from the data
