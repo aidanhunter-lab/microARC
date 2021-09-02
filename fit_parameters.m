@@ -18,8 +18,12 @@ rng(1) % set random seed
 % or parFile = 'filename.mat' to use saved values as the initials.
 % parFile = [];
 
-parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2.mat';
-parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2_filterData.mat';
+% parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2.mat';
+% parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2_filterData.mat';
+
+parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_aG_sigG_upweightAbnTot.mat';
+parFile = 'parameterInitialValues_RMS_Hellinger2_Arctic_aG_sigG_upweightAbnTot.mat';
+
 
 % parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_removeParams.mat';
 Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
@@ -65,7 +69,9 @@ costFunctionType = 'RMS_Hellinger2'; % fit scalar/nutrient data using least sum 
 % costFunctionType = 'meanCDFdist_HellingerFullSpectrum';
 % costFunctionType = 'meanCDFdist_HellingerFullSpectrum_averagedEventsDepths';
 
-fitTrajectories = 'Atlantic';
+% fitTrajectories = 'Atlantic';
+fitTrajectories = 'Arctic';
+
 % Different cost functions may use binned size data (integrated within
 % modelled size class intervals) or may fit to the full size spectra data.
 % This choice affects how model outputs are extracted to match data.
@@ -116,7 +122,10 @@ switch restartRun, case true
 %     tag = [tag, '_Atlantic_singleTraj_removeParams'];
     
 %     tag = [tag, '_Atlantic_singleTraj_adjustParBounds2'];
-    tag = [tag, '_Atlantic_singleTraj_adjustParBounds2_filterData'];
+%     tag = [tag, '_Atlantic_singleTraj_adjustParBounds2_filterData'];
+
+%     tag = [tag, '_Atlantic_aG_sigG_upweightAbnTot'];
+    tag = [tag, '_Arctic_aG_sigG_upweightAbnTot'];
     
     fileName_results = fullfile(Directories.resultsDir, ...
         [fileName_results '_' tag]);
@@ -195,7 +204,13 @@ saveParams = true;
 fileName_results = 'fittedParameters';
 % and identifying tag
 % tag = 'Atlantic_singleTraj_adjustParBounds2';
-tag = 'Atlantic_singleTraj_adjustParBounds2_filterData';
+
+% tag = 'Atlantic_singleTraj_adjustParBounds2_filterData';
+
+% tag = 'Atlantic_aG_sigG_upweightAbnTot';
+tag = 'Arctic_aG_sigG_upweightAbnTot';
+
+
 tag = [FixedParams.costFunction '_' tag];
 
 fileName_results = fullfile(Directories.resultsDir, ...

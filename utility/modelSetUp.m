@@ -54,21 +54,6 @@ Data = prepareFittingData(obsDir, ...
     'plotCellConcSpectra', plotCellConcSpectra, ...
     'plotBioVolSpectra', plotBioVolSpectra);
 
-% Chlorophyll samples from deep water cannot be replicated by the model
-% unless modelled plankton sink -- light does not penetrate deeply enough 
-% to permit growth and diffusion is too weak. Unless plankton sinking is
-% modelled then the deep water chlorophyll samples should not be used when
-% fitting model parameters.
-ds = Data.scalar;
-ds = rmfield(ds, {'nSamples','nEvents'});
-ds = struct2table(ds);
-ds(strcmp(ds.Variable, 'chl_a') & ds.Depth >= 100,:) = [];
-ds = table2struct(ds, 'ToScalar', true);
-ds.nSamples = length(ds.Value);
-ds.nEvents = length(unique(ds.Event));
-Data.scalar = ds;
-clear ds
-
 % Choose number of modelled size class intervals using function
 % setSizeClassIntervals.m
 % min/max sizes to retain from the data
@@ -138,8 +123,7 @@ nsizes = FixedParams.nPP_size;
     'datFull', Data.sizeFull, 'nsizes', nsizes, 'FixedParams', FixedParams, ...
     'plotSizeClassIntervals', plotSizeClassIntervals);
 
-% Choose data types to use in cost function - I think bio-volume is the
-% best choice for the size data
+% Choose data types to use in cost function
 if ~exist('scalarFittingData', 'var')
     scalarFittingData = {'N','chl_a','PON','POC'};
 end
@@ -169,8 +153,20 @@ clear F
 % standardises data, filters out unrequired data, and derives a few useful
 % metrics.
 
-% Remove fitting-data samples from below the maximum modelled depth
-Data = omitDeepSamples(Data, FixedParams);
+% Remove fitting-data samples from below the maximum modelled depth.
+% Optional arguments may be included to omit samples from below selected depths.
+
+% Chlorophyll samples from deep water cannot be replicated by the model
+% unless modelled plankton sink -- light does not penetrate deeply enough 
+% to permit growth and diffusion is too weak. Unless plankton sinking is
+% modelled then the deep water chlorophyll samples should probabaly not be 
+% used when fitting model parameters.
+if ~exist('chlSampleDepthLimit', 'var')
+    chlSampleDepthLimit = 100; % By default exclude chl samples from depths >= 100
+end
+
+Data = omitDeepSamples(Data, FixedParams, ...
+    'chlSampleDepthLimit', chlSampleDepthLimit);
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -286,51 +282,6 @@ Data.sizeFull.dataBinned.ArcticOrigin = Data_.sizeFull.dataBinned.ArcticOrigin;
 Forc.waterMass = Forc_.waterMass(ismember(Forc_.iTraj, Forc.iTraj));
 
 clear Forc_ Data_
-
-% % Number of trajectories per sample event (duplicates may be required for 
-% % some events, depending on maxDist).
-% if ~exist('numTraj', 'var')
-%     numTraj = 10;
-% end
-% 
-% [Forc_, eventTraj] = chooseTrajectories(Forc, Data.scalar, maxDist, numTraj);
-% 
-% %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-% % The choice of maxDist is important. If maxDist is very large then the 
-% % trajectories ascribed to each sampling event will correspond poorly to
-% % the history of the water at the events, so small values are better.
-% % However, if maxDist is small then this can limit the number of
-% % trajectories available to use for each sampling event, and may entirely
-% % exclude some sampling events from the analyses if no trajectories are
-% % within the maxDist radius. We want to set maxDist small, but not too
-% % small...
-% %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-% 
-% % Observe any warnings produced by chooseTrajectories.m and use the table
-% % 'eventTraj' to help evaluate choice of maxDist and numTraj: if happy then
-% % set Forc = Forc_, otherwise reselect maxDist and numTraj and repeat
-% % chooseTrajectories.m
-% Forc = Forc_; clear Forc_
-% 
-% % Omit data from any sampling events not matched with a set of trajectories
-% Data = omitUnmatchedEvents(Data, eventTraj, Forc);
-% % [Data, eventTraj] = omitUnmatchedEvents(Data, eventTraj, Forc);
-% 
-% % Group sampling events by origin of particles: Arctic or Atlantic.
-% % Each individual trajectory is either of Atlantic or Arctic origin
-% % (stored in Forc.waterMass).
-% % Each sampling event is associated with a selection of trajectories, so
-% % may be considered as Atlantic, Arctic, or a mixture (stored in 
-% % Data.scalar.waterMass).
-% if ~exist('trajectoryPlot', 'var')
-%     trajectoryPlot = false;
-% end
-% if ~exist('dendrogramPlot', 'var')
-%     dendrogramPlot = false;
-% end
-% 
-% [Forc, Data] = particleOrigin(Forc, Data, ...
-%     'trajectoryPlot', trajectoryPlot, 'dendrogramPlot', dendrogramPlot); pause(0.25)
 
 
 % Group size data by water origin -- find average spectra using
