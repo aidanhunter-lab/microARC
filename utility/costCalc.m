@@ -30,6 +30,13 @@ end
 
 %% Run model
 
+% Transform from search space scale to natural scale
+for i = 1:length(FixedParams.tunePars)
+    pn = FixedParams.tunePars{i};
+    func = FixedParams.tuneParsInvTransform.(pn);
+    pars(i) = func(pars(i));
+end
+
 % Set parameter values
 Params = updateParameters(Params, FixedParams, pars);
 

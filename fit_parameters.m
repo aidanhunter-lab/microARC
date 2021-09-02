@@ -16,9 +16,16 @@ rng(1) % set random seed
 % Store folders/filenames of data and saved parameters.
 % Set parFile = [] for default initial parameter values (hard-coded, not loaded)
 % or parFile = 'filename.mat' to use saved values as the initials.
-% Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
-%     'parFile', []);
-parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_removeParams.mat';
+% parFile = [];
+
+% parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2.mat';
+% parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2_filterData.mat';
+
+parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_aG_sigG_upweightAbnTot.mat';
+parFile = 'parameterInitialValues_RMS_Hellinger2_Arctic_aG_sigG_upweightAbnTot.mat';
+
+
+% parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_removeParams.mat';
 Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
     'parFile', parFile);
 
@@ -30,7 +37,7 @@ display(Directories)
 % name-value pairs for modelSetUp.m include: useTraj, ESDmin, ESDmax, nsizes
 % [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
 %     'displayAllOutputs', true); % default set-up -- no plots
-numTraj = 1; % use only a single trajectory per sampling event -- events at Arctic-Atlantic water boundaries are not easily descernable when using only one trajectory
+numTraj = 1; % For optimisation efficiency use only a single trajectory per sampling event
 [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
     'displayAllOutputs', true, 'numTraj', numTraj);
 
@@ -62,19 +69,23 @@ costFunctionType = 'RMS_Hellinger2'; % fit scalar/nutrient data using least sum 
 % costFunctionType = 'meanCDFdist_HellingerFullSpectrum';
 % costFunctionType = 'meanCDFdist_HellingerFullSpectrum_averagedEventsDepths';
 
-fitTrajectories = 'Atlantic';
+% fitTrajectories = 'Atlantic';
+fitTrajectories = 'Arctic';
+
 % Different cost functions may use binned size data (integrated within
 % modelled size class intervals) or may fit to the full size spectra data.
 % This choice affects how model outputs are extracted to match data.
 fitToFullSizeSpectra = false;
+rescaleForOptim = true; % Should parameters be estimated within some transformed space? See optimisationOptions for details -- this could probably be usefully extended to limit estimation problems realted to parameter correlations/pathologic parameter space
+
 [FixedParams, Params, Forc, Data] = ...
     optimisationOptions(FixedParams, Params, Forc, Data, ...
     'niter', niter, ...
     'popSize', popSize, ...
     'costFunctionType', costFunctionType, ...
     'fitTrajectories', fitTrajectories, ...
-    'fitToFullSizeSpectra', fitToFullSizeSpectra);
-
+    'fitToFullSizeSpectra', fitToFullSizeSpectra, ...
+    'rescaleForOptim', rescaleForOptim);
 % Optional arguments (e.g. 'niter') may be included as name-value pairs,
 % otherwise default values are used.
 % It is important to specify 'costFunctionType' as one of the options
@@ -99,24 +110,47 @@ v0 = initialiseVariables(FixedParams, Params, Forc);
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 restartRun = true; % restart algorithm from a saved prior run?
+fp = false; % true = restart using full population from prior run; false = restart with random population and best param set from prior run
+ni = true; % true = use v0 values generated (above) using loaded parameters; false = load v0 values used to initialise previous optimisation run (v0 possibly generated using sub-optimal params)
+
 switch restartRun, case true
     fileName_results = 'fittedParameters';  % saved parameters file name
 %     tag = '1';                              % and identifying tag
     tag = FixedParams.costFunction;
 %     tag = [tag '_Atlantic_quadraticMortality_singleTraj_relativeSizeDataOnly'];
 %     tag = [tag, '_Atlantic_quadraticMortality_singleTraj_omitSizeDataTot_removeParams'];
-    tag = [tag, '_Atlantic_singleTraj_removeParams'];
+%     tag = [tag, '_Atlantic_singleTraj_removeParams'];
+    
+%     tag = [tag, '_Atlantic_singleTraj_adjustParBounds2'];
+%     tag = [tag, '_Atlantic_singleTraj_adjustParBounds2_filterData'];
+
+%     tag = [tag, '_Atlantic_aG_sigG_upweightAbnTot'];
+    tag = [tag, '_Arctic_aG_sigG_upweightAbnTot'];
+    
     fileName_results = fullfile(Directories.resultsDir, ...
         [fileName_results '_' tag]);
-    % Load stored results    
-    [~, results, ~, ~, boundsLower, boundsUpper, Data, Forc, FixedParams, Params, v0] = ...
-        loadOptimisationRun(fileName_results);
+    % Load stored results
+    switch ni
+        case true
+            [~, results, ~, ~, boundsLower, boundsUpper, Data, Forc, FixedParams, Params] = ...
+                loadOptimisationRun(fileName_results);
+        case false
+            [~, results, ~, ~, boundsLower, boundsUpper, Data, Forc, FixedParams, Params, v0] = ...
+                loadOptimisationRun(fileName_results);            
+%             [~, results, ~, ~, ~, ~, ~, ~, ~, ~, v0] = ...
+%                 loadOptimisationRun(fileName_results);
+    end
     populationOld = results.populationHistory(:,:,end);
     scoresOld = results.scoreHistory(:,end);
-    optimiserOptions = results.optimiserOptions;
+    switch fp
+        case true
+            optimiserOptions = results.optimiserOptions;
+            optimiserOptions.InitialPopulationMatrix = populationOld;
+            optimiserOptions.InitialScoresMatrix = scoresOld;
+        case false
+            optimiserOptions.InitialPopulationMatrix = results.optPar_searchSpace;
+    end    
     optimiserOptions.MaxGenerations = niter;
-    optimiserOptions.InitialPopulationMatrix = populationOld;
-    optimiserOptions.InitialScoresMatrix = scoresOld;
 end
 
 % Parallelise integrations over trajectories
@@ -150,6 +184,7 @@ results_ = storeTunedOutput(FixedParams.optimiser, gapopulationhistory, ...
 % results into the loaded 'results' struct.
 appendResults = exist('results', 'var');
 if appendResults
+    results.optPar_searchSpace = results_.optPar_searchSpace;
     results.optPar = results_.optPar;
     results.optPar_summary = results_.optPar_summary;
     results.populationHistory = cat(3, results.populationHistory, ... 
@@ -165,14 +200,19 @@ displayFittedParameters(results)
 % Save output
 saveParams = true;
 
-fileName_results = 'fittedParameters';  % choose file name
-tag = FixedParams.costFunction;         % and identifying tag
-tag = [tag '_Atlantic_singleTraj_removeParams'];
-% tag = [tag '_Atlantic_quadraticMortality_singleTraj_omitSizeDataTot_removeParams'];
+% Choose file name
+fileName_results = 'fittedParameters';
+% and identifying tag
+% tag = 'Atlantic_singleTraj_adjustParBounds2';
 
-% tag = [tag '_Atlantic_quadraticMortality_singleTraj_allSpectra'];
-% tag = [tag '_Atlantic_quadraticMortality_singleTraj'];
-% tag = [tag '_Arctic'];
+% tag = 'Atlantic_singleTraj_adjustParBounds2_filterData';
+
+% tag = 'Atlantic_aG_sigG_upweightAbnTot';
+tag = 'Arctic_aG_sigG_upweightAbnTot';
+
+
+tag = [FixedParams.costFunction '_' tag];
+
 fileName_results = fullfile(Directories.resultsDir, ...
     [fileName_results '_' tag]);
 

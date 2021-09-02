@@ -123,8 +123,7 @@ nsizes = FixedParams.nPP_size;
     'datFull', Data.sizeFull, 'nsizes', nsizes, 'FixedParams', FixedParams, ...
     'plotSizeClassIntervals', plotSizeClassIntervals);
 
-% Choose data types to use in cost function - I think bio-volume is the
-% best choice for the size data
+% Choose data types to use in cost function
 if ~exist('scalarFittingData', 'var')
     scalarFittingData = {'N','chl_a','PON','POC'};
 end
@@ -154,8 +153,20 @@ clear F
 % standardises data, filters out unrequired data, and derives a few useful
 % metrics.
 
-% Remove fitting-data samples from below the maximum modelled depth
-Data = omitDeepSamples(Data, FixedParams);
+% Remove fitting-data samples from below the maximum modelled depth.
+% Optional arguments may be included to omit samples from below selected depths.
+
+% Chlorophyll samples from deep water cannot be replicated by the model
+% unless modelled plankton sink -- light does not penetrate deeply enough 
+% to permit growth and diffusion is too weak. Unless plankton sinking is
+% modelled then the deep water chlorophyll samples should probabaly not be 
+% used when fitting model parameters.
+if ~exist('chlSampleDepthLimit', 'var')
+    chlSampleDepthLimit = 100; % By default exclude chl samples from depths >= 100
+end
+
+Data = omitDeepSamples(Data, FixedParams, ...
+    'chlSampleDepthLimit', chlSampleDepthLimit);
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -180,8 +191,6 @@ if ~exist('useSingleSizeSpectra', 'var'), useSingleSizeSpectra = true; end
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
-
 % There are lots of forcing data particle trajectories -- far too many to
 % include within a parameter optimisation procedure, so these need to be
 % filtered.
@@ -192,14 +201,6 @@ if ~exist('useSingleSizeSpectra', 'var'), useSingleSizeSpectra = true; end
 if ~exist('maxDist', 'var')
     maxDist = 25;
 end
-% Number of trajectories per sample event (duplicates may be required for 
-% some events, depending on maxDist).
-if ~exist('numTraj', 'var')
-    numTraj = 10;
-end
-
-[Forc_, eventTraj] = chooseTrajectories(Forc, Data.scalar, maxDist, numTraj);
-
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % The choice of maxDist is important. If maxDist is very large then the 
 % trajectories ascribed to each sampling event will correspond poorly to
@@ -211,15 +212,33 @@ end
 % small...
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+% Number of trajectories per sample event (duplicates may be required for 
+% some events, depending on maxDist).
+if exist('numTraj', 'var')
+    % numTrajDefault is used, in the first instance, to filter particle
+    % trajectories while retaining sufficient (at least 10) trajectories
+    % per sample event to determine the water mass origin of each sample.
+    % Then, after water mass origin (Arctic/Atlantic/Arctic&Atlantic) is
+    % determined, we re-filter to retain numTraj trajectories per sample.
+    % This roundabout method is important because if numTraj=1 (which is
+    % good for parameter optimisation efficiency) then samples at the
+    % water mass boundaries are described as EITHER Arctic OR Atlantic,
+    % which is dodgy because a sample may, in reality, be from Arctic water
+    % while the nearest trajectory originated from the Atlantic, and we
+    % cannot tell which samples are boundary cases from single trajecories.
+    numTrajDefault = max(eval('numTraj'), 10);
+else
+    numTraj = 10;
+    numTrajDefault = 10;
+end
+
+[Forc_, eventTraj] = chooseTrajectories(Forc, Data.scalar, maxDist, numTrajDefault, ...
+    'displayWarnings', false);
 % Observe any warnings produced by chooseTrajectories.m and use the table
-% 'eventTraj' to help evaluate choice of maxDist and numTraj: if happy then
-% set Forc = Forc_, otherwise reselect maxDist and numTraj and repeat
-% chooseTrajectories.m
-Forc = Forc_; clear Forc_
+% 'eventTraj' to help evaluate choice of maxDist and numTraj.
 
 % Omit data from any sampling events not matched with a set of trajectories
-Data = omitUnmatchedEvents(Data, eventTraj, Forc);
-% [Data, eventTraj] = omitUnmatchedEvents(Data, eventTraj, Forc);
+Data_ = omitUnmatchedEvents(Data, eventTraj, Forc_);
 
 % Group sampling events by origin of particles: Arctic or Atlantic.
 % Each individual trajectory is either of Atlantic or Arctic origin
@@ -234,8 +253,35 @@ if ~exist('dendrogramPlot', 'var')
     dendrogramPlot = false;
 end
 
-[Forc, Data] = particleOrigin(Forc, Data, ...
+[Forc_, Data_] = particleOrigin(Forc_, Data_, ...
     'trajectoryPlot', trajectoryPlot, 'dendrogramPlot', dendrogramPlot); pause(0.25)
+
+% Now that water mass origin has been determined for each sample (using
+% particle trajectories) re-filter to select numTraj particle trajectories
+% per sample.
+[Forc, eventTraj] = chooseTrajectories(Forc, Data.scalar, maxDist, numTraj);
+
+% Omit data from any sampling events not matched with a set of trajectories
+Data = omitUnmatchedEvents(Data, eventTraj, Forc);
+
+% This code section is a bit messy because it was a quick-fix to sort out
+% issues with ascribing water mass origins to sample events when using a
+% single particle trajctory per event -- it could be improved...
+Data.scalar.waterMass = Data_.scalar.waterMass;
+Data.scalar.AtlanticOrigin = Data_.scalar.AtlanticOrigin;
+Data.scalar.ArcticOrigin = Data_.scalar.ArcticOrigin;
+
+Data.sizeFull.waterMass = Data_.sizeFull.waterMass;
+Data.sizeFull.AtlanticOrigin = Data_.sizeFull.AtlanticOrigin;
+Data.sizeFull.ArcticOrigin = Data_.sizeFull.ArcticOrigin;
+
+Data.sizeFull.dataBinned.waterMass = Data_.sizeFull.dataBinned.waterMass;
+Data.sizeFull.dataBinned.AtlanticOrigin = Data_.sizeFull.dataBinned.AtlanticOrigin;
+Data.sizeFull.dataBinned.ArcticOrigin = Data_.sizeFull.dataBinned.ArcticOrigin;
+
+Forc.waterMass = Forc_.waterMass(ismember(Forc_.iTraj, Forc.iTraj));
+
+clear Forc_ Data_
 
 
 % Group size data by water origin -- find average spectra using

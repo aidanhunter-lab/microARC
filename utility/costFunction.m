@@ -1537,7 +1537,8 @@ else
             
             % Within each size data group, weight relative abundance-at-size
             % relative to total abundance.
-            weight_relVsTot = 3; % weighting factor of relative vs total abundance (relative abundance assumed more reliable)
+%             weight_relVsTot = 3; % weighting factor of relative vs total abundance (relative abundance assumed more reliable)
+            weight_relVsTot = 1;
             costSize = zeros(2,length(waterMasses)); % store weighted costs for all size data groups
             for i = 1:length(waterMasses)
                 wm = waterMasses{i};

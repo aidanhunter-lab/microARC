@@ -12,17 +12,29 @@ clear; close all; delete(gcp('nocreate')); clc
 addpath(genpath(fileparts(which('fit_parameters'))))
 
 % Store folders/filenames of data and saved parameters
+parFile = [];
+% parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2_filterData.mat';
+
+parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_aG_sigG_upweightAbnTot.mat';
+parFile = 'parameterInitialValues_RMS_Hellinger2_Arctic_aG_sigG_upweightAbnTot.mat';
+
 Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
-    'parFile', []);
-% Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
-%     'parFile', 'parameterInitialValues_1.mat');
+    'parFile', parFile);
 display(Directories)
 
 % Load saved outputs from optimisation runs or choose default set-up
 loadFittedParams = true; % use output saved from optimisation run?
-fileName = 'fittedParameters';  % saved parameters file name
-% tag = '1';                      % and identifying tag
-tag = 'RMS_Hellinger2_Atlantic_singleTraj_removeParams';
+% Saved parameters file name and identifying tag
+fileName = 'fittedParameters';
+% tag = 'RMS_Hellinger2_Atlantic_singleTraj_removeParams';
+% tag = 'RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds';
+
+% tag = 'RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2';
+% tag = 'RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2_filterData';
+
+tag = 'RMS_Hellinger2_Atlantic_aG_sigG_upweightAbnTot';
+tag = 'RMS_Hellinger2_Arctic_aG_sigG_upweightAbnTot';
+
 
 fileName = fullfile(Directories.resultsDir, ...
     [fileName '_' tag]);
@@ -90,7 +102,6 @@ tic; disp('.. started at'); disp(datetime('now'))
     FixedParams.odeIntegrator, FixedParams.odeOptions);
 toc
 
-
 % Generate modelled equivalents of the data
 modData0 = matchModOutput2Data(out0, auxVars0, Data0, FixedParams, ...
     'fitToFullSizeSpectra', FixedParams.fitToFullSizeSpectra);
@@ -134,10 +145,10 @@ subplot(2,2,4)
 plot_rawData('scalar', 'POC', Data0, 'pointAlpha', pointAlpha);
 
 
-% Standardised data
+% Standardised data -- sized for paper
 plt_stnd = figure;
 plt_stnd.Units = 'inches';
-plt_stnd.Position = [0 0 8 12];
+plt_stnd.Position = [0 0 6 9];
 nrows = 4; % number of rows excluding legend
 ncols = 2;
 legh = (1 / 5) * (1 / nrows); % legend height
@@ -177,9 +188,17 @@ plot_standardisedData('scalar', 'chl_a', Data0, 'covariate', 'Depth', ...
 subplot('Position', [pex + 2 * pwt - pw, 1 - pex - 3 * pht - ph, pw, ph]);
 plot_standardisedData('scalar', 'chl_a', Data0, 'covariate', 'Event', ...
     'pointAlpha', 0.4, 'densityCurve', true);
-leg = legend('Arctic', 'Atlantic', 'data distribution', 'standard normal', ...
+% Include legend at bottom
+if ismember('Arctic/Atlantic', Data0.scalar.waterMass)
+    waterMasses = {'Arctic', 'Arctic & Atlantic', 'Atlantic'};
+    ncol = 3;
+else
+    waterMasses = {'Arctic', 'Atlantic'};    
+    ncol = 2;
+end
+leg = legend([waterMasses, 'data distribution', 'standard normal'], ...
     'Location', 'bestoutside', 'FontSize', legFontSize, ...
-    'Orientation', 'horizontal', 'NumColumns', 2, ...
+    'Orientation', 'horizontal', 'NumColumns', ncol, ...
     'box', 'on');
 set(leg, 'Position', [0.25, pex, 0.5, legh])
 
@@ -335,6 +354,62 @@ for i = 1:2
     sgtitle(['Model fit to ' pn{i} ' data'])
 end
 
+% % Compare with data sampled from Arctic waters
+% fitTrajectories = 'Arctic';
+% fitToFullSizeSpectra = false;
+% rescaleForOptim = true; % Should parameters be estimated within some transformed space? See optimisationOptions for details -- this could probably be usefully extended to limit estimation problems realted to parameter correlations/pathologic parameter space
+% [~, ~, ~, dat] = ...
+%     optimisationOptions(FixedParams, Params, Forc0, Data0, ...
+%     'fitTrajectories', fitTrajectories, ...
+%     'fitToFullSizeSpectra', fitToFullSizeSpectra, ...
+%     'rescaleForOptim', rescaleForOptim);
+% 
+% standard = [true, false];
+% pn = {'standardised', 'raw'};
+% Vars = {'N','PON','POC','chl_a'};
+% nrows = 3; % 1 row per plot type
+% ncols = length(Vars); % 1 column per data type
+% colDat = [0, 0, 0];
+% colMod = [0, 1, 0];
+% connectors = true;
+% for i = 1:2
+%     standardised = standard(i);
+%     plotName = ['pltFit2Data_' pn{i}];
+%     assignin('base', plotName, figure)
+%     set(eval(plotName), 'Units', 'inches')
+%     set(eval(plotName), 'Position', [0 0 16 12])
+%     
+%     % 1st row: ungrouped data
+%     for ii = 1:ncols
+%         subplot(nrows, ncols, ii)
+%         xvar = Vars{ii};
+%         plot_fitToNutrient_sorted(xvar, Data, modData, ...
+%             'colDat', colDat, 'colMod', colMod, ...
+%             'standardised', standardised, 'connectors', connectors);
+%     end
+%     
+%     % 2nd row: grouped by depth -- boxplot
+%     for ii = 1:ncols
+%         subplot(nrows, ncols, ii + ncols)
+%         xvar = Vars{ii};
+%         plot_fitToNutrient_depth(xvar, Data, modData, ...
+%             'colDat', colDat, 'colMod', colMod, ...
+%             'standardised', standardised);
+%     end
+%     
+%     % 3rd row: grouped by sample event -- boxplot
+%     for ii = 1:ncols
+%         subplot(nrows, ncols, ii + 2 * ncols)
+%         xvar = Vars{ii};
+%         plot_fitToNutrient_event(xvar, Data, modData, ...
+%             'colDat', colDat, 'colMod', colMod, ...
+%             'standardised', standardised);
+%     end
+%     sgtitle(['Model fit to ' pn{i} ' data'])
+% end
+
+
+
 
 % Grouped by data type
 standardised = true;
@@ -377,6 +452,18 @@ end
 
 
 switch save, case true
+    % Group plots -- all scalar data
+    plotName = 'pltFit2Data_raw';
+    filename = 'fitToData_raw.png';
+    if (exist(plotName, 'var') && isvalid(eval(plotName)))
+        print(eval(plotName), fullfile(folder, filename), '-r300', '-dpng');
+    end
+    plotName = 'pltFit2Data_standardised';
+    filename = 'fitToData_standardised.png';
+    if (exist(plotName, 'var') && isvalid(eval(plotName)))
+        print(eval(plotName), fullfile(folder, filename), '-r300', '-dpng');
+    end
+    % Individual plots -- separate scalar data types
     for i = 1:length(Vars)
         plotName = ['pltFit2Data_' Vars{i}];
         filename = ['fitToData_' Vars{i} '.png'];
@@ -401,9 +488,10 @@ end
 trophicGroups = {'autotroph', 'heterotroph'}; pn = {'P','Z'};
 xvar = 'BioVol';
 logScale = 'semilogx'; % for size spectra data choose logScale = 'loglog' or 'semilogx'
-waterOrigin = 'Atlantic';
+% waterOrigin = 'Atlantic';
+waterOrigin = 'Arctic';
 connectors = true; % lines linking data to modelled equivalents
-meanOnly = false; % display mean (over sample events) of modelled values -- for cleaner plot
+meanOnly = true; % display mean (over sample events) of modelled values -- for cleaner plot
 
 for i = 1:length(trophicGroups)
     trophicGroup = trophicGroups{i};
@@ -478,14 +566,14 @@ pltN = plot_fitToData('N', Data, modData, logPlot); pause(0.25)
 logPlot = 'semilogx'; % for size spectra data choose logPlot = 'loglog' or 'semilogx'
 
 % Comment out Arctic plots because we're fitting to Atlantic data
-pltBioVol_Atl_P = plot_fitToData('BioVol', Data, modData, logPlot, ... 
-    'trophicGroup', 'autotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
-% pltBioVol_Arc_P = plot_fitToData('BioVol', Data, modData, logPlot, ... 
-%     'trophicGroup', 'autotroph', 'waterOrigin', 'Arctic'); pause(0.25)
-pltBioVol_Atl_Z = plot_fitToData('BioVol', Data, modData, logPlot, ... 
-    'trophicGroup', 'heterotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
-% pltBioVol_Arc_Z = plot_fitToData('BioVol', Data, modData, logPlot, ... 
-%     'trophicGroup', 'heterotroph', 'waterOrigin', 'Arctic'); pause(0.25)
+% pltBioVol_Atl_P = plot_fitToData('BioVol', Data, modData, logPlot, ... 
+%     'trophicGroup', 'autotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
+pltBioVol_Arc_P = plot_fitToData('BioVol', Data, modData, logPlot, ... 
+    'trophicGroup', 'autotroph', 'waterOrigin', 'Arctic'); pause(0.25)
+% pltBioVol_Atl_Z = plot_fitToData('BioVol', Data, modData, logPlot, ... 
+%     'trophicGroup', 'heterotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
+pltBioVol_Arc_Z = plot_fitToData('BioVol', Data, modData, logPlot, ... 
+    'trophicGroup', 'heterotroph', 'waterOrigin', 'Arctic'); pause(0.25)
 
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -512,19 +600,19 @@ switch save, case true
     
     % size data
     if exist('pltBioVol_Arc_P', 'var') && isvalid(pltBioVol_Arc_P)
-        filename = 'fitToData_BioVolSpectra_Arc_P.png';
+        filename = 'fitToData_linePlots_BioVolSpectra_Arc_P.png';
         print(pltBioVol_Arc_P, fullfile(folder, filename), '-r300', '-dpng');
     end
     if exist('pltBioVol_Arc_Z', 'var') && isvalid(pltBioVol_Arc_Z)
-        filename = 'fitToData_BioVolSpectra_Arc_Z.png';
+        filename = 'fitToData_linePlots_BioVolSpectra_Arc_Z.png';
         print(pltBioVol_Arc_Z, fullfile(folder, filename), '-r300', '-dpng');
     end
     if exist('pltBioVol_Atl_P', 'var') && isvalid(pltBioVol_Atl_P)
-        filename = 'fitToData_BioVolSpectra_Atl_P.png';
+        filename = 'fitToData_linePlots_BioVolSpectra_Atl_P.png';
         print(pltBioVol_Atl_P, fullfile(folder, filename), '-r300', '-dpng');
     end
     if exist('pltBioVol_Atl_Z', 'var') && isvalid(pltBioVol_Atl_Z)
-        filename = 'fitToData_BioVolSpectra_Atl_Z.png';
+        filename = 'fitToData_linePlots_BioVolSpectra_Atl_Z.png';
         print(pltBioVol_Atl_Z, fullfile(folder, filename), '-r300', '-dpng');
     end
     
@@ -687,6 +775,7 @@ plot_comparePMFs(yobs, ymod, varLabel, 'waterMass', waterMass, ...
 
 % Display fitted parameters in relation to their bounding values (in the
 % table, columns widths shoukd be adjustable).
+
 plt = plot_fittedParameters(results.optPar_summary);
 
 switch save, case true
@@ -849,7 +938,7 @@ save = false;
 
 % Choose one or more trajectories -- if multiple are selected then the plot
 % will average over them.
-sampleEvent = 24;
+sampleEvent = 1;
 % All trajectories used for sampleEvent
 traj = find(Data0.scalar.EventTraj(sampleEvent,:));
 % If waterMass is either Atlantic OR Arctic then it may make sense to plot
@@ -1323,7 +1412,7 @@ close all
 
 %% Network plots -- fluxes, production
 
-% Ome of these network plots are too busy -- too many overlapping
+% Some of these network plots are too busy -- too many overlapping
 % connections. The same information can be displayed differently as
 % 'heatmaps' or tables...
 
@@ -1384,6 +1473,28 @@ switch save, case true
             print(plt_OM, fullfile(folder, filename), '-r300', '-dpng');
         end
 end
+
+
+
+
+% Try representing the feeding fluxes as a heatmap
+Type = 'feedingFluxes';
+nutrient = 'nitrogen';
+traj = 'Atlantic';
+
+plt_feedFlux_N = figure;
+plt_feedFlux_N.Units = 'inches';
+plt_feedFlux_N.Position = [0 0 10 7.5];
+
+subplot(2,1,1)
+plot_network_heatmap('feedingFluxes', 'nitrogen', auxVars0, FixedParams, Forc0, 'Atlantic');
+
+
+
+subplot(2,1,2)
+plot_network('feedingFluxes', 'nitrogen', auxVars0, FixedParams, Forc0, 'Atlantic');
+
+
 
 
 

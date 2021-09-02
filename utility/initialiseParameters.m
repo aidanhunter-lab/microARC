@@ -153,7 +153,7 @@ end
 delta_pred = reshape(FixedParams.ZPdia, [FixedParams.nZP_size, 1]);
 delta_prey = [reshape(FixedParams.PPdia, [1 FixedParams.nPP_size]), ...
     reshape(FixedParams.ZPdia, [1 FixedParams.nZP_size])];
-FixedParams.delta = delta_pred ./ delta_prey; % predator:prey size (radii) ratios
+FixedParams.delta = delta_pred ./ delta_prey; % predator:prey size (diameter) ratios
 
 % delta_pred = reshape(FixedParams.ZPsize, [FixedParams.nZP_size, 1]);
 % delta_prey = [reshape(FixedParams.PPsize, [1 FixedParams.nPP_size]), ... 
@@ -294,6 +294,11 @@ if (isfield(Params, 'm_a') && isfield(Params, 'm_b')) && ...
     Params.m = Params.m_func(Params.m_a, Params.m_b, Vol);
 end
 
+if isfield(Params, 'K_m_coef') && ~isempty(Params.K_m_coef) && ...
+        ~isempty(Params.Q_C)
+    Params.K_m = Params.K_m_func(Params.K_m_coef, Params.Q_C);
+end
+
 if (isfield(Params, 'wp_a') && isfield(Params, 'wp_b')) && ...
         ~(isempty(Params.wp_a) || isempty(Params.wp_b))
     nz = FixedParams.nz;
@@ -314,9 +319,11 @@ if isfield(Params, 'rPOC') && isfield(Params, 'rPOC_func')
     Params.rPOC = Params.rPOC_func(Params.rPON);
 end
 
-if (isfield(Params, 'delta_opt') && isfield(Params, 'sigG') && isfield(Params, 'phi')) && ...
-        ~(isempty(Params.delta_opt) && isempty(Params.sigG) && isempty(Params.phi))
-    Params.phi = exp(-log(FixedParams.delta ./ Params.delta_opt) .^ 2 ./ (2 .* Params.sigG .^ 2));
+
+if (isfield(Params, 'delta_opt') && isfield(Params, 'sigG')) && ...
+        ~(isempty(Params.delta_opt) || isempty(Params.sigG))
+    Params.phi = Params.phi_func(Params.delta_opt, Params.sigG, FixedParams.delta);
+%     Params.phi = exp(-log(FixedParams.delta ./ Params.delta_opt) .^ 2 ./ (2 .* Params.sigG .^ 2));
     % Standardise so that each predator may optimally graze some prey class.
     % Otherwise the small predators cannot optimally graze so their
     % experienced prey saturation is always low.
@@ -392,6 +399,11 @@ if (isfield(Params, 'Vmax_QC') && isfield(Params, 'aN_QC')) && ...
     Params.kN = Params.kN_func(Params.Vmax_QC, Params.aN_QC);
 end
 
+if (isfield(Params, 'Gmax_a') && isfield(Params, 'aG')) && ...
+        ~(isempty(Params.Gmax_a) || isempty(Params.aG))
+    Params.k_G = Params.k_G_func(Params.Gmax_a, Params.aG);
+end
+
 % Params.beta(FixedParams.nPP_size+1) = Params.beta(FixedParams.nPP_size); % assume beta for zooplankton is equivalent to largest phytoplankton size class
 
 
@@ -417,8 +429,9 @@ end
 % end
 
 function vol = d2vol(d)
-vol = 4 ./ 3 .* pi .* (0.5 .* d) .^ 3;
+vol = 1 ./ 6 .* pi .* d .^ 3;
 end
+% d2vol = @(d) 1 ./ 6 .* pi .* d .^ 3;
 
 % function d = vol2d(vol)
 % d = 2 .* (vol .* (3 ./ 4 ./ pi)) .^ (1/3);

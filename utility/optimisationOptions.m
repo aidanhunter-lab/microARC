@@ -6,10 +6,23 @@ function [FixedParams, Params, Forc, Data] = ...
 extractVarargin(varargin)
 
 if ~exist('fitToFullSizeSpectra', 'var') || isempty(fitToFullSizeSpectra)
-    % if unspecified then by default fit model using binned size spectra data
+    % If unspecified then by default fit model using binned size spectra
+    % data. Fitting to the full (unbinned) size data creates a very rough
+    % cost function surface that's problematic to fit.
     fitToFullSizeSpectra = false;
 end
 FixedParams.fitToFullSizeSpectra = fitToFullSizeSpectra;
+
+if ~exist('rescaleForOptim', 'var')
+    % True by default because I think it's useful to estimate some of the
+    % size-dependency (exponent) parameters on a transformed scale.
+    % If further transforms were introduced (maybe useful for regularising 
+    % parameter search space) then the 'rescaleForOptim' argument will 
+    % probably need to be a character string rather than logical.
+    rescaleForOptim = true;
+end
+
+
 
 %% Select parameters to optimise
 
@@ -19,8 +32,8 @@ FixedParams.fitToFullSizeSpectra = fitToFullSizeSpectra;
 %     'Qmin_QC_a', 'Qmin_QC_b', 'Qmax_delQ_a', 'Qmax_delQ_b', ... 
 %     'Vmax_QC_a', 'Vmax_QC_b', 'aN_QC_a', 'aN_QC_b'};
 parnames = {'wPOM1', 'rDON', 'rPON', 'aP', 'm_a', 'Gmax_a', 'Gmax_b', ... 
-    'k_G', 'pmax_a', 'pmax_b', 'Qmin_QC_a', 'Qmin_QC_b', 'Qmax_delQ_a', ... 
-    'Qmax_delQ_b', 'Vmax_QC_a', 'Vmax_QC_b', 'aN_QC_a', 'aN_QC_b'};
+    'aG', 'sigG', 'pmax_a', 'pmax_b', 'Qmin_QC_a', 'Qmax_delQ_a', 'Qmax_delQ_b', ...
+    'Vmax_QC_a', 'Vmax_QC_b', 'aN_QC_a', 'aN_QC_b'};
 
 % Check that all chosen parameters exist -- error if not
 if ~all(ismember(parnames, Params.scalarParams) | ... 
@@ -38,10 +51,63 @@ ub = cellfun(@(x) x(2), bounds); % upper bounds
 FixedParams.tunePars = parnames;
 FixedParams.tunePars_lb = lb;
 FixedParams.tunePars_ub = ub;
-% Assign to workspace
+% % Assign to workspace
+% assignin('caller', 'npars', npars)
+% assignin('caller', 'boundsLower', lb)
+% assignin('caller', 'boundsUpper', ub)
+
+% Parameter transforms for optimisation search space
+switch rescaleForOptim
+    case true
+        % Use a log(-x) transform for parameters x = {Qmax_delQ_b, pmax_b, Gmax_b, m_b}
+        logNegPars = {'Qmax_delQ_b', 'pmax_b', 'Gmax_b', 'm_b'};
+        for i = 1:length(parnames)
+            pn = parnames{i};
+            if ismember(pn, logNegPars)
+                tuneParsTransform.(pn) = @(x) log(-x);
+                tuneParsInvTransform.(pn) = @(x) -exp(x);
+            else
+                tuneParsTransform.(pn) = @(x) x;
+                tuneParsInvTransform.(pn) = @(x) x;
+            end
+        end
+        
+    case false
+        for i = 1:length(parnames)
+            pn = parnames{i};
+            tuneParsTransform.(pn) = @(x) x;
+            tuneParsInvTransform.(pn) = @(x) x;
+        end
+end
+
+FixedParams.tuneParsTransform = tuneParsTransform;
+FixedParams.tuneParsInvTransform = tuneParsInvTransform;
+
+% Assign parameter bounds to workspace -- transformed if required
+switch rescaleForOptim
+    case true
+        for i = 1:length(logNegPars)
+            if ismember(logNegPars{i}, parnames)
+                func = tuneParsTransform.(logNegPars{i});
+                ind = strcmp(parnames, logNegPars{i});
+                bb = [lb(ind) ub(ind)];
+                % Add small number to any zeros to be log-transformed --
+                % cannot have infinities.
+                if bb(2) == 0 && bb(1) < 0
+                    bb(2) = -abs(diff(bb)) / 1e4;
+                end
+                bb = sort(func(bb));
+                lb(ind) = bb(1);
+                ub(ind) = bb(2);
+            end
+        end
+end
 assignin('caller', 'npars', npars)
 assignin('caller', 'boundsLower', lb)
 assignin('caller', 'boundsUpper', ub)
+
+
+
 
 %% Select cost function.
 % There's a few options for the cost function. Not yet sure which is the

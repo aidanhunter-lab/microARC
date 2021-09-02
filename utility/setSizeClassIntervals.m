@@ -263,22 +263,23 @@ switch Case
         
         % Assign all measurements to size class intervals
         for j = 1:ntrophicLevels
-            if strcmp(trophicLevels{j}, 'autotroph')
-                nsizes = nsizesP;
-                if ~isempty(FixedParams)
-                    cellDia = FixedParams.PPdia;
-                    cellDiaInt = FixedParams.PPdia_intervals;
-                end
-            end
-            if strcmp(trophicLevels{j}, 'heterotroph')
-                nsizes = nsizesZ;
-                if ~isempty(FixedParams)
-                    cellDia = FixedParams.ZPdia;
-                    cellDiaInt = FixedParams.ZPdia_intervals;
-                end
+            trophicLevel = trophicLevels{j};
+            switch trophicLevel
+                case 'autotroph'
+                    nsizes = nsizesP;
+                    if ~isempty(FixedParams)
+                        cellDia = FixedParams.PPdia;
+                        cellDiaInt = FixedParams.PPdia_intervals;
+                    end
+                case 'heterotroph'
+                    nsizes = nsizesZ;
+                    if ~isempty(FixedParams)
+                        cellDia = FixedParams.ZPdia;
+                        cellDiaInt = FixedParams.ZPdia_intervals;
+                    end
             end
             
-            datj = dat(strcmp(dat.trophicLevel, trophicLevels{j}),:);
+            datj = dat(strcmp(dat.trophicLevel, trophicLevel),:);
             if j > 1
                 datj.size = [];
                 datj.sizeClass = [];
@@ -309,8 +310,8 @@ switch Case
             dat3 = dat3(o,:); % recover original row order
             dat3.rowIndex = [];
             
-            dat.sizeClass(strcmp(dat.trophicLevel, trophicLevels{j})) = dat3.sizeClass;
-            dat.size(strcmp(dat.trophicLevel, trophicLevels{j})) = dat3.size;
+            dat.sizeClass(strcmp(dat.trophicLevel, trophicLevel)) = dat3.sizeClass;
+            dat.size(strcmp(dat.trophicLevel, trophicLevel)) = dat3.size;
         end
 
         
@@ -451,26 +452,27 @@ switch Case
         
         % Assign all measurements to size class intervals
         for j = 1:ntrophicLevels
-            
-            datj = datFull(strcmp(datFull.trophicLevel, trophicLevels{j}),:);
+            trophicLevel = trophicLevels{j};
+            datj = datFull(strcmp(datFull.trophicLevel, trophicLevel),:);
             if j > 1
                 datj.size = [];
                 datj.sizeClass = [];
             end
-            dat3 = dat2;            
-            if strcmp(trophicLevels{j}, 'autotroph')
-                nsizes = nsizesP;
-                if ~isempty(FixedParams)
-                    cellDia = FixedParams.PPdia;
-                    cellDiaInt = FixedParams.PPdia_intervals;
-                end
-            end
-            if strcmp(trophicLevels{j}, 'heterotroph')
-                nsizes = nsizesZ;
-                if ~isempty(FixedParams)
-                    cellDia = FixedParams.ZPdia;
-                    cellDiaInt = FixedParams.ZPdia_intervals;
-                end
+            dat3 = dat2;
+            
+            switch trophicLevel
+                case 'autotroph'
+                    nsizes = nsizesP;
+                    if ~isempty(FixedParams)
+                        cellDia = FixedParams.PPdia;
+                        cellDiaInt = FixedParams.PPdia_intervals;
+                    end
+                case 'heterotroph'
+                    nsizes = nsizesZ;
+                    if ~isempty(FixedParams)
+                        cellDia = FixedParams.ZPdia;
+                        cellDiaInt = FixedParams.ZPdia_intervals;
+                    end
             end
             
             if exist('cellDiaInt', 'var') && ~isempty(cellDiaInt)
@@ -496,8 +498,8 @@ switch Case
             dat3 = dat3(o,:); % recover original row order
             dat3.rowIndex = [];
             
-            datFull.sizeClass(strcmp(datFull.trophicLevel, trophicLevels{j})) = dat3.sizeClass;
-            datFull.size(strcmp(datFull.trophicLevel, trophicLevels{j})) = dat3.size;
+            datFull.sizeClass(strcmp(datFull.trophicLevel, trophicLevel)) = dat3.sizeClass;
+            datFull.size(strcmp(datFull.trophicLevel, trophicLevel)) = dat3.size;
         end
         
         % Integrate size spectra across each size class interval
