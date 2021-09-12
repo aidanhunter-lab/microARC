@@ -11,6 +11,17 @@ function [Forc, FixedParams, Params, Data] = modelSetUp(Directories, varargin)
 % Params      = model parameters that MAY be tuned.
 % Data        = observed data included in cost function to tune parameters.
 
+% Plots may be generated as extra output by setting to 'true' any of the
+% following optional arguments coded in varargin as name-value pairs...
+% plotCellConcSpectra
+% plotBioVolSpectra
+% plotSizeClassIntervals
+% trajectoryPlot
+% dendrogramPlot
+% plotScalarData
+% plotSizeData
+% plotAllData
+
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -287,9 +298,11 @@ clear Forc_ Data_
 % Group size data by water origin -- find average spectra using
 % measurements from events whose trajectories all orginate from either the
 % Arctic or the Atlantic
-% avFun = @mean; % arithmetic or geometric mean spectra over sampe events and depths
-avFun = @geomean; % choice of average type is important! geometric mean more appropriate for these data?
-Data = sizeDataOrigin(Data, 'avFun', avFun);
+if ~exist('avFun_sizeSpectra', 'var')
+    avFun_sizeSpectra = @geomean; % by default find averages of multiple size spectra using geometric means
+end
+
+Data = sizeDataOrigin(Data, 'avFun', avFun_sizeSpectra);
 
 % For each trajectory, find the time of the latest sampling event.
 % Integrations along trajectories can then be stopped at these events to

@@ -45,17 +45,13 @@ dat = struct2table(dat);
 dat.log_Value = log(dat.Value);
 
 dPOM = {'PON','POC'};
+logy = dPOM;
 
 for jj = 1:length(dPOM)
     
     dv = dPOM{jj};
     d_ind = strcmp(dat.Variable, dv);
     d = dat(d_ind,:);
-    
-%     Event = unique(d.Event);
-%     nev = length(Event);
-%     Events = table(Event);
-%     Events.Index = (1:nev)';
     
     % Fit linear mixed models
     lme_mods{1} = fitlme(d, 'log_Value~1');
@@ -80,37 +76,7 @@ for jj = 1:length(dPOM)
         (dat.scale_mu(d_ind), dat.scale_sig(d_ind), dat.Value(d_ind)); % scaled data
 
     
-%     % Extract fitted coefficients of linear models
-%     cf = zeros(2,1); % fixed-effect (depth) intercept & gradient
-%     cr = zeros(nev,2); % random-effect (event) intercept & gradient deviations    
-%     cf_ = mod.fixedEffects;
-%     cr_ = mod.randomEffects;    
-%     if length(cf_) == 2, cf = cf_; else, cf(1) = cf_; end        
-%     if length(cr_) == nev
-%         if whichMod ~= 4, cr(:,1) = cr_; else, cr(:,2) = cr_; end
-%     end
-%     if length(cr_) == 2*nev, cr = reshape(cr_, [2 nev])'; end
-% 
-%     rsd = mod.residuals;
-%     stdDev = std(rsd);
-%     
-%     % Calculate depth- and event-dependent expected values and store
-%     % functions used to scale the data and model output    
-%     Events = join(d(:,'Event'), Events);
-%     cr_ = cr(Events.Index,:);
-%     intercept = cf(1) + cr_(:,1);
-%     gradient = cf(2) + cr_(:,2);
-% 
-%     dat.scale_mu(d_ind) = intercept + gradient .* d.Depth;
-%     dat.scale_sig(d_ind) = stdDev;
-%     
-%     Data.scalar.(['scaleFun_' dv]) = @(mu,sig,x) (log(x) - mu) ./ sig; % scaling function
-%     dat.scaled_Value(d_ind) = Data.scalar.(['scaleFun_' dv]) ... 
-%         (dat.scale_mu(d_ind), dat.scale_sig(d_ind), dat.Value(d_ind)); % scaled data
-
 end
-
-logy = dPOM;
 
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -119,14 +85,10 @@ logy = dPOM;
 % to depth by log tranform of dependent variable (chl)
 
 dv = 'chl_a';
+logy = [logy 'chl_a'];
 
 d_ind = strcmp(dat.Variable, dv);
 d = dat(d_ind,:);
-
-% Event = unique(d.Event);
-% nev = length(Event);
-% Events = table(Event);
-% Events.Index = (1:nev)';
 
 % Fit linear mixed models
 lme_mods{1} = fitlme(d, 'log_Value~1');
@@ -150,39 +112,6 @@ Data.scalar.(['scaleFun_' dv]) = @(mu,sig,x) (log(x) - mu) ./ sig; % scaling fun
 dat.scaled_Value(d_ind) = Data.scalar.(['scaleFun_' dv]) ...
     (dat.scale_mu(d_ind), dat.scale_sig(d_ind), dat.Value(d_ind)); % scaled data
 
-
-% % Extract fitted coefficients of linear models
-% cf = zeros(2,1); % fixed-effect (depth) intercept & gradient
-% cr = zeros(nev,2); % random-effect (event) intercept & gradient deviations
-% cf_ = mod.fixedEffects;
-% cr_ = mod.randomEffects;
-% if length(cf_) == 2, cf = cf_; else, cf(1) = cf_; end
-% if length(cr_) == nev
-%     if whichMod ~= 4, cr(:,1) = cr_; else, cr(:,2) = cr_; end
-% end
-% if length(cr_) == 2*nev, cr = reshape(cr_, [2 nev])'; end
-% 
-% rsd = mod.residuals;
-% stdDev = std(rsd);
-% 
-% % Calculate depth- and event-dependent expected values and store
-% % functions used to scale the data and model output
-% 
-% Events = join(d(:,'Event'), Events);
-% cr_ = cr(Events.Index,:);
-% intercept = cf(1) + cr_(:,1);
-% gradient = cf(2) + cr_(:,2);
-% 
-% dat.scale_mu(d_ind) = intercept + gradient .* d.Depth;
-% dat.scale_sig(d_ind) = stdDev;
-% 
-% Data.scalar.(['scaleFun_' dv]) = @(mu,sig,x) (log(x) - mu) ./ sig; % scaling function
-% 
-% dat.scaled_Value(d_ind) = Data.scalar.(['scaleFun_' dv]) ...
-%     (dat.scale_mu(d_ind), dat.scale_sig(d_ind), dat.Value(d_ind)); % scaled data
-
-logy = [logy 'chl_a'];
-
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 % Nitrogen data is treated differently because it has a different
@@ -198,10 +127,10 @@ logy = [logy 'chl_a'];
 dat.log_Depth = log(dat.Depth);
 
 dv = 'N';
+logx = {dv};
 
 d_ind = strcmp(dat.Variable, dv);
 d = dat(d_ind,:);
-
 
 if ~exist('NclineDepth', 'var') || isempty(NclineDepth)
     
@@ -276,10 +205,6 @@ elseif isnumeric(NclineDepth) && length(NclineDepth) == 1
     
 end
 
-logx = {dv};
-
-
-
 
 %% Store outputs in the Data struct
 Data.scalar.scale_mu = dat.scale_mu;
@@ -291,17 +216,17 @@ Data.scalar.scale_sig(~Data.scalar.inCostFunction) = nan;
 Data.scalar.scaled_Value(~Data.scalar.inCostFunction) = nan;
 
 
-
-
 %% Standardise size spectra measurements
 
-% There are no covariates available in these data, so standardise by
-% substracting the mean and dividing by the standard deviation across size
-% classes, after log-transforming (cell and N concentrations) or
-% logit-transforming (bio-volume)... there's probably not much point in
-% standardising these size spectra
+% There are no covariates available in these data, so standardise by log
+% transforming, then substracting the mean and dividing by the standard 
+% deviation across size classes.
+% Box-Cox transforms would be better than log transforms as the resulting
+% data would be closer to standard normal, but this will not influence the
+% most effective (I think!) cost functions which use size data on natural
+% scale.
 
-% aggregated size spectra -- no sampling event covariate
+% Aggregated size spectra -- no sampling event covariate
 
 vars = unique(sizeDatBinned.Variable, 'stable'); % size spectra measurement types (cell concentration, bio-volume, or nitrogen concentration)
 if isfield(sizeDatBinned, 'scenario')
@@ -315,10 +240,11 @@ for i = 1:length(vars)
     varLabel = vars{i};
     indi = strcmp(sizeDatBinned.Variable, vars{i});    
     switch varLabel
-        case {'CellConc', 'NConc'}
+        % We may use different standardising functions for each data type -- see commented case below where a logit transform was used for biovolume (when the units were appropriate to constrain 0<biovol<1)
+        case {'CellConc', 'NConc', 'BioVol'}
             Data.size.(['scaleFun_' varLabel]) = @(mu,sig,x) (log(x)-mu) ./ sig;
-        case 'BioVol'
-            Data.size.(['scaleFun_' varLabel]) = @(mu,sig,x) (log(x ./ (1-x)) - mu) ./ sig;
+%         case 'BioVol'
+%             Data.size.(['scaleFun_' varLabel]) = @(mu,sig,x) (log(x ./ (1-x)) - mu) ./ sig;
     end
     for j = 1:length(scenarios)
         if iscell(scenarios)
@@ -330,10 +256,11 @@ for i = 1:length(vars)
             indk = indj & strcmp(sizeDatBinned.trophicLevel, groups{k});
             y = sizeDatBinned.Value(indk);
             switch varLabel
-                case {'CellConc', 'NConc'}
+                % See above comment about using different functions
+                case {'CellConc', 'NConc', 'BioVol'}
                     yl = log(y);
-                case 'BioVol'
-                    yl = log(y ./ (1-y));
+%                 case 'BioVol'
+%                     yl = log(y ./ (1-y));
             end
             mu = mean(yl);
             sig = std(yl);
@@ -347,7 +274,7 @@ end
 Data.size.dataBinned = sizeDatBinned;
 
 
-% full size spectra -- here we have a sampling event covariate, and some
+% Full size spectra -- here we have a sampling event covariate, and some
 % events have measures over multiple depths... but just repeat the process
 % used for the aggregated data.
 
@@ -363,10 +290,10 @@ if ~isempty(sizeDatFullBinned)
         varLabel = vars{i};
         indi = strcmp(sizeDatFullBinned.Variable, vars{i});
         switch varLabel
-            case {'CellConc', 'NConc'}
+            case {'CellConc', 'NConc', 'BioVol'}
                 Data.sizeFull.(['scaleFun_' varLabel]) = @(mu,sig,x) (log(x)-mu) ./ sig;
-            case 'BioVol'
-                Data.sizeFull.(['scaleFun_' varLabel]) = @(mu,sig,x) (log(x ./ (1-x)) - mu) ./ sig;
+%             case 'BioVol'
+%                 Data.sizeFull.(['scaleFun_' varLabel]) = @(mu,sig,x) (log(x ./ (1-x)) - mu) ./ sig;
         end
         for j = 1:length(cruises)
             indj = indi & strcmp(sizeDatFullBinned.Cruise, cruises{j});
@@ -379,10 +306,10 @@ if ~isempty(sizeDatFullBinned)
                         indd = inde & sizeDatFullBinned.Depth == depths(jd);
                         y = sizeDatFullBinned.Value(indd);
                         switch varLabel
-                            case {'CellConc', 'NConc'}
+                            case {'CellConc', 'NConc', 'BioVol'}
                                 yl = log(y);
-                            case 'BioVol'
-                                yl = log(y ./ (1-y));
+%                             case 'BioVol'
+%                                 yl = log(y ./ (1-y));
                         end
                         mu = mean(yl);
                         sig = std(yl);

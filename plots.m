@@ -103,6 +103,8 @@ tic; disp('.. started at'); disp(datetime('now'))
 toc
 
 % Generate modelled equivalents of the data
+if ~isfield(FixedParams, 'fitToFullSizeSpectra'), FixedParams.fitToFullSizeSpectra = false; end
+
 modData0 = matchModOutput2Data(out0, auxVars0, Data0, FixedParams, ...
     'fitToFullSizeSpectra', FixedParams.fitToFullSizeSpectra);
 modData = matchModOutput2Data(out, auxVars, Data, FixedParams, ...
@@ -110,6 +112,9 @@ modData = matchModOutput2Data(out, auxVars, Data, FixedParams, ...
 
 [cost, costComponents] = costFunction('label', FixedParams.costFunction, ...
     'Data', Data, 'modData', modData);
+
+% [cost0, costComponents0] = costFunction('label', 'RMS_Hellinger2', ...
+%     'Data', Data0, 'modData', modData0);
 
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -488,8 +493,8 @@ end
 trophicGroups = {'autotroph', 'heterotroph'}; pn = {'P','Z'};
 xvar = 'BioVol';
 logScale = 'semilogx'; % for size spectra data choose logScale = 'loglog' or 'semilogx'
-% waterOrigin = 'Atlantic';
-waterOrigin = 'Arctic';
+waterOrigin = 'Atlantic';
+% waterOrigin = 'Arctic';
 connectors = true; % lines linking data to modelled equivalents
 meanOnly = true; % display mean (over sample events) of modelled values -- for cleaner plot
 
@@ -566,14 +571,14 @@ pltN = plot_fitToData('N', Data, modData, logPlot); pause(0.25)
 logPlot = 'semilogx'; % for size spectra data choose logPlot = 'loglog' or 'semilogx'
 
 % Comment out Arctic plots because we're fitting to Atlantic data
-% pltBioVol_Atl_P = plot_fitToData('BioVol', Data, modData, logPlot, ... 
-%     'trophicGroup', 'autotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
-pltBioVol_Arc_P = plot_fitToData('BioVol', Data, modData, logPlot, ... 
-    'trophicGroup', 'autotroph', 'waterOrigin', 'Arctic'); pause(0.25)
-% pltBioVol_Atl_Z = plot_fitToData('BioVol', Data, modData, logPlot, ... 
-%     'trophicGroup', 'heterotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
-pltBioVol_Arc_Z = plot_fitToData('BioVol', Data, modData, logPlot, ... 
-    'trophicGroup', 'heterotroph', 'waterOrigin', 'Arctic'); pause(0.25)
+pltBioVol_Atl_P = plot_fitToData('BioVol', Data, modData, logPlot, ... 
+    'trophicGroup', 'autotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
+% pltBioVol_Arc_P = plot_fitToData('BioVol', Data, modData, logPlot, ... 
+%     'trophicGroup', 'autotroph', 'waterOrigin', 'Arctic'); pause(0.25)
+pltBioVol_Atl_Z = plot_fitToData('BioVol', Data, modData, logPlot, ... 
+    'trophicGroup', 'heterotroph', 'waterOrigin', 'Atlantic'); pause(0.25)
+% pltBioVol_Arc_Z = plot_fitToData('BioVol', Data, modData, logPlot, ... 
+%     'trophicGroup', 'heterotroph', 'waterOrigin', 'Arctic'); pause(0.25)
 
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

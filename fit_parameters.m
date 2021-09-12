@@ -17,15 +17,13 @@ rng(1) % set random seed
 % Set parFile = [] for default initial parameter values (hard-coded, not loaded)
 % or parFile = 'filename.mat' to use saved values as the initials.
 % parFile = [];
+parFile = 'parameterInitialValues';
+% Identifying tag (may be tag=[]) here is the name of cost function used to
+% generate saved parameters, and a string describing model set-up. 
+tag = '_RMS_Hellinger2_Atlantic_aG_sigG_upweightAbnTot.mat';
+% tag = 'RMS_Hellinger2_Arctic_aG_sigG_upweightAbnTot.mat';
+if ~isempty(parFile), parFile = [parFile tag]; end
 
-% parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2.mat';
-% parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2_filterData.mat';
-
-parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_aG_sigG_upweightAbnTot.mat';
-parFile = 'parameterInitialValues_RMS_Hellinger2_Arctic_aG_sigG_upweightAbnTot.mat';
-
-
-% parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_removeParams.mat';
 Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
     'parFile', parFile);
 
@@ -35,21 +33,12 @@ display(Directories)
 % Set-up may be modified here by passing some extra arguments as name-value
 % pairs (preferable), or directly modified within modelSetUp.m. % Useful 
 % name-value pairs for modelSetUp.m include: useTraj, ESDmin, ESDmax, nsizes
-% [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
-%     'displayAllOutputs', true); % default set-up -- no plots
 numTraj = 1; % For optimisation efficiency use only a single trajectory per sampling event
 [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
     'displayAllOutputs', true, 'numTraj', numTraj);
 
-% modelSetup.m may also produce plots -- set to 'true' any name-value pair as shown below
-% [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
-%     'plotCellConcSpectra', true, 'plotBioVolSpectra', true, ...
-%     'plotSizeClassIntervals', true, ...
-%     'trajectoryPlot', true, 'dendrogramPlot', true, ...
-%     'plotScalarData', true, 'plotSizeData', true, 'plotAllData', true, ...
-%     'displayForc', true, 'displayData', true);
-
-% Parameters may be modified using name-value pairs in updateParameters.m
+% Parameters should be modified using name-value pairs in updateParameters.m
+% and not by changing values directly in the Params struct, e.g.
 % Params = updateParameters(Params, FixedParams, 'pmax_a', 20, 'aP', 0.01);
 
 
@@ -58,25 +47,25 @@ numTraj = 1; % For optimisation efficiency use only a single trajectory per samp
 % Choose which parameters to tune, the cost function, and numerical tuning
 % algorithm. Can also select which data to fit / trajectories to run as
 % Arctic and/or Atlantic.
-niter = 50; % algorithm iterations (the process can be continued from where it stops, so this value doesn't matter that much)
+niter = 50; % algorithm iterations (the algorithm can be halted and continued, so we may set niter quite small and run the algorithm in repeated blocks)
 popSize = 100; % number of parameter sets evaluated per iteration
 
-costFunctionType = 'RMS_Hellinger2'; % fit scalar/nutrient data using least sum of errors, fit relative size data using Hellinger distances, totals in size data fit as ratio of zooplankton
+% See costFunction.m for list of cost function choices
+% costFunctionType = 'RMS_Hellinger2'; % fit scalar/nutrient data using least sum of errors, fit relative size data using Hellinger distances, totals in size data fit as ratio of zooplankton
+costFunctionType = 'RMS_Hellinger_ZPratio'; % fit scalar/nutrient data using least sum of errors, fit relative size data using Hellinger distances, totals in size data fit as ratio of zooplankton
 
-% costFunctionType = 'RMSsmooth_Hellinger'; % fit scalar/nutrient data using least sum of squares (smoothed for robustness against model outliers), fit size data using Hellinger distances
-% costFunctionType = 'meanCDFdist_Hellinger';
-% costFunctionType = 'smoothCDFdist_Hellinger';
-% costFunctionType = 'meanCDFdist_HellingerFullSpectrum';
-% costFunctionType = 'meanCDFdist_HellingerFullSpectrum_averagedEventsDepths';
-
-% fitTrajectories = 'Atlantic';
-fitTrajectories = 'Arctic';
+% Fit parameters to data sampled from either Atlantic or Arctic waters
+fitTrajectories = 'Atlantic';
+% fitTrajectories = 'Arctic';
 
 % Different cost functions may use binned size data (integrated within
 % modelled size class intervals) or may fit to the full size spectra data.
 % This choice affects how model outputs are extracted to match data.
 fitToFullSizeSpectra = false;
-rescaleForOptim = true; % Should parameters be estimated within some transformed space? See optimisationOptions for details -- this could probably be usefully extended to limit estimation problems realted to parameter correlations/pathologic parameter space
+% Set rescaleForOptim true to estimate parameters within some transformed 
+% space -- transforms chosen to improve optimisation efficiency by
+% smoothing search space.
+rescaleForOptim = true;
 
 [FixedParams, Params, Forc, Data] = ...
     optimisationOptions(FixedParams, Params, Forc, Data, ...
@@ -109,26 +98,22 @@ v0 = initialiseVariables(FixedParams, Params, Forc);
 %                      organic matter      [type, depth, nutrient]
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-restartRun = true; % restart algorithm from a saved prior run?
-fp = false; % true = restart using full population from prior run; false = restart with random population and best param set from prior run
-ni = true; % true = use v0 values generated (above) using loaded parameters; false = load v0 values used to initialise previous optimisation run (v0 possibly generated using sub-optimal params)
+% Restart algorithm from a saved prior run?
+restartRun = true;
+% fp = true: restart using full population from prior run
+% fp = false: restart with random population and best param set from prior run
+fp = false; 
+% ni = true: use v0 values generated (above) using loaded parameters
+% ni = false: load v0 values used to initialise previous optimisation run (v0 possibly generated using sub-optimal params)
+ni = true;
 
 switch restartRun, case true
-    fileName_results = 'fittedParameters';  % saved parameters file name
-%     tag = '1';                              % and identifying tag
-    tag = FixedParams.costFunction;
-%     tag = [tag '_Atlantic_quadraticMortality_singleTraj_relativeSizeDataOnly'];
-%     tag = [tag, '_Atlantic_quadraticMortality_singleTraj_omitSizeDataTot_removeParams'];
-%     tag = [tag, '_Atlantic_singleTraj_removeParams'];
-    
-%     tag = [tag, '_Atlantic_singleTraj_adjustParBounds2'];
-%     tag = [tag, '_Atlantic_singleTraj_adjustParBounds2_filterData'];
-
-%     tag = [tag, '_Atlantic_aG_sigG_upweightAbnTot'];
-    tag = [tag, '_Arctic_aG_sigG_upweightAbnTot'];
-    
+    % saved parameters file name (and identifying tag should already be defined)
+    fileName_results = 'fittedParameters';
+%     tag = 'Atlantic_aG_sigG_upweightAbnTot';
+%     tag = [FixedParams.costFunction '_' tag];
     fileName_results = fullfile(Directories.resultsDir, ...
-        [fileName_results '_' tag]);
+        [fileName_results tag]);
     % Load stored results
     switch ni
         case true
@@ -167,6 +152,7 @@ optimisationTime = toc / 60 / 60; disp('.. finished at'); disp(datetime('now'));
 disp(['Optimisation time: ' num2str(floor(optimisationTime)) ' hrs, ' ...
     num2str(floor(mod(60*optimisationTime,60))) ' mins'])
 
+
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 % Examine and store results.
@@ -203,14 +189,8 @@ saveParams = true;
 % Choose file name
 fileName_results = 'fittedParameters';
 % and identifying tag
-% tag = 'Atlantic_singleTraj_adjustParBounds2';
-
-% tag = 'Atlantic_singleTraj_adjustParBounds2_filterData';
-
 % tag = 'Atlantic_aG_sigG_upweightAbnTot';
 tag = 'Arctic_aG_sigG_upweightAbnTot';
-
-
 tag = [FixedParams.costFunction '_' tag];
 
 fileName_results = fullfile(Directories.resultsDir, ...
