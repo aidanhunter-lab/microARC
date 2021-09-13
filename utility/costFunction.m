@@ -1,20 +1,34 @@
-function [cost, costComponents, costFunctionChoices] = costFunction(varargin)
+function [cost, costComponents, costFunctionChoices, costLabel_dataType] = costFunction(varargin)
 
 % Labels for cost function options -- code & comments for each below.
 % To use a different cost function simply write its label here then include
-% another case below -- it must be fully implementable from Data and modData
+% another case below -- it must be fully implementable from Data and
+% modData. Note below the requirement of cost function label when fitting
+% to full (unbinned) size spectra.
 costFunctionChoices = { ...
-    'LSS', ...                                                              % requires integrated/binned size data
-    'RMS', ...                                                              % requires integrated/binned size data
-    'Hellinger_groupWaterOrigin', ...                                       % requires integrated/binned size data
-    'IQD_Hellinger_groupWaterOrigin', ...                                   % requires integrated/binned size data
-    'RMS_Hellinger', ...                                                    % requires integrated/binned size data
-    'RMS_Hellinger2', ...
-    'RMS_Hellinger_ZPratio', ...                                            % requires integrated/binned size data
-    'RMSsmooth_Hellinger', ...                                              % requires integrated/binned size data
-    'meanCDFdist_HellingerFullSpectrum', ...                                % requires full size spectra
-    'meanCDFdist_HellingerFullSpectrum_averagedEventsDepths'                % requires full size spectra
+    'LSS'; ...                                                              % requires integrated/binned size data
+    'RMS'; ...                                                              % requires integrated/binned size data
+    'Hellinger_groupWaterOrigin'; ...                                       % requires integrated/binned size data
+    'IQD_Hellinger_groupWaterOrigin'; ...                                   % requires integrated/binned size data
+    'RMS_Hellinger'; ...                                                    % requires integrated/binned size data
+    'RMS_Hellinger_ZPratio'; ...                                            % requires integrated/binned size data
+    'RMSsmooth_Hellinger'; ...                                              % requires integrated/binned size data
+    'RMS_HellingerFullSpectrum'; ...                                        % requires full size spectra
+    'RMS_HellingerFullSpectrum_averagedEventsDepths'                        % requires full size spectra
     };
+
+% Specify type of size data used for each cost function choice: either
+% 'binnedSizeData' or 'fullSizeSpectra'.
+% To do this automatically we require the cost function label to contain
+% the string 'FullSpectrum' iff it's designed to fit to the unbinned size
+% spectra data.
+dataTypes = {'binnedSizeData', 'fullSizeSpectra'};
+di = 1 + cellfun(@(z) contains(z, 'FullSpectrum'), costFunctionChoices);
+costLabel_dataType = cell(length(costFunctionChoices), 2);
+costLabel_dataType(:,1) = costFunctionChoices;
+costLabel_dataType(:,2) = arrayfun(@(z) dataTypes(z), di);
+costLabel_dataType = cell2table(costLabel_dataType, ... 
+    'VariableNames', {'label','dataType'});
 
 % Evaluating cost requires passing name-value pairs for 'label', 'Data' and
 % 'modData' as optional varargin values. The 'label' specifies which cost
@@ -38,7 +52,7 @@ end
 Vars = Data.scalar.obsInCostFunction;
 VarsSize = Data.size.obsInCostFunction;
 
-% Evaluate cost function with name given by 'label'
+%% Evaluate cost function with name given by 'label'
 switch label
     
     case 'LSS'
@@ -1016,51 +1030,52 @@ switch label
         
         %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    case 'meanCDFdist_HellingerFullSpectrum'
+    case 'RMS_HellingerFullSpectrum'
         
-        % As above, but use model output representing the full size
-        % spectra rather than binned (integrated) data.
-        % In fact, it is potentially far better than the above because
-        % it is now much easier to separately fit all the individual
-        % size spectra rather than averaging over sampling events and
-        % depths... of course, we could still take averages...
-        % I don't know which will be the more useful approach. Fitting
-        % to each spectra separately is quite likely to produce poor
-        % fits, but the average may still be reasonable. Fitting to the
-        % different depth layers could also prove very beneficial by
-        % much more strongly informing dependence of size structure
-        % upon depth.
-        
+        % Same as case RMS_Hellinger but use model output representing the
+        % full size spectra rather than binned (integrated) data.
         % Build the size data cost section to separately fit all size
         % spectra -- keep the returned cost components as autotrophs &
         % heterotrophs in Arctic and/or Atlantic waters => average the
         % costs over sampling events and depths within this function.
         
-        
         % Scalar data
+        plotFit = false;
         for i = 1:length(Vars)
             varLabel = Vars{i};
             yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
             ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
             n = size(ymod, 1);
-            %                 m = size(ymod, 2);
-            cdf = (1:n)' ./ n;
-            [yobs_sort, o] = sort(yobs); % sort observations
-            % put modelled output in same order -- these values will
-            % almost certainly NOT be in ascending order...
+            % Sort observations
+            [yobs_sort, o] = sort(yobs);
+            CDFobs = [yobs_sort, ...
+                (1:n)' ./ n]; % Empirical CDF of standardised data            
+            % Reorder modelled values to match sorted data
             ymod_sort = ymod(o,:);
-            %                 figure(1)
-            %                 plot(yobs_sort, cdf)
-            %                 hold on
-            %                 plot(ymod_sort, cdf)
-            %                 hold off
-            % find distances between each modelled data point and the
-            % empirical data CDF
-            ymodi = interp1(yobs_sort, cdf, ymod_sort, 'linear', 'extrap');
-            ymodi = min(1, max(0, ymodi));
-            CDFdist = abs(cdf - ymodi);
-            avDist = mean(CDFdist); % average over data points
-            costComponents.(varLabel) = mean(avDist); % average over trajectory selections
+            CDFmod = [ymod_sort, CDFobs(:,2)]; % align modelled values with the smoothed CDF of the data
+            switch plotFit, case true
+                figure
+                plot(CDFobs(:,1), CDFobs(:,2)) % empirical CDF of data
+                hold on
+                scatter(CDFmod(:,1), CDFmod(:,2))
+                for ij = 1:n
+                    plot([CDFobs(ij,1), CDFmod(ij,1)], [CDFobs(ij,2), CDFmod(ij,2)], 'Color', [0.85, 0.85, 0.85])
+                end
+            end
+            %~
+            % This has been modified from a root-mean-square (RMS) cost.
+            % True RMS function code is commented.
+            %~
+%             err2 = (CDFobs(:,1) - CDFmod(:,1)) .^ 2; % squared error
+            err = abs(CDFobs(:,1) - CDFmod(:,1)); % absolute error
+%             avFun = @mean;
+            avFun = @geomean; % Errors have skewed distributions => use geometric mean for robustness against overfitting data points that the model cannot reproduce
+%             RMS = (avFun(err2)) .^ 0.5; % root-mean-square
+            RMS = avFun(err); % average absolute error
+            RMS = RMS ./ range(CDFobs(:,1)); % scale to get values more in line with Hellinger distance values... this is ad-hoc method, could be improved...
+            
+            costComponents.(varLabel) = avFun(RMS); % average over trajectory selections
+            
         end
         
         % Vector (size) data
@@ -1071,7 +1086,7 @@ switch label
         else
             waterMasses = {[]};
         end
-        % The VarsSize labels are wrong => redefine
+        % VarsSize labels match binned data => redefine for full size spectra
         switch Data.size.obsInCostFunction{1}
             case 'BioVol'; VarsSize = {'BioVolDensity'};
             case 'CellConc'; VarsSize = {'cellDensity'};
@@ -1081,6 +1096,8 @@ switch label
         nWaterMasses = length(waterMasses);
         nTrophicLevels = length(trophicLevels);
         HellingerDistances = nan(nVars, nWaterMasses, nTrophicLevels);
+        totAbnMetric = nan(nVars, nWaterMasses, nTrophicLevels);
+        a = log(3) / log(2); % steepness of cost metric for total abundance
         for i = 1:length(VarsSize)
             varLabel = VarsSize{i};
             for w = 1:length(waterMasses)
@@ -1101,12 +1118,18 @@ switch label
                             ind3 = ind2 & strcmp(Data.size.trophicLevel, trophicLevel);
                             yobs = Data.size.(varLabel)(ind3);
                             ymod = modData.size.(varLabel)(ind3);
-                            % Fit only to relative abundance-at-size =>
-                            % normalise the data & modelled output
-                            yobs = yobs ./ sum(yobs);
-                            ymod = ymod ./ sum(ymod);
-                            HellingerDistance = (1 - sum((yobs .* ymod) .^ 0.5)) .^ 0.5;
+                            % Hellinger distance for relative abundance-at-size                            yobsRel = yobs ./ sum(yobs);
+                            yobsRel = yobs ./ sum(yobs);
+                            ymodRel = ymod ./ sum(ymod);
+                            HellingerDistance = (1 - sum((yobsRel .* ymodRel) .^ 0.5)) .^ 0.5;
                             HellingerDistances(i,w,it,counter) = HellingerDistance;
+                            % Metric for total abundance
+                            yobsTot = trapz(yobs);
+                            ymodTot = trapz(ymod);
+                            u = abs(log(ymodTot / yobsTot));
+                            u = exp(-a .* u);
+                            z = (1 - u) ./ (1 + u);
+                            totAbnMetric(i,w,it,counter) = z;
                         end
                     end
                 end
@@ -1115,6 +1138,7 @@ switch label
         
         % Average Hellinger distances over sample events & depths
         HellingerDistances_ = mean(HellingerDistances, ndims(HellingerDistances));
+        totAbnMetric_ = mean(totAbnMetric, ndims(totAbnMetric));
         % Store in costComponents
         for i = 1:length(VarsSize)
             varLabel = VarsSize{i};
@@ -1124,49 +1148,103 @@ switch label
                     for w = 1:length(waterMasses)
                         waterMass = waterMasses{w};
                         label = [varLabel '_' waterMass '_' trophicLevel];
-                        costComponents.(label) = HellingerDistances_(i,w,it);
+                        costComponents.([label '_Rel']) = HellingerDistances_(i,w,it);
+                        costComponents.([label '_Tot']) = totAbnMetric_(i,w,it);
                     end
                 else
                     label = [varLabel '_' trophicLevel];
-                    costComponents.(label) = HellingerDistances_(i,1,it);
+                    costComponents.([label '_Rel']) = HellingerDistances_(i,1,it);
+                    costComponents.([label '_Tot']) = totAbnMetric_(i,1,it);
                 end
             end
         end
         
-        % Calculate total cost -- a scalar value
-        fields = fieldnames(costComponents);
-        costComponents_ = struct2array(costComponents);
-        costNutrient = costComponents_(ismember(fields, Vars));
-        costSize = costComponents_(~ismember(fields, Vars));
-        cost_ = [mean(costNutrient), mean(costSize)];
-        cost = mean(cost_);
+        % Within each size data group, weight relative abundance-at-size
+        % relative to total abundance.
+        weight_relVsTot = 3; % weighting factor of relative vs total abundance (relative abundance assumed more reliable)
+        costSize = zeros(2,length(waterMasses)); % store weighted costs for all size data groups
+        for i = 1:length(waterMasses)
+            wm = waterMasses{i};
+            if groupedByWaterOrigin
+                cta = costComponents.([varLabel '_' wm '_autotroph_Tot']);
+                cra = costComponents.([varLabel '_' wm '_autotroph_Rel']);
+                cth = costComponents.([varLabel '_' wm '_heterotroph_Tot']);
+                crh = costComponents.([varLabel '_' wm '_heterotroph_Rel']);
+            else
+                cta = costComponents.([varLabel '_autotroph_Tot']);
+                cra = costComponents.([varLabel '_autotroph_Rel']);
+                cth = costComponents.([varLabel '_heterotroph_Tot']);
+                crh = costComponents.([varLabel '_heterotroph_Rel']);
+            end
+            costSize(1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
+            costSize(2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
+        end
         
+        costNutrient = zeros(1,length(Vars));
+        for i = 1:length(Vars)
+            costNutrient(i) = costComponents.(Vars{i});
+        end
+        
+        % Treat PON & POC data as a single type, POM, thereby
+        % downweighting their combined cost contribution
+        POMi = ismember(Vars, {'PON','POC'});
+        costPOM = mean(costNutrient(POMi));
+        costNutrient(POMi) = [];
+        costNutrient = [costNutrient, costPOM];
+        
+        % Average the cost across data-types (nutrient & size)
+        cost = [mean(costNutrient), mean(costSize(:))];
+        % Assign size vs nutrient weighting
+        weight_sizeVsNutrient = 1; % weighting factor of size vs nutrient data
+        weights = 2 .* [1, weight_sizeVsNutrient] ./ (weight_sizeVsNutrient+1);
+        cost = weights .* cost;
+        
+        cost = mean(cost); % finally, average cost over nutrient and size data components
         
         %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         
-    case 'meanCDFdist_HellingerFullSpectrum_averagedEventsDepths'
+    case 'RMS_HellingerFullSpectrum_averagedEventsDepths'
         
-        % As above, but average over all events and depths before
-        % comparing model to data
-        
+        % Same as RMS_HellingerFullSpectrum_averagedEventsDepths but
+        % average over all events and depths before comparing model to data
         
         % Scalar data
+        plotFit = false;
         for i = 1:length(Vars)
             varLabel = Vars{i};
             yobs = Data.scalar.scaled_Value(strcmp(Data.scalar.Variable, varLabel));
             ymod = modData.scalar.scaled_Value(strcmp(modData.scalar.Variable, varLabel),:);
             n = size(ymod, 1);
-            %                 m = size(ymod, 2);
-            cdf = (1:n)' ./ n;
-            [yobs_sort, o] = sort(yobs); % sort observations
+            % Sort observations
+            [yobs_sort, o] = sort(yobs);
+            CDFobs = [yobs_sort, ...
+                (1:n)' ./ n]; % Empirical CDF of standardised data            
+            % Reorder modelled values to match sorted data
             ymod_sort = ymod(o,:);
-            % find distances between each modelled data point and the
-            % empirical data CDF
-            ymodi = interp1(yobs_sort, cdf, ymod_sort, 'linear', 'extrap');
-            ymodi = min(1, max(0, ymodi));
-            CDFdist = abs(cdf - ymodi);
-            avDist = mean(CDFdist); % average over data points
-            costComponents.(varLabel) = mean(avDist); % average over trajectory selections
+            CDFmod = [ymod_sort, CDFobs(:,2)]; % align modelled values with the smoothed CDF of the data
+            switch plotFit, case true
+                figure
+                plot(CDFobs(:,1), CDFobs(:,2)) % empirical CDF of data
+                hold on
+                scatter(CDFmod(:,1), CDFmod(:,2))
+                for ij = 1:n
+                    plot([CDFobs(ij,1), CDFmod(ij,1)], [CDFobs(ij,2), CDFmod(ij,2)], 'Color', [0.85, 0.85, 0.85])
+                end
+            end
+            %~
+            % This has been modified from a root-mean-square (RMS) cost.
+            % True RMS function code is commented.
+            %~
+%             err2 = (CDFobs(:,1) - CDFmod(:,1)) .^ 2; % squared error
+            err = abs(CDFobs(:,1) - CDFmod(:,1)); % absolute error
+%             avFun = @mean;
+            avFun = @geomean; % Errors have skewed distributions => use geometric mean for robustness against overfitting data points that the model cannot reproduce
+%             RMS = (avFun(err2)) .^ 0.5; % root-mean-square
+            RMS = avFun(err); % average absolute error
+            RMS = RMS ./ range(CDFobs(:,1)); % scale to get values more in line with Hellinger distance values... this is ad-hoc method, could be improved...
+            
+            costComponents.(varLabel) = avFun(RMS); % average over trajectory selections
+            
         end
         
         % Vector (size) data
@@ -1177,7 +1255,7 @@ switch label
         else
             waterMasses = {[]};
         end
-        % The VarsSize labels are wrong => redefine
+        % VarsSize labels match binned data => redefine for full size spectra
         switch Data.size.obsInCostFunction{1}
             case 'BioVol'; VarsSize = {'BioVolDensity'};
             case 'CellConc'; VarsSize = {'cellDensity'};
@@ -1187,11 +1265,13 @@ switch label
         nWaterMasses = length(waterMasses);
         nTrophicLevels = length(trophicLevels);
         nESD = length(unique(Data.size.ESD));
-        
+        a = log(3) / log(2); % steepness of cost metric for total abundance
         % Extract modelled output and data into arrays with sample
         % event and depth in the trailing dimension
-        yobs = nan(nVars, nWaterMasses, nTrophicLevels, nESD);
-        ymod = nan(nVars, nWaterMasses, nTrophicLevels, nESD);
+        yobsRel = nan(nVars, nWaterMasses, nTrophicLevels, nESD);
+        ymodRel = nan(nVars, nWaterMasses, nTrophicLevels, nESD);
+        yobsTot = nan(nVars, nWaterMasses, nTrophicLevels);
+        ymodTot = nan(nVars, nWaterMasses, nTrophicLevels);
         for i = 1:nVars
             varLabel = VarsSize{i};
             for w = 1:nWaterMasses
@@ -1212,63 +1292,109 @@ switch label
                             counter = counter + 1;
                             Depth = Depths(id);
                             ind3 = ind2 & Data.size.Depth == Depth;
-                            yobs_ = Data.size.(varLabel)(ind3);
-                            ymod_ = modData.size.(varLabel)(ind3);
-                            % Fit only to relative abundance-at-size =>
-                            % normalise the data & modelled output
-                            yobs_ = yobs_ ./ sum(yobs_);
-                            ymod_ = ymod_ ./ sum(ymod_);
-                            yobs(i,w,it,:,counter) = yobs_;
-                            ymod(i,w,it,:,counter) = ymod_;
+                            yobs = Data.size.(varLabel)(ind3);
+                            ymod = modData.size.(varLabel)(ind3);
+                            yobsRel(i,w,it,:,counter) = yobs ./ sum(yobs);
+                            ymodRel(i,w,it,:,counter) = ymod ./ sum(ymod);
+                            yobsTot(i,w,it,counter) = trapz(yobs);
+                            ymodTot(i,w,it,counter) = trapz(ymod);
                         end
                     end
                 end
             end
         end
         % Average over sample events and depths
-        yobs = mean(yobs, 5);
-        ymod = mean(ymod, 5);
+        if size(yobsRel, ndims(yobsRel)) ~= nESD
+            yobsRel = mean(yobsRel, ndims(yobsRel));
+            ymodRel = mean(ymodRel, ndims(ymodRel));
+            yobsTot = mean(yobsTot, ndims(yobsTot));
+            ymodTot = mean(ymodTot, ndims(ymodTot));
+        end
+        
         % Find Hellinger distances betwen model output and data for
         % these averaged spectra, for all variables, water masses and
         % trophic levels.
         HellingerDistances = nan(nVars, nWaterMasses, nTrophicLevels);
+        totAbnMetric = nan(nVars, nWaterMasses, nTrophicLevels);
         for i = 1:nVars
             for w = 1:nWaterMasses
                 for it = 1:nTrophicLevels
-                    yobs_ = yobs(i,w,it,:);
-                    ymod_ = ymod(i,w,it,:);
+                    yobs_ = yobsRel(i,w,it,:);
+                    ymod_ = ymodRel(i,w,it,:);
                     HellingerDistance = (1 - sum((yobs_ .* ymod_) .^ 0.5)) .^ 0.5;
                     HellingerDistances(i,w,it) = HellingerDistance;
+                    yobsTot_ = yobsTot(i,w,it);
+                    ymodTot_ = ymodTot(i,w,it);
+                    u = abs(log(ymodTot_ / yobsTot_));
+                    u = exp(-a .* u);
+                    z = (1 - u) ./ (1 + u);
+                    totAbnMetric(i,w,it) = z;
                 end
             end
         end
-        
+                
         % Store in costComponents
-        for i = 1:nVars
+        for i = 1:length(VarsSize)
             varLabel = VarsSize{i};
-            for it = 1:nTrophicLevels
+            for it = 1:length(trophicLevels)
                 trophicLevel = trophicLevels{it};
                 if groupedByWaterOrigin
-                    for w = 1:nWaterMasses
+                    for w = 1:length(waterMasses)
                         waterMass = waterMasses{w};
                         label = [varLabel '_' waterMass '_' trophicLevel];
-                        costComponents.(label) = HellingerDistances(i,w,it);
+                        costComponents.([label '_Rel']) = HellingerDistances(i,w,it);
+                        costComponents.([label '_Tot']) = totAbnMetric(i,w,it);
                     end
                 else
                     label = [varLabel '_' trophicLevel];
-                    costComponents.(label) = HellingerDistances(i,1,it);
+                    costComponents.([label '_Rel']) = HellingerDistances(i,1,it);
+                    costComponents.([label '_Tot']) = totAbnMetric(i,1,it);
                 end
             end
         end
         
-        % Calculate total cost -- a scalar value
-        fields = fieldnames(costComponents);
-        costComponents_ = struct2array(costComponents);
-        costNutrient = costComponents_(ismember(fields, Vars));
-        costSize = costComponents_(~ismember(fields, Vars));
-        cost_ = [mean(costNutrient), mean(costSize)];
-        cost = mean(cost_);
+        % Within each size data group, weight relative abundance-at-size
+        % relative to total abundance.
+        weight_relVsTot = 3; % weighting factor of relative vs total abundance (relative abundance assumed more reliable)
+        costSize = zeros(2,length(waterMasses)); % store weighted costs for all size data groups
+        for i = 1:length(waterMasses)
+            wm = waterMasses{i};
+            if groupedByWaterOrigin
+                cta = costComponents.([varLabel '_' wm '_autotroph_Tot']);
+                cra = costComponents.([varLabel '_' wm '_autotroph_Rel']);
+                cth = costComponents.([varLabel '_' wm '_heterotroph_Tot']);
+                crh = costComponents.([varLabel '_' wm '_heterotroph_Rel']);
+            else
+                cta = costComponents.([varLabel '_autotroph_Tot']);
+                cra = costComponents.([varLabel '_autotroph_Rel']);
+                cth = costComponents.([varLabel '_heterotroph_Tot']);
+                crh = costComponents.([varLabel '_heterotroph_Rel']);
+            end
+            costSize(1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
+            costSize(2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
+        end
         
+        costNutrient = zeros(1,length(Vars));
+        for i = 1:length(Vars)
+            costNutrient(i) = costComponents.(Vars{i});
+        end
+        
+        % Treat PON & POC data as a single type, POM, thereby
+        % downweighting their combined cost contribution
+        POMi = ismember(Vars, {'PON','POC'});
+        costPOM = mean(costNutrient(POMi));
+        costNutrient(POMi) = [];
+        costNutrient = [costNutrient, costPOM];
+        
+        % Average the cost across data-types (nutrient & size)
+        cost = [mean(costNutrient), mean(costSize(:))];
+        % Assign size vs nutrient weighting
+        weight_sizeVsNutrient = 1; % weighting factor of size vs nutrient data
+        weights = 2 .* [1, weight_sizeVsNutrient] ./ (weight_sizeVsNutrient+1);
+        cost = weights .* cost;
+        
+        cost = mean(cost); % finally, average cost over nutrient and size data components
+
 end
 
 

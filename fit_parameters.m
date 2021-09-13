@@ -18,8 +18,9 @@ rng(1) % set random seed
 % or parFile = 'filename.mat' to use saved values as the initials.
 % parFile = [];
 parFile = 'parameterInitialValues';
-% Identifying tag (may be tag=[]) here is the name of cost function used to
-% generate saved parameters, and a string describing model set-up. 
+% Identifying tag here is the name of cost function used to
+% generate saved parameters, and a string describing model set-up
+% (set tag=[] if unused).
 tag = '_RMS_Hellinger2_Atlantic_aG_sigG_upweightAbnTot.mat';
 % tag = 'RMS_Hellinger2_Arctic_aG_sigG_upweightAbnTot.mat';
 if ~isempty(parFile), parFile = [parFile tag]; end
@@ -50,18 +51,19 @@ numTraj = 1; % For optimisation efficiency use only a single trajectory per samp
 niter = 50; % algorithm iterations (the algorithm can be halted and continued, so we may set niter quite small and run the algorithm in repeated blocks)
 popSize = 100; % number of parameter sets evaluated per iteration
 
-% See costFunction.m for list of cost function choices
-% costFunctionType = 'RMS_Hellinger2'; % fit scalar/nutrient data using least sum of errors, fit relative size data using Hellinger distances, totals in size data fit as ratio of zooplankton
-costFunctionType = 'RMS_Hellinger_ZPratio'; % fit scalar/nutrient data using least sum of errors, fit relative size data using Hellinger distances, totals in size data fit as ratio of zooplankton
+[~,~,~,cfc] = costFunction(); % list available cost function choices
+% costFunctionType = 'RMS_Hellinger_ZPratio'; % fit scalar/nutrient data using least sum of errors, fit relative size data using Hellinger distances, totals in size data fit as ratio of zooplankton
+costFunctionType = 'RMS_HellingerFullSpectrum';
 
 % Fit parameters to data sampled from either Atlantic or Arctic waters
 fitTrajectories = 'Atlantic';
 % fitTrajectories = 'Arctic';
 
-% Different cost functions may use binned size data (integrated within
-% modelled size class intervals) or may fit to the full size spectra data.
-% This choice affects how model outputs are extracted to match data.
-fitToFullSizeSpectra = false;
+% % Different cost functions may use binned size data (integrated within
+% % modelled size class intervals) or may fit to the full size spectra data.
+% % This choice affects how model outputs are extracted to match data.
+% fitToFullSizeSpectra = false;
+
 % Set rescaleForOptim true to estimate parameters within some transformed 
 % space -- transforms chosen to improve optimisation efficiency by
 % smoothing search space.
@@ -73,8 +75,8 @@ rescaleForOptim = true;
     'popSize', popSize, ...
     'costFunctionType', costFunctionType, ...
     'fitTrajectories', fitTrajectories, ...
-    'fitToFullSizeSpectra', fitToFullSizeSpectra, ...
     'rescaleForOptim', rescaleForOptim);
+
 % Optional arguments (e.g. 'niter') may be included as name-value pairs,
 % otherwise default values are used.
 % It is important to specify 'costFunctionType' as one of the options
@@ -121,7 +123,7 @@ switch restartRun, case true
                 loadOptimisationRun(fileName_results);
         case false
             [~, results, ~, ~, boundsLower, boundsUpper, Data, Forc, FixedParams, Params, v0] = ...
-                loadOptimisationRun(fileName_results);            
+                loadOptimisationRun(fileName_results);
 %             [~, results, ~, ~, ~, ~, ~, ~, ~, ~, v0] = ...
 %                 loadOptimisationRun(fileName_results);
     end
