@@ -52,17 +52,12 @@ niter = 50; % algorithm iterations (the algorithm can be halted and continued, s
 popSize = 100; % number of parameter sets evaluated per iteration
 
 [~,~,~,cfc] = costFunction(); % list available cost function choices
-% costFunctionType = 'RMS_Hellinger_ZPratio'; % fit scalar/nutrient data using least sum of errors, fit relative size data using Hellinger distances, totals in size data fit as ratio of zooplankton
-costFunctionType = 'RMS_HellingerFullSpectrum';
+costFunctionType = 'RMS_Hellinger_ZPratio'; % fit scalar/nutrient data using least sum of errors, fit relative size data using Hellinger distances, totals in size data fit as ratio of zooplankton
+% costFunctionType = 'RMS_HellingerFullSpectrum';
 
 % Fit parameters to data sampled from either Atlantic or Arctic waters
 fitTrajectories = 'Atlantic';
 % fitTrajectories = 'Arctic';
-
-% % Different cost functions may use binned size data (integrated within
-% % modelled size class intervals) or may fit to the full size spectra data.
-% % This choice affects how model outputs are extracted to match data.
-% fitToFullSizeSpectra = false;
 
 % Set rescaleForOptim true to estimate parameters within some transformed 
 % space -- transforms chosen to improve optimisation efficiency by

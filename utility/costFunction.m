@@ -310,23 +310,25 @@ switch label
         
         % Within each size data group, weight relative abundance-at-size
         % relative to total abundance.
-        weight_relVsTot = 3; % weighting factor of relative vs total abundance
-        costSize = zeros(2,length(waterMasses)); % store weighted costs for all size data groups
-        for i = 1:length(waterMasses)
-            wm = waterMasses{i};
-            if groupedByWaterOrigin
-                cta = costComponents.([varLabel '_' wm '_autotroph_Tot']);
-                cra = costComponents.([varLabel '_' wm '_autotroph_Rel']);
-                cth = costComponents.([varLabel '_' wm '_heterotroph_Tot']);
-                crh = costComponents.([varLabel '_' wm '_heterotroph_Rel']);
-            else
-                cta = costComponents.([varLabel '_autotroph_Tot']);
-                cra = costComponents.([varLabel '_autotroph_Rel']);
-                cth = costComponents.([varLabel '_heterotroph_Tot']);
-                crh = costComponents.([varLabel '_heterotroph_Rel']);
+        weight_relVsTot = 3;
+        nDataTypes = length(VarsSize);
+        costSize = zeros(nDataTypes, 2, length(waterMasses)); % store weighted costs for all size data groups (dimension = data type, trophic level, water mass)
+        for j = 1:nDataTypes
+            varLabel = VarsSize{j};
+            for i = 1:length(waterMasses)
+                wm = waterMasses{i};
+                if groupedByWaterOrigin
+                    cLabel = [varLabel '_' wm '_'];
+                else
+                    cLabel = [varLabel '_'];
+                end
+                cta = costComponents.([cLabel 'autotroph_Tot']);
+                cra = costComponents.([cLabel 'autotroph_Rel']);
+                cth = costComponents.([cLabel 'heterotroph_Tot']);
+                crh = costComponents.([cLabel 'heterotroph_Rel']);
+                costSize(j,1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
+                costSize(j,2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
             end
-            costSize(1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
-            costSize(2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
         end
         
         costNutrient = zeros(1,length(Vars));
@@ -484,25 +486,27 @@ switch label
         
         % Within each size data group, weight relative abundance-at-size
         % relative to total abundance.
-        weight_relVsTot = 3; % weighting factor of relative vs total abundance
-        costSize = zeros(2,length(waterMasses)); % store weighted costs for all size data groups
-        for i = 1:length(waterMasses)
-            wm = waterMasses{i};
-            if groupedByWaterOrigin
-                cta = costComponents.([varLabel '_' wm '_autotroph_Tot']);
-                cra = costComponents.([varLabel '_' wm '_autotroph_Rel']);
-                cth = costComponents.([varLabel '_' wm '_heterotroph_Tot']);
-                crh = costComponents.([varLabel '_' wm '_heterotroph_Rel']);
-            else
-                cta = costComponents.([varLabel '_autotroph_Tot']);
-                cra = costComponents.([varLabel '_autotroph_Rel']);
-                cth = costComponents.([varLabel '_heterotroph_Tot']);
-                crh = costComponents.([varLabel '_heterotroph_Rel']);
+        weight_relVsTot = 3;
+        nDataTypes = length(VarsSize);
+        costSize = zeros(nDataTypes, 2, length(waterMasses)); % store weighted costs for all size data groups (dimension = data type, trophic level, water mass)
+        for j = 1:nDataTypes
+            varLabel = VarsSize{j};
+            for i = 1:length(waterMasses)
+                wm = waterMasses{i};
+                if groupedByWaterOrigin
+                    cLabel = [varLabel '_' wm '_'];
+                else
+                    cLabel = [varLabel '_'];
+                end
+                cta = costComponents.([cLabel 'autotroph_Tot']);
+                cra = costComponents.([cLabel 'autotroph_Rel']);
+                cth = costComponents.([cLabel 'heterotroph_Tot']);
+                crh = costComponents.([cLabel 'heterotroph_Rel']);
+                costSize(j,1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
+                costSize(j,2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
             end
-            costSize(1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
-            costSize(2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
         end
-        
+
         costNutrient = zeros(1,length(Vars));
         for i = 1:length(Vars)
             costNutrient(i) = costComponents.(Vars{i});
@@ -648,23 +652,25 @@ switch label
         
         % Within each size data group, weight relative abundance-at-size
         % relative to total abundance.
-        weight_relVsTot = 3; % weighting factor of relative vs total abundance (relative abundance assumed more reliable)
-        costSize = zeros(2,length(waterMasses)); % store weighted costs for all size data groups
-        for i = 1:length(waterMasses)
-            wm = waterMasses{i};
-            if groupedByWaterOrigin
-                cta = costComponents.([varLabel '_' wm '_autotroph_Tot']);
-                cra = costComponents.([varLabel '_' wm '_autotroph_Rel']);
-                cth = costComponents.([varLabel '_' wm '_heterotroph_Tot']);
-                crh = costComponents.([varLabel '_' wm '_heterotroph_Rel']);
-            else
-                cta = costComponents.([varLabel '_autotroph_Tot']);
-                cra = costComponents.([varLabel '_autotroph_Rel']);
-                cth = costComponents.([varLabel '_heterotroph_Tot']);
-                crh = costComponents.([varLabel '_heterotroph_Rel']);
+        weight_relVsTot = 3;
+        nDataTypes = length(VarsSize);
+        costSize = zeros(nDataTypes, 2, length(waterMasses)); % store weighted costs for all size data groups (dimension = data type, trophic level, water mass)
+        for j = 1:nDataTypes
+            varLabel = VarsSize{j};
+            for i = 1:length(waterMasses)
+                wm = waterMasses{i};
+                if groupedByWaterOrigin
+                    cLabel = [varLabel '_' wm '_'];
+                else
+                    cLabel = [varLabel '_'];
+                end
+                cta = costComponents.([cLabel 'autotroph_Tot']);
+                cra = costComponents.([cLabel 'autotroph_Rel']);
+                cth = costComponents.([cLabel 'heterotroph_Tot']);
+                crh = costComponents.([cLabel 'heterotroph_Rel']);
+                costSize(j,1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
+                costSize(j,2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
             end
-            costSize(1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
-            costSize(2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
         end
         
         costNutrient = zeros(1,length(Vars));
@@ -812,28 +818,28 @@ switch label
             end
         end
         
-        
         % Within each size data group, weight relative abundance-at-size
         % relative to total abundance.
-        %             weight_relVsTot = 3; % weighting factor of relative vs total abundance (relative abundance assumed more reliable)
         weight_relVsTot = 1;
-        costSize = zeros(2,length(waterMasses)); % store weighted costs for all size data groups
-        for i = 1:length(waterMasses)
-            wm = waterMasses{i};
-            if groupedByWaterOrigin
-                %                     cta = costComponents.([varLabel '_' wm '_autotroph_Tot']);
-                cra = costComponents.([varLabel '_' wm '_autotroph_Rel']);
-                cth = costComponents.([varLabel '_' wm '_heterotroph_Tot']);
-                crh = costComponents.([varLabel '_' wm '_heterotroph_Rel']);
-            else
-                %                     cta = costComponents.([varLabel '_autotroph_Tot']);
-                cra = costComponents.([varLabel '_autotroph_Rel']);
-                cth = costComponents.([varLabel '_heterotroph_Tot']);
-                crh = costComponents.([varLabel '_heterotroph_Rel']);
+        nDataTypes = length(VarsSize);
+        costSize = zeros(nDataTypes, 2, length(waterMasses)); % store weighted costs for all size data groups (dimension = data type, trophic level, water mass)
+        for j = 1:nDataTypes
+            varLabel = VarsSize{j};
+            for i = 1:length(waterMasses)
+                wm = waterMasses{i};
+                if groupedByWaterOrigin
+                    cLabel = [varLabel '_' wm '_'];
+                else
+                    cLabel = [varLabel '_'];
+                end
+%                 cta = costComponents.([cLabel 'autotroph_Tot']);
+                cra = costComponents.([cLabel 'autotroph_Rel']);
+                cth = costComponents.([cLabel 'heterotroph_Tot']);
+                crh = costComponents.([cLabel 'heterotroph_Rel']);
+%                 costSize(j,1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
+                costSize(j,1,i) = cra;
+                costSize(j,2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
             end
-            %                 costSize(1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
-            costSize(1,i) = cra;
-            costSize(2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
         end
         
         costNutrient = zeros(1,length(Vars));
@@ -848,7 +854,7 @@ switch label
         costNutrient(POMi) = [];
         costNutrient = [costNutrient, costPOM];
         
-        % Average the cost across data-types (nutrient & size)
+        % Average the cost for each data type (nutrient & size)
         cost = [mean(costNutrient), mean(costSize(:))];
         % Assign size vs nutrient weighting
         weight_sizeVsNutrient = 1; % weighting factor of size vs nutrient data
@@ -856,7 +862,6 @@ switch label
         cost = weights .* cost;
         
         cost = mean(cost); % finally, average cost over nutrient and size data components
-        %             cost = cost(2); % try fitting only to the size data
         
         
         %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -987,23 +992,25 @@ switch label
         
         % Within each size data group, weight relative abundance-at-size
         % relative to total abundance.
-        weight_relVsTot = 3; % weighting factor of relative vs total abundance (relative abundance assumed more reliable)
-        costSize = zeros(2,length(waterMasses)); % store weighted costs for all size data groups
-        for i = 1:length(waterMasses)
-            wm = waterMasses{i};
-            if groupedByWaterOrigin
-                cta = costComponents.([varLabel '_' wm '_autotroph_Tot']);
-                cra = costComponents.([varLabel '_' wm '_autotroph_Rel']);
-                cth = costComponents.([varLabel '_' wm '_heterotroph_Tot']);
-                crh = costComponents.([varLabel '_' wm '_heterotroph_Rel']);
-            else
-                cta = costComponents.([varLabel '_autotroph_Tot']);
-                cra = costComponents.([varLabel '_autotroph_Rel']);
-                cth = costComponents.([varLabel '_heterotroph_Tot']);
-                crh = costComponents.([varLabel '_heterotroph_Rel']);
+        weight_relVsTot = 3;
+        nDataTypes = length(VarsSize);
+        costSize = zeros(nDataTypes, 2, length(waterMasses)); % store weighted costs for all size data groups (dimension = data type, trophic level, water mass)
+        for j = 1:nDataTypes
+            varLabel = VarsSize{j};
+            for i = 1:length(waterMasses)
+                wm = waterMasses{i};
+                if groupedByWaterOrigin
+                    cLabel = [varLabel '_' wm '_'];
+                else
+                    cLabel = [varLabel '_'];
+                end
+                cta = costComponents.([cLabel 'autotroph_Tot']);
+                cra = costComponents.([cLabel 'autotroph_Rel']);
+                cth = costComponents.([cLabel 'heterotroph_Tot']);
+                crh = costComponents.([cLabel 'heterotroph_Rel']);
+                costSize(j,1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
+                costSize(j,2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
             end
-            costSize(1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
-            costSize(2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
         end
         
         costNutrient = zeros(1,length(Vars));
@@ -1161,23 +1168,25 @@ switch label
         
         % Within each size data group, weight relative abundance-at-size
         % relative to total abundance.
-        weight_relVsTot = 3; % weighting factor of relative vs total abundance (relative abundance assumed more reliable)
-        costSize = zeros(2,length(waterMasses)); % store weighted costs for all size data groups
-        for i = 1:length(waterMasses)
-            wm = waterMasses{i};
-            if groupedByWaterOrigin
-                cta = costComponents.([varLabel '_' wm '_autotroph_Tot']);
-                cra = costComponents.([varLabel '_' wm '_autotroph_Rel']);
-                cth = costComponents.([varLabel '_' wm '_heterotroph_Tot']);
-                crh = costComponents.([varLabel '_' wm '_heterotroph_Rel']);
-            else
-                cta = costComponents.([varLabel '_autotroph_Tot']);
-                cra = costComponents.([varLabel '_autotroph_Rel']);
-                cth = costComponents.([varLabel '_heterotroph_Tot']);
-                crh = costComponents.([varLabel '_heterotroph_Rel']);
+        weight_relVsTot = 3;
+        nDataTypes = length(VarsSize);
+        costSize = zeros(nDataTypes, 2, length(waterMasses)); % store weighted costs for all size data groups (dimension = data type, trophic level, water mass)
+        for j = 1:nDataTypes
+            varLabel = VarsSize{j};
+            for i = 1:length(waterMasses)
+                wm = waterMasses{i};
+                if groupedByWaterOrigin
+                    cLabel = [varLabel '_' wm '_'];
+                else
+                    cLabel = [varLabel '_'];
+                end
+                cta = costComponents.([cLabel 'autotroph_Tot']);
+                cra = costComponents.([cLabel 'autotroph_Rel']);
+                cth = costComponents.([cLabel 'heterotroph_Tot']);
+                crh = costComponents.([cLabel 'heterotroph_Rel']);
+                costSize(j,1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
+                costSize(j,2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
             end
-            costSize(1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
-            costSize(2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
         end
         
         costNutrient = zeros(1,length(Vars));
@@ -1355,23 +1364,25 @@ switch label
         
         % Within each size data group, weight relative abundance-at-size
         % relative to total abundance.
-        weight_relVsTot = 3; % weighting factor of relative vs total abundance (relative abundance assumed more reliable)
-        costSize = zeros(2,length(waterMasses)); % store weighted costs for all size data groups
-        for i = 1:length(waterMasses)
-            wm = waterMasses{i};
-            if groupedByWaterOrigin
-                cta = costComponents.([varLabel '_' wm '_autotroph_Tot']);
-                cra = costComponents.([varLabel '_' wm '_autotroph_Rel']);
-                cth = costComponents.([varLabel '_' wm '_heterotroph_Tot']);
-                crh = costComponents.([varLabel '_' wm '_heterotroph_Rel']);
-            else
-                cta = costComponents.([varLabel '_autotroph_Tot']);
-                cra = costComponents.([varLabel '_autotroph_Rel']);
-                cth = costComponents.([varLabel '_heterotroph_Tot']);
-                crh = costComponents.([varLabel '_heterotroph_Rel']);
+        weight_relVsTot = 3;
+        nDataTypes = length(VarsSize);
+        costSize = zeros(nDataTypes, 2, length(waterMasses)); % store weighted costs for all size data groups (dimension = data type, trophic level, water mass)
+        for j = 1:nDataTypes
+            varLabel = VarsSize{j};
+            for i = 1:length(waterMasses)
+                wm = waterMasses{i};
+                if groupedByWaterOrigin
+                    cLabel = [varLabel '_' wm '_'];
+                else
+                    cLabel = [varLabel '_'];
+                end
+                cta = costComponents.([cLabel 'autotroph_Tot']);
+                cra = costComponents.([cLabel 'autotroph_Rel']);
+                cth = costComponents.([cLabel 'heterotroph_Tot']);
+                crh = costComponents.([cLabel 'heterotroph_Rel']);
+                costSize(j,1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
+                costSize(j,2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
             end
-            costSize(1,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cta, cra]);
-            costSize(2,i) = mean(2 .* [1, weight_relVsTot] ./ (weight_relVsTot+1) .* [cth, crh]);
         end
         
         costNutrient = zeros(1,length(Vars));
