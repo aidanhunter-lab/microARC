@@ -72,16 +72,16 @@ end
 %~~~~~~~~~~~~~
 if isempty(FixedParams.zw)
     FixedParams.zw = [0; -cumsum(linspace(FixedParams.dzmin, ...
-        FixedParams.dzmax, FixedParams.nz))'];                               % depth of layer edges
+        FixedParams.dzmax, FixedParams.nz))'];                            % depth of layer edges
 end
 if isempty(FixedParams.zwidth)
-    FixedParams.zwidth = FixedParams.zw(1:end-1) - FixedParams.zw(2:end);    % widths of depth layers
+    FixedParams.zwidth = FixedParams.zw(1:end-1) - FixedParams.zw(2:end); % widths of depth layers
 end
 if isempty(FixedParams.z)
-    FixedParams.z = 0.5*(FixedParams.zw(1:end-1)+FixedParams.zw(2:end));     % midpoints of depth layers
+    FixedParams.z = 0.5*(FixedParams.zw(1:end-1)+FixedParams.zw(2:end));  % midpoints of depth layers
 end
 if isempty(FixedParams.delz)
-    FixedParams.delz = abs(diff(FixedParams.z));                             % distance between centres of adjacent depth layers
+    FixedParams.delz = abs(diff(FixedParams.z));                          % distance between centres of adjacent depth layers
 end
 
 %~~~~~~~~~~~~~~~~
@@ -90,15 +90,15 @@ end
 
 % Inorganic nutrient
 if isempty(FixedParams.nIN)
-    FixedParams.nIN = length(FixedParams.IN_nut);  % number of nutrient types
+    FixedParams.nIN = length(FixedParams.IN_nut); % number of nutrient types
 end
 
 % Plankton
 if isempty(FixedParams.nPP_nut)
-    FixedParams.nPP_nut = length(FixedParams.PP_nut);              % number of nutrient types
+    FixedParams.nPP_nut = length(FixedParams.PP_nut); % number of nutrient types
 end
 if isempty(FixedParams.nZP_nut)
-    FixedParams.nZP_nut = length(FixedParams.ZP_nut);              % number of nutrient types
+    FixedParams.nZP_nut = length(FixedParams.ZP_nut); % number of nutrient types
 end
 
 
@@ -155,17 +155,12 @@ delta_prey = [reshape(FixedParams.PPdia, [1 FixedParams.nPP_size]), ...
     reshape(FixedParams.ZPdia, [1 FixedParams.nZP_size])];
 FixedParams.delta = delta_pred ./ delta_prey; % predator:prey size (diameter) ratios
 
-% delta_pred = reshape(FixedParams.ZPsize, [FixedParams.nZP_size, 1]);
-% delta_prey = [reshape(FixedParams.PPsize, [1 FixedParams.nPP_size]), ... 
-%     reshape(FixedParams.ZPsize, [1 FixedParams.nZP_size])];
-% FixedParams.delta = delta_pred ./ delta_prey; % predator:prey size ratios
-
 if isempty(FixedParams.nPP)
-    FixedParams.nPP = FixedParams.nPP_size * FixedParams.nPP_nut;  % number of phytoplankton classes
+    FixedParams.nPP = FixedParams.nPP_size * FixedParams.nPP_nut; % number of phytoplankton classes
 end
 
 if isempty(FixedParams.nZP)
-    FixedParams.nZP = FixedParams.nZP_size * FixedParams.nZP_nut;  % number of zooplankton classes
+    FixedParams.nZP = FixedParams.nZP_size * FixedParams.nZP_nut; % number of zooplankton classes
 end
 
 FixedParams.diaAll = [FixedParams.PPdia; FixedParams.ZPdia];
@@ -173,15 +168,15 @@ FixedParams.sizeAll = [FixedParams.PPsize; FixedParams.ZPsize];
 
 
 if isempty(FixedParams.diatoms)
-    FixedParams.diatoms = FixedParams.diaAll >= 10;                 % assume large phytoplankton are diatoms - only needed to split SINMOD output over classes during state variable initialisation
+    FixedParams.diatoms = FixedParams.diaAll >= 10;               % assume large phytoplankton are diatoms - only needed to split SINMOD output over classes during state variable initialisation
 end
 if isempty(FixedParams.phytoplankton)
     FixedParams.phytoplankton = [true(1,FixedParams.nPP_size) ... 
-        false(1,FixedParams.nZP_size)]';                                % index phytoplankton
+        false(1,FixedParams.nZP_size)]';                          % index phytoplankton
 end
 if isempty(FixedParams.zooplankton)
     FixedParams.zooplankton = [false(1,FixedParams.nPP_size) ... 
-    true(1,FixedParams.nZP_size)]';                                     % index zooplankton 
+    true(1,FixedParams.nZP_size)]';                               % index zooplankton 
 end
 
 % Organic matter
@@ -282,10 +277,6 @@ if (isfield(Params, 'Gmax_a') && isfield(Params, 'Gmax_b')) && ...
     Params.Gmax = Params.Gmax_func(Params.Gmax_a, Params.Gmax_b, Vol);
 end
 
-% if isempty(Params.k_G)
-%     Params.k_G = powerFunction(Params.k_G_a, Params.k_G_b, VolZ);
-% end
-
 if (isfield(Params, 'm_a') && isfield(Params, 'm_b')) && ...
         ~(isempty(Params.m_a) || isempty(Params.m_b))
     powerFunction = Params.m_func;
@@ -323,14 +314,6 @@ end
 if (isfield(Params, 'delta_opt') && isfield(Params, 'sigG')) && ...
         ~(isempty(Params.delta_opt) || isempty(Params.sigG))
     Params.phi = Params.phi_func(Params.delta_opt, Params.sigG, FixedParams.delta);
-%     Params.phi = exp(-log(FixedParams.delta ./ Params.delta_opt) .^ 2 ./ (2 .* Params.sigG .^ 2));
-    % Standardise so that each predator may optimally graze some prey class.
-    % Otherwise the small predators cannot optimally graze so their
-    % experienced prey saturation is always low.
-    % This messes up the pred:prey size ratio effect, but modelled size 
-    % classes are actually intervals containing a range of sizes.
-    % OR NOT, AS IT MAY NOT BE ECOLOGICALLY REASONABLE => COMMENT OUT
-%     Params.phi = Params.phi ./ max(Params.phi, [], 2);
 end
 
 if isfield(Params, 'wPOM_func') && isfield(Params, 'wPOM1') && ~isempty(Params.wPOM1)
@@ -404,7 +387,6 @@ if (isfield(Params, 'Gmax_a') && isfield(Params, 'aG')) && ...
     Params.k_G = Params.k_G_func(Params.Gmax_a, Params.aG);
 end
 
-% Params.beta(FixedParams.nPP_size+1) = Params.beta(FixedParams.nPP_size); % assume beta for zooplankton is equivalent to largest phytoplankton size class
 
 
 %% Tidy up
@@ -422,18 +404,9 @@ end
 
 
 %% auxiliary functions
-% 
-% function y = doubleLogisticFunction(a, b, c, x)
-% u = exp(x - c);
-% y = a ./ (1 + u) .* (1 + b .* u);
-% end
 
 function vol = d2vol(d)
 vol = 1 ./ 6 .* pi .* d .^ 3;
 end
 % d2vol = @(d) 1 ./ 6 .* pi .* d .^ 3;
-
-% function d = vol2d(vol)
-% d = 2 .* (vol .* (3 ./ 4 ./ pi)) .^ (1/3);
-% end
 

@@ -1,5 +1,6 @@
 function [cost, costComponents, modData, out, auxVars] = costCalc(pars, ... 
     FixedParams, Params, Forc, Data, v0, odeIntegrator, odeOptions, varargin)
+% Function wrapper that runs the model and cost function.
 % Returns a scalar 'cost' quantifying model misfit to data, given parameters
 % 'pars'.
 % May optionally return a struct 'costComponents' containing the cost 
@@ -24,10 +25,6 @@ if ~exist('selectFunction', 'var')
     selectFunction = defaultCostType;
 end
 
-% Vars = Data.scalar.obsInCostFunction; % Data types used to fit the model
-% VarsSize = Data.size.obsInCostFunction;
-
-
 %% Run model
 
 % Transform from search space scale to natural scale
@@ -39,12 +36,6 @@ end
 
 % Set parameter values
 Params = updateParameters(Params, FixedParams, pars);
-
-% % Some initial state variables are specified as functions of parameter
-% % values => should be recalculated for each parameter set. If v0 were totally
-% % independent of parameter values then it would be absolutely fixed and, to 
-% % avoid wasted computation, should be passed as an argument to costFunction.m.
-% v0 = initialiseVariables(FixedParams, Params, Forc);
 
 % Integrate
 [out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, ...
@@ -61,19 +52,13 @@ Params = updateParameters(Params, FixedParams, pars);
 % binned size data, which averages over covariate information including
 % sampling events and depths -- this can be convenient and is probably (in
 % my opinion!) best for parameter-tuning.
-% When fitToFullSizeSpectra = false the full size spectra data are matched
+% When fitToFullSizeSpectra = true the full size spectra data are matched
 % within modData.size, which contains all potentially useful covariate
 % information -- any cost function using this will need to explicitly
 % handle the covariates and any associated averaging/smoothing.
 
 modData = matchModOutput2Data(out, auxVars, Data, FixedParams, ...
     'fitToFullSizeSpectra', FixedParams.fitToFullSizeSpectra);
-
-% if FixedParams.fitToFullSizeSpectra
-%     modData = matchModOutput2Data_fullSpectrum(out, auxVars, Data, FixedParams);
-% else
-%     modData = matchModOutput2Data(out, auxVars, Data, FixedParams);
-% end
 
 
 %% Cost function

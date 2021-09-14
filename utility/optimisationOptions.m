@@ -5,14 +5,6 @@ function [FixedParams, Params, Forc, Data] = ...
 
 extractVarargin(varargin)
 
-if ~exist('fitToFullSizeSpectra', 'var') || isempty(fitToFullSizeSpectra)
-    % If unspecified then by default fit model using binned size spectra
-    % data. Fitting to the full (unbinned) size data creates a very rough
-    % cost function surface that's problematic to fit.
-    fitToFullSizeSpectra = false;
-end
-FixedParams.fitToFullSizeSpectra = fitToFullSizeSpectra;
-
 if ~exist('rescaleForOptim', 'var')
     % True by default because I think it's useful to estimate some of the
     % size-dependency (exponent) parameters on a transformed scale.
@@ -22,15 +14,9 @@ if ~exist('rescaleForOptim', 'var')
     rescaleForOptim = true;
 end
 
-
-
 %% Select parameters to optimise
 
 % Choose from the lists: Params.scalars & Params.sizeDependent.
-% parnames = {'wPOM1', 'wp_a', 'wp_b', 'rDON', 'rPON', ...
-%     'aP', 'm_a', 'm2', 'Gmax_a', 'Gmax_b', 'k_G', 'pmax_a', 'pmax_b', ... 
-%     'Qmin_QC_a', 'Qmin_QC_b', 'Qmax_delQ_a', 'Qmax_delQ_b', ... 
-%     'Vmax_QC_a', 'Vmax_QC_b', 'aN_QC_a', 'aN_QC_b'};
 parnames = {'wPOM1', 'rDON', 'rPON', 'aP', 'm_a', 'Gmax_a', 'Gmax_b', ... 
     'aG', 'sigG', 'pmax_a', 'pmax_b', 'Qmin_QC_a', 'Qmax_delQ_a', 'Qmax_delQ_b', ...
     'Vmax_QC_a', 'Vmax_QC_b', 'aN_QC_a', 'aN_QC_b'};
@@ -51,10 +37,6 @@ ub = cellfun(@(x) x(2), bounds); % upper bounds
 FixedParams.tunePars = parnames;
 FixedParams.tunePars_lb = lb;
 FixedParams.tunePars_ub = ub;
-% % Assign to workspace
-% assignin('caller', 'npars', npars)
-% assignin('caller', 'boundsLower', lb)
-% assignin('caller', 'boundsUpper', ub)
 
 % Parameter transforms for optimisation search space
 switch rescaleForOptim
@@ -106,37 +88,33 @@ assignin('caller', 'npars', npars)
 assignin('caller', 'boundsLower', lb)
 assignin('caller', 'boundsUpper', ub)
 
-
-
-
 %% Select cost function.
-% There's a few options for the cost function. Not yet sure which is the
-% best... Hellinger2_groupWaterOrigin is most defensible as it makes fewest
-% assumptions
-[~, ~, costFunctionChoices] = costFunction();
-% costFunctionChoices = { ...
-%     'LSS', ...
-%     'RMS', ...
-%     'syntheticLikelihood_ScalarNormal_SizeSpectraLogNormal_logisticNormal', ...
-%     'syntheticLikelihood_ScalarNormal_SizeSpectraLogNormalDirichlet', ...
-%     'syntheticLikelihood_ScalarNormalShape_SizeSpectraLogNormalDirichlet', ...
-%     'N_LN-Dir_groupWaterOrigin', ...
-%     'Hellinger_groupWaterOrigin', ...
-%     'Hellinger2_groupWaterOrigin', ...
-%     'Hellinger_MVN_groupWaterOrigin'
-%     };
+
+[~, ~, ~, costFunctionChoices] = costFunction();
 
 if ~exist('costFunctionType', 'var')
-    % costFunctionChoices should be given shorter names...
-    %     costFunctionType = costFunctionChoices{4}; % select cost function
-    %     costFunctionType = costFunctionChoices{6}; % select cost function
-    costFunctionType = 'meanCDFdist_Hellinger';
-    if ~ismember(costFunctionType, costFunctionChoices)
-        costFunctionType = costFunctionChoices{1};
-    end
+    % If costFunctionType is not given as argument then use the first cost
+    % function listed in available options
+    costFunctionType = costFunctionChoices.label{1};
+    warning(['It is better to specify argument "costFunctionType", otherwise the cost function label is set as the first listed in the availbale options (costFunctionType=' costFunctionType ').'])
 end
+if ~any(strcmp(costFunctionType, costFunctionChoices.label))
+    costFunctionType = costFunctionChoices.label{1};
+    warning(['As argument "costFunctionType" does not match any available options listed in costFunction.m, the cost function label is set as the first listed in the availbale options (costFunctionType=' costFunctionType ').'])
+end
+
 FixedParams.costFunction = costFunctionType;
 assignin('caller', 'costFunctionLabel', costFunctionType)
+
+dataType = costFunctionChoices.dataType{strcmp(costFunctionType, ...
+    costFunctionChoices.label)}; % cost function size data requirements (full spectra or binned size data)
+switch dataType
+    case 'fullSizeSpectra'
+        FixedParams.fitToFullSizeSpectra = true;
+    case 'binnedSizeData'
+        FixedParams.fitToFullSizeSpectra = false;
+end
+
 
 %% Select optimising algorithm (so far only ga is available)
 optimiserChoices = {'ga','muga'};
@@ -146,7 +124,6 @@ end
 FixedParams.optimiser = optimiser;
 optimise = str2func(optimiser);
 assignin('caller', 'optimise', optimise) % assign optimising algorithm to the workspace
-
 
 %% Parameters of optimising algorithm
 
@@ -184,5 +161,9 @@ if ~exist('fitTrajectories', 'var')
     fitTrajectories = [];
 end
 
-[Forc, Data] = filterInputByOrigin(Forc, Data, 'fitTrajectories', fitTrajectories);
+if ~isfield(Data, 'sizeFull')
+    warning('Filtering the data by water origin is not possible because the Data struct is missing field "sizeFull". This probably happened because optimisationOptions.m has been run a second time and the data are already filtered -- it should be OK if "fitTrajectories" has not been changed...')
+else
+    [Forc, Data] = filterInputByOrigin(Forc, Data, 'fitTrajectories', fitTrajectories);
+end
 
