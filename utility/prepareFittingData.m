@@ -60,9 +60,8 @@ stationList = 'PS114_station_list.csv';
 
 dat = readtable(fullfile(obsDir,nutrientObsFile), 'Format', 'auto');
 stations = readtable(fullfile(obsDir,stationList), 'Format', 'auto');
-% There is no date provided in dat(!), so need to combine table of
-% sampling station data with table of measurements... but the formating is
-% inconsistent...
+% There is no date provided in dat, so need to combine table of sampling 
+% station data with table of measurements, but the formating is inconsistent...
 dat.Label = join([dat.Cruise, dat.Station], '/');
 dat.Label = strrep(dat.Label, '_', '-');
 stations.Properties.VariableNames{'Station'} = 'Label';
@@ -287,9 +286,7 @@ dat_size = readtable(fullfile(obsDir, sizeSpectraObsFile), 'Format', 'auto');
 % A selection of cell size -> N conversions are contained in these data.
 % Although the different conversions produce nitrogen size-spectra of
 % similar shape, there is some substantial variation in magnitudes
-% (especially at small and large cell sizes). So maybe we should
-% use the measured cell densities in our cost function rather than the
-% nitrogen densities...
+% (especially at small and large cell sizes).
 varNames = dat_size.Properties.VariableNames;
 varNames = varNames(contains(varNames, 'NperCell'));
 ne = length(varNames);
@@ -377,20 +374,9 @@ dat_size_all.Yearday = yearday(dat_size_all.t);
 
 
 cruises = unique(dat_size_all.cruise, 'stable'); % data collected from different cruises/years
-% N = length(cruises);
+
 nutrition = unique(dat_size_all.nutrition, 'stable');
 
-
-% keepVars = [{'scenario', 'season', 'regime', 'ESD', 'cellVolume', ...
-%     'cellDensity', 'cellDensitySD', 'BioVolDensity'}, strcat('Ndensity_', NsizeEqs), 'Ndensity'];
-% dat_size_all = dat_size_all(:,keepVars);
-
-% cols = [[1 0 0]; [0 1 0]; [0 0 1]; ...
-%     [1 0 1]; [1 1 0]; [0 1 1]]; 
-% cols = cols(1:N,:); % plotting colours for different cruises
-
-
-% v = reshape(varargin, [2 0.5*length(varargin)]);
 
 %~~~
 % optional plots
@@ -549,7 +535,6 @@ if ~isempty(makePlots)
         end
         sgtitle(Title)
     end
-    
     
 end
 

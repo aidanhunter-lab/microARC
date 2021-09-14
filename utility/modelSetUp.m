@@ -11,16 +11,16 @@ function [Forc, FixedParams, Params, Data] = modelSetUp(Directories, varargin)
 % Params      = model parameters that MAY be tuned.
 % Data        = observed data included in cost function to tune parameters.
 
-% Plots may be generated as extra output by setting to 'true' any of the
+% Plots may be generated as extra output by setting as true any of the
 % following optional arguments coded in varargin as name-value pairs...
-% plotCellConcSpectra
-% plotBioVolSpectra
-% plotSizeClassIntervals
-% trajectoryPlot
-% dendrogramPlot
-% plotScalarData
-% plotSizeData
-% plotAllData
+% 'plotCellConcSpectra'
+% 'plotBioVolSpectra'
+% 'plotSizeClassIntervals'
+% 'trajectoryPlot'
+% 'dendrogramPlot'
+% 'plotScalarData'
+% 'plotSizeData'
+% 'plotAllData'
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
