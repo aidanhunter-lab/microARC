@@ -9,94 +9,73 @@
 % Refresh the workspace
 clear; close all; delete(gcp('nocreate')); clc
 % Include all subdirectories within search path
-addpath(genpath(fileparts(which('fit_parameters'))))
+addpath(genpath(fileparts(which('plots'))))
 
 % Store folders/filenames of data and saved parameters
-parFile = [];
-% parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2_filterData.mat';
+% file_params = [];
+fileName_params = 'parameterInitialValues';
+fileType_params = '.mat';
+tag = '_RMS_Hellinger2_Atlantic_aG_sigG_upweightAbnTot';
+file_params = fullfile([fileName_params tag fileType_params]);
 
-parFile = 'parameterInitialValues_RMS_Hellinger2_Atlantic_aG_sigG_upweightAbnTot.mat';
-parFile = 'parameterInitialValues_RMS_Hellinger2_Arctic_aG_sigG_upweightAbnTot.mat';
+if ~exist(file_params, 'file'), warning('file_params does not exist -- check file names in results directory.'), file_params = []; end
 
 Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
-    'parFile', parFile);
+    'parFile', file_params);
 display(Directories)
 
 % Load saved outputs from optimisation runs or choose default set-up
 loadFittedParams = true; % use output saved from optimisation run?
 % Saved parameters file name and identifying tag
-fileName = 'fittedParameters';
-% tag = 'RMS_Hellinger2_Atlantic_singleTraj_removeParams';
-% tag = 'RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds';
-
-% tag = 'RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2';
-% tag = 'RMS_Hellinger2_Atlantic_singleTraj_adjustParBounds2_filterData';
-
-tag = 'RMS_Hellinger2_Atlantic_aG_sigG_upweightAbnTot';
-tag = 'RMS_Hellinger2_Arctic_aG_sigG_upweightAbnTot';
-
-
-fileName = fullfile(Directories.resultsDir, ...
-    [fileName '_' tag]);
+fileName_results = 'fittedParameters';
+fileType_results = '.mat';
+tag = '_RMS_Hellinger2_Atlantic_aG_sigG_upweightAbnTot';
+file_results = fullfile(Directories.resultsDir, ...
+    [fileName_results tag fileType_results]);
 
 switch loadFittedParams
     case true
         % Load stored results
         [~, results, parNames, optPar, boundsLower, boundsUpper, Data, Forc, ...
-            FixedParams, Params, v0] = loadOptimisationRun(fileName);
-        displayFittedParameters(results)
-        Params = updateParameters(Params, FixedParams, optPar); % ensure Params struct contains the best-fitting parameter set        
-        % Parameters may be modified using name-value pairs in updateParameters.m
-        % Params = updateParameters(Params, FixedParams, 'pmax_a', 2, 'aP', 0.01);
-        
-        % As saved results may be based on trajectories originating fom the
-        % Arctic or Atlantic, call modelSetUp to generate the unfiltered
-        % forcing and fitting data
+            FixedParams, Params, v0] = loadOptimisationRun(file_results);
+        Params = updateParameters(Params, FixedParams, optPar); % update Params struct to store the best-fitting parameter set        
+        % Loaded parameters and associated data may be based on (filtered)
+        % particle trajectories originating fom the Arctic or Atlantic.
+        % Some plots will show all data so call modelSetUp to generate the
+        % complete forcing & fitting data sets.
         numTraj = 1;
-        [Forc0, ~, ParamsDefault, Data0] = modelSetUp(Directories, ... 
+        [Forc0, ~, ~, Data0] = modelSetUp(Directories, ... 
             'numTraj', numTraj);
-        
+    
     case false % Use default model set-up if fitted outputs are not loaded
         numTraj = 1;
-        [Forc0, FixedParams, Params, Data0] = modelSetUp(Directories, ...
+        [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
             'numTraj', numTraj);
-        ParamsDefault = Params;
-        
-        % modelSetup.m may also produce plots -- set to 'true' any name-value pair as shown below
-        
-        % [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
-        %     'plotCellConcSpectra', true, 'plotBioVolSpectra', true, ...
-        %     'plotSizeClassIntervals', true, ...
-        %     'trajectoryPlot', true, 'dendrogramPlot', true, ...
-        %     'plotScalarData', true, 'plotSizeData', true, 'plotAllData', true, ...
-        %     'displayForc', true, 'displayData', true);
+        Forc0 = Forc; Data0 = Data;
 end
 
 % Run model over entire trajectories?
 Forc.integrateFullTrajectory = true;
-Forc0.integrateFullTrajectory = true;
+Forc0.integrateFullTrajectory = Forc.integrateFullTrajectory;
+
 % Parallelise integrations over trajectories
 poolObj = gcp('nocreate');
 if isempty(poolObj), poolObj = parpool('SpmdEnabled', false); end
+
 % Initialise variables
 if ~exist('v0', 'var') || ~isnumeric(v0)
     % If initial condition v0 has not been loaded then create initials.
-    % NOTE: initialiseVariables.m uses the quota parameters to initialise 
-    % the plankton state variables. Thus, loaded v0 values may differ from 
-    % those here generated using "best-fitting" quota params...
-    v0 = initialiseVariables(FixedParams, ParamsDefault, Forc0);
+    v0 = initialiseVariables(FixedParams, Params, Forc);
 end
-% v00 = initialiseVariables(FixedParams, Params, Forc0); % create initials for full data (Forc0)
-v00 = initialiseVariables(FixedParams, ParamsDefault, Forc0); % create initials for full data (Forc0)
+v00 = initialiseVariables(FixedParams, Params, Forc0); % create initials for full data (Forc0)
 
-
-clear out auxVars modData0 modData
-% Generate model outputs using all trajectories
+% Generate model outputs over trajectories linked to all data (Atlantic & Arctic)
+clear out out0 auxVars auxVars0 modData0 modData
 tic; disp('.. started at'); disp(datetime('now'))
 [out0, auxVars0] = integrateTrajectories(FixedParams, Params, Forc0, v00, ... 
     FixedParams.odeIntegrator, FixedParams.odeOptions);
 toc
-% and only trajectories used to fit the model
+% and only over the trajectories used to fit the model
 tic; disp('.. started at'); disp(datetime('now'))
 [out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, ... 
     FixedParams.odeIntegrator, FixedParams.odeOptions);
@@ -104,7 +83,6 @@ toc
 
 % Generate modelled equivalents of the data
 if ~isfield(FixedParams, 'fitToFullSizeSpectra'), FixedParams.fitToFullSizeSpectra = false; end
-
 modData0 = matchModOutput2Data(out0, auxVars0, Data0, FixedParams, ...
     'fitToFullSizeSpectra', FixedParams.fitToFullSizeSpectra);
 modData = matchModOutput2Data(out, auxVars, Data, FixedParams, ...
@@ -112,9 +90,8 @@ modData = matchModOutput2Data(out, auxVars, Data, FixedParams, ...
 
 [cost, costComponents] = costFunction('label', FixedParams.costFunction, ...
     'Data', Data, 'modData', modData);
-
-% [cost0, costComponents0] = costFunction('label', 'RMS_Hellinger2', ...
-%     'Data', Data0, 'modData', modData0);
+[cost0, costComponents0] = costFunction('label', FixedParams.costFunction, ...
+    'Data', Data0, 'modData', modData0);
 
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -358,63 +335,6 @@ for i = 1:2
     end
     sgtitle(['Model fit to ' pn{i} ' data'])
 end
-
-% % Compare with data sampled from Arctic waters
-% fitTrajectories = 'Arctic';
-% fitToFullSizeSpectra = false;
-% rescaleForOptim = true; % Should parameters be estimated within some transformed space? See optimisationOptions for details -- this could probably be usefully extended to limit estimation problems realted to parameter correlations/pathologic parameter space
-% [~, ~, ~, dat] = ...
-%     optimisationOptions(FixedParams, Params, Forc0, Data0, ...
-%     'fitTrajectories', fitTrajectories, ...
-%     'fitToFullSizeSpectra', fitToFullSizeSpectra, ...
-%     'rescaleForOptim', rescaleForOptim);
-% 
-% standard = [true, false];
-% pn = {'standardised', 'raw'};
-% Vars = {'N','PON','POC','chl_a'};
-% nrows = 3; % 1 row per plot type
-% ncols = length(Vars); % 1 column per data type
-% colDat = [0, 0, 0];
-% colMod = [0, 1, 0];
-% connectors = true;
-% for i = 1:2
-%     standardised = standard(i);
-%     plotName = ['pltFit2Data_' pn{i}];
-%     assignin('base', plotName, figure)
-%     set(eval(plotName), 'Units', 'inches')
-%     set(eval(plotName), 'Position', [0 0 16 12])
-%     
-%     % 1st row: ungrouped data
-%     for ii = 1:ncols
-%         subplot(nrows, ncols, ii)
-%         xvar = Vars{ii};
-%         plot_fitToNutrient_sorted(xvar, Data, modData, ...
-%             'colDat', colDat, 'colMod', colMod, ...
-%             'standardised', standardised, 'connectors', connectors);
-%     end
-%     
-%     % 2nd row: grouped by depth -- boxplot
-%     for ii = 1:ncols
-%         subplot(nrows, ncols, ii + ncols)
-%         xvar = Vars{ii};
-%         plot_fitToNutrient_depth(xvar, Data, modData, ...
-%             'colDat', colDat, 'colMod', colMod, ...
-%             'standardised', standardised);
-%     end
-%     
-%     % 3rd row: grouped by sample event -- boxplot
-%     for ii = 1:ncols
-%         subplot(nrows, ncols, ii + 2 * ncols)
-%         xvar = Vars{ii};
-%         plot_fitToNutrient_event(xvar, Data, modData, ...
-%             'colDat', colDat, 'colMod', colMod, ...
-%             'standardised', standardised);
-%     end
-%     sgtitle(['Model fit to ' pn{i} ' data'])
-% end
-
-
-
 
 % Grouped by data type
 standardised = true;
@@ -736,8 +656,6 @@ for ii = 1:nv
         text(xl(1) + 0.01 * xd, yl(1) + 0.05 * yd, 'underestimated', 'HorizontalAlignment', 'left')
     end
 end
-
-
 
 
 % Size data - histograms .... see plots2.m
