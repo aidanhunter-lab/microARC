@@ -22,7 +22,6 @@ parFile = 'parameterInitialValues';
 % generate saved parameters, and a string describing model set-up
 % (set tag=[] if unused).
 tag = '_RMS_Hellinger2_Atlantic_aG_sigG_upweightAbnTot.mat';
-% tag = 'RMS_Hellinger2_Arctic_aG_sigG_upweightAbnTot.mat';
 if ~isempty(parFile), parFile = [parFile tag]; end
 
 Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
@@ -52,12 +51,10 @@ niter = 50; % algorithm iterations (the algorithm can be halted and continued, s
 popSize = 100; % number of parameter sets evaluated per iteration
 
 [~,~,~,cfc] = costFunction(); % list available cost function choices
-costFunctionType = 'RMS_Hellinger_ZPratio'; % fit scalar/nutrient data using least sum of errors, fit relative size data using Hellinger distances, totals in size data fit as ratio of zooplankton
-% costFunctionType = 'RMS_HellingerFullSpectrum';
+costFunctionType = 'RMS_Hellinger_ZPratio'; % select cost function from cfc
 
 % Fit parameters to data sampled from either Atlantic or Arctic waters
 fitTrajectories = 'Atlantic';
-% fitTrajectories = 'Arctic';
 
 % Set rescaleForOptim true to estimate parameters within some transformed 
 % space -- transforms chosen to improve optimisation efficiency by
@@ -97,42 +94,19 @@ v0 = initialiseVariables(FixedParams, Params, Forc);
 
 % Restart algorithm from a saved prior run?
 restartRun = true;
-% fp = true: restart using full population from prior run
-% fp = false: restart with random population and best param set from prior run
-fp = false; 
-% ni = true: use v0 values generated (above) using loaded parameters
-% ni = false: load v0 values used to initialise previous optimisation run (v0 possibly generated using sub-optimal params)
-ni = true;
-
 switch restartRun, case true
-    % saved parameters file name (and identifying tag should already be defined)
-    fileName_results = 'fittedParameters';
-%     tag = 'Atlantic_aG_sigG_upweightAbnTot';
-%     tag = [FixedParams.costFunction '_' tag];
+    fileName_results = 'fittedParameters'; % saved parameters file name (and identifying tag should already be defined)
     fileName_results = fullfile(Directories.resultsDir, ...
         [fileName_results tag]);
-    % Load stored results
-    switch ni
-        case true
-            [~, results, ~, ~, boundsLower, boundsUpper, Data, Forc, FixedParams, Params] = ...
-                loadOptimisationRun(fileName_results);
-        case false
-            [~, results, ~, ~, boundsLower, boundsUpper, Data, Forc, FixedParams, Params, v0] = ...
-                loadOptimisationRun(fileName_results);
-%             [~, results, ~, ~, ~, ~, ~, ~, ~, ~, v0] = ...
-%                 loadOptimisationRun(fileName_results);
-    end
-    populationOld = results.populationHistory(:,:,end);
-    scoresOld = results.scoreHistory(:,end);
-    switch fp
-        case true
-            optimiserOptions = results.optimiserOptions;
-            optimiserOptions.InitialPopulationMatrix = populationOld;
-            optimiserOptions.InitialScoresMatrix = scoresOld;
-        case false
-            optimiserOptions.InitialPopulationMatrix = results.optPar_searchSpace;
-    end    
-    optimiserOptions.MaxGenerations = niter;
+    fp = false; % fp = true => restart using full population from prior run
+                % fp = false => restart with best param set from prior run and otherwise random population
+    ni = true; % ni = true => use new v0 values generated (above) using loaded parameters
+               % ni = false => use saved v0 values from previous optimisation run (v0 possibly generated using sub-optimal params)
+    restartParamFit(fileName_results, optimiserOptions, 'fp', fp, 'ni', ni)
+    % Note: to avoid overwriting stucts Data, Forc, Params or
+    % FixedParams generated above in model set-up, set to false the
+    % optional name-value pair argument 'loadMainStructs' or individually
+    % set as false 'loadData', 'loadForc', 'loadParams' or 'loadFixedParams'
 end
 
 % Parallelise integrations over trajectories
@@ -177,6 +151,7 @@ if appendResults
 else
     results = results_;
 end
+clear results_
 
 displayFittedParameters(results)
 
@@ -186,8 +161,7 @@ saveParams = true;
 % Choose file name
 fileName_results = 'fittedParameters';
 % and identifying tag
-% tag = 'Atlantic_aG_sigG_upweightAbnTot';
-tag = 'Arctic_aG_sigG_upweightAbnTot';
+tag = 'Atlantic_aG_sigG_upweightAbnTot';
 tag = [FixedParams.costFunction '_' tag];
 
 fileName_results = fullfile(Directories.resultsDir, ...

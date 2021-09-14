@@ -2,7 +2,6 @@ function [m, fittingOutput, parnames, optPar, lb, ub, Data, Forc, FixedParams, .
     Params, v0] = loadOptimisationRun(fileName)
 
 m = load(fileName);
-% m = matfile(fileName, 'Writable', true);
 fittingOutput = m.fittingOutput;
 parnames = fittingOutput.parNames;
 optPar = fittingOutput.optPar;
