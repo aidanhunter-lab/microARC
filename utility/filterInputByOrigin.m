@@ -43,42 +43,7 @@ if ~default
         error('Optional name-value pair argument "fitTrajectories" must be "Atlantic", "Arctic" or "all".')
     end
     
-    % Filter forcing data - discard trajectories not used to fit model
-    switch fitTrajectories
-        case waterMasses
-            keepTraj = strcmp(fitTrajectories, Forc.waterMass); % trajectories to retain
-        case 'all'
-            keepTraj = true(size(Forc.waterMass));
-    end
-    nkeep = sum(keepTraj); % updated number of trajectories after filtering
-    ntraj = length(Forc.iTraj);
-    fields = fieldnames(Forc);
-    for i = 1:length(fields)
-        x = Forc.(fields{i});
-        nd = ndims(x);
-        filter = size(x, nd) == ntraj; % trajectories stored in last dimension
-        if filter
-            x = shiftdim(x, nd-1);
-            xs = size(x);
-            x = x(keepTraj,:);
-            x = reshape(x, [nkeep, xs(2:nd)]);
-            x = shiftdim(x, 1);
-            Forc.(fields{i}) = x;
-        end
-    end
-    Forc.nTraj = length(Forc.iTraj);
-    
-    % Create table to relabel trajectories if some have been omitted
-    oldTraj = (1:ntraj)';
-    newTraj = keepTraj(:);
-    relabelTraj = table(oldTraj, newTraj);
-    relabelTraj = relabelTraj(relabelTraj.newTraj,:);
-    relabelTraj.newTraj = (1:height(relabelTraj))';
-        
-    %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    
-    % Filter fitting data - discard data from sample events associated with
-    % the discarded trajectories.
+    % Filter fitting data by retaining samples given by fitTrajectories.
     
     % Scalar data
     switch fitTrajectories
@@ -87,10 +52,14 @@ if ~default
         case 'all'
             keepEvents = true(size(Data.scalar.waterMass));
     end
+    
+    evTraj = Data.scalar.evTraj(:,keepEvents); % linear index of required trajectories in Forc, matches sample event
+    keepTraj = unique(evTraj);
+    trajTable = table((1:length(keepTraj))', keepTraj', ... 
+        'VariableNames', {'new','old'}); % table of new and old trajectory indices
+
     Data.scalar.EventTraj = Data.scalar.EventTraj(keepEvents,keepTraj);
-    Data.scalar.evTraj = Data.scalar.evTraj(:,keepEvents);
-    Data.scalar.evTraj = arrayfun(@(x) ... 
-        relabelTraj.newTraj(relabelTraj.oldTraj == x) , Data.scalar.evTraj); % relabel trajectories to match the number stored in Forc
+    Data.scalar.evTraj = arrayfun(@(z) trajTable.new(trajTable.old == z), evTraj); % filter trajectories and relabel to match the number to be stored in Forc
     Data.scalar.waterMass = Data.scalar.waterMass(keepEvents);
     Data.scalar.AtlanticOrigin = Data.scalar.AtlanticOrigin(keepEvents);
     Data.scalar.ArcticOrigin = Data.scalar.ArcticOrigin(keepEvents);
@@ -111,7 +80,6 @@ if ~default
         end
     end
     Data.scalar.nSamples = length(Data.scalar.t);
-%     Data.scalar = sortOrderData(Data.scalar);
 
     % Size data
     sizeData = Data.sizeFull;
@@ -127,10 +95,12 @@ if ~default
             % near the boundaries because their origin is uncertain.
             keepEvents = ismember(sizeData.waterMass, waterMasses);
     end
+    
+    
+    evTraj = sizeData.evTraj(:,keepEvents);
+    keepTraj = unique(evTraj);
     sizeData.EventTraj = sizeData.EventTraj(keepEvents,keepTraj);
-    sizeData.evTraj = sizeData.evTraj(:,keepEvents);
-    sizeData.evTraj = arrayfun(@(x) ... 
-        relabelTraj.newTraj(relabelTraj.oldTraj == x) , sizeData.evTraj); % relabel trajectories to match the number stored in Forc
+    sizeData.evTraj = arrayfun(@(z) trajTable.new(trajTable.old == z), evTraj); % filter trajectories and relabel to match the number to be stored in Forc
     sizeData.waterMass = sizeData.waterMass(keepEvents);
     sizeData.AtlanticOrigin = sizeData.AtlanticOrigin(keepEvents);
     sizeData.ArcticOrigin = sizeData.ArcticOrigin(keepEvents);
@@ -187,6 +157,31 @@ if ~default
     Data = standardiseFittingData(Data);
     Data.scalar = sortOrderData(Data.scalar);
 
+    %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
+    
+    % Filter forcing data - discard trajectories not used to fit model.
+    
+    keepTraj = trajTable.old; % Use table of trajectories defined above from the scalar data
+    nkeep = length(keepTraj); % updated number of trajectories after filtering
+    
+    ntraj = length(Forc.iTraj);
+    fields = fieldnames(Forc);
+    for i = 1:length(fields)
+        x = Forc.(fields{i});
+        nd = ndims(x);
+        filter = size(x, nd) == ntraj; % trajectories stored in last dimension
+        if filter
+            x = shiftdim(x, nd-1);
+            xs = size(x);
+            x = x(keepTraj,:);
+            x = reshape(x, [nkeep, xs(2:nd)]);
+            x = shiftdim(x, 1);
+            Forc.(fields{i}) = x;
+        end
+    end
+    Forc.nTraj = length(Forc.iTraj);
+
     
 else
     % Default - fitTrajectories either empty or not specified => use all
@@ -197,9 +192,4 @@ else
     Data = rmfield(Data, 'sizeFull');
     
 end
-
-
-
-
-
 

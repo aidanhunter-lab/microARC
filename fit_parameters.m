@@ -108,6 +108,8 @@ switch restartRun, case true
     % FixedParams generated above in model set-up, set to false the
     % optional name-value pair argument 'loadMainStructs' or individually
     % set as false 'loadData', 'loadForc', 'loadParams' or 'loadFixedParams'
+%     restartParamFit(file_results, optimiserOptions, 'fp', fp, 'ni', ni, ...
+%         'loadData', false, 'loadForc', false)
 end
 
 % Parallelise integrations over trajectories

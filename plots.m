@@ -43,14 +43,16 @@ switch loadFittedParams
         % particle trajectories originating fom the Arctic or Atlantic.
         % Some plots will show all data so call modelSetUp to generate the
         % complete forcing & fitting data sets.
-        numTraj = 1;
+        numTraj = 1; % Single trajectory per sampling event
+        chlSampleDepthLimit = inf; % Include all chlorophyll samples -- do not omit the deep samples
         [Forc0, ~, ~, Data0] = modelSetUp(Directories, ... 
-            'numTraj', numTraj);
+            'numTraj', numTraj, 'chlSampleDepthLimit', chlSampleDepthLimit);
     
     case false % Use default model set-up if fitted outputs are not loaded
         numTraj = 1;
+        chlSampleDepthLimit = inf;
         [Forc, FixedParams, Params, Data] = modelSetUp(Directories, ...
-            'numTraj', numTraj);
+            'numTraj', numTraj, 'chlSampleDepthLimit', chlSampleDepthLimit);
         Forc0 = Forc; Data0 = Data;
 end
 
@@ -1113,6 +1115,36 @@ end
 
 
 close all
+
+
+
+% Plot forcing data averaged over trajectories originating from Arctic & Atlantic
+
+sampleEvent = 1;
+% All trajectories used for sampleEvent
+traj = find(Data0.scalar.EventTraj(sampleEvent,:));
+% If waterMass is either Atlantic OR Arctic then it may make sense to plot
+% average over all trajectories, although there could be unwanted smoothing
+% effects...
+% Otherwise, if waterMass is a mixture of origins, then group trajectories
+% by origin and make separate plots
+waterMass = Data0.scalar.waterMass{sampleEvent};
+
+
+trajArctic = find(strcmp(Forc0.waterMass, 'Arctic'));
+trajAtlantic = find(strcmp(Forc0.waterMass, 'Atlantic'));
+
+
+plt_Forc = plot_contour_DepthTime('forcing', ...
+    trajArctic, out0, auxVars0, FixedParams, Forc0, 'linear', ...
+    'Event', sampleEvent, 'waterOrigin', 'Arctic');
+
+plt_Forc = plot_contour_DepthTime('forcing', ...
+    trajAtlantic, out0, auxVars0, FixedParams, Forc0, 'linear', ...
+    'Event', sampleEvent, 'waterOrigin', 'Atlantic');
+
+
+
 
 
 %% Time evolution
