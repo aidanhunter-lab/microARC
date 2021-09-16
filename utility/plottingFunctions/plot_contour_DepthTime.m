@@ -1,14 +1,7 @@
 function plt = plot_contour_DepthTime(var, traj, out, auxVars, ...
     fixedParams, forcing, smooth, varargin)
 
-if ~isempty(varargin)
-    if any(strcmp(varargin, 'Event'))
-        sampleEvent = varargin{find(strcmp(varargin, 'Event'))+1};
-    end
-    if any(strcmp(varargin, 'waterOrigin'))
-        waterOrigin = varargin{find(strcmp(varargin, 'waterOrigin'))+1};
-    end
-end
+extractVarargin(varargin)
 
 fixedParams.nPP_size = double(fixedParams.nPP_size);
 fixedParams.nZP_size = double(fixedParams.nZP_size);
@@ -33,6 +26,10 @@ end
 [depth, time] = ndgrid(abs(fixedParams.z), 1:fixedParams.nt);
 [depthGrid, timeGrid] = ndgrid(1:1:abs(fixedParams.zw(end)), 1:fixedParams.nt);
 
+% maxDepth = 100;
+% depthGrid = depthGrid(1:maxDepth,:);
+% timeGrid = timeGrid(1:maxDepth,:);
+
 switch var
     
     case 'forcing'
@@ -41,14 +38,16 @@ switch var
         plt.Units = 'inches';
         plt.Position = [0 0 8 9];
         
-        % Temperaturele
+        % Temperature
         subplot(3,1,1)
         x = forcing.T(:,:,traj);
         if ntraj > 1
             x = mean(x, ndims(x));
         end
         F = griddedInterpolant(depth, time, x, smooth);
+        
         Fsmooth = flip(F(depthGrid, timeGrid));
+%         Fsmooth = flip(F(depthGrid, timeGrid));
         contourf(Fsmooth)
         cb = colorbar;
         cb.Label.String = '\circC';
@@ -56,8 +55,11 @@ switch var
         ylabel('depth (m)')
         xticks(100:100:fixedParams.nt)
         xticklabels(yearday(forcing.t(100:100:fixedParams.nt,1)))
-        yticks(linspace(0,abs(fixedParams.zw(end)),7))
-        yticklabels(linspace(fixedParams.zw(end),0,7))
+        
+        yt = round(linspace(0,max(abs(depthGrid(:))),7), 2, 'significant');
+        yticks(yt)
+        yticklabels(flip(-yt))
+        
         
         % Diffusivity
         subplot(3,1,2);
@@ -67,7 +69,8 @@ switch var
         end
         F = griddedInterpolant(depth, time, x, smooth);
         Fsmooth = flip(F(depthGrid, timeGrid));
-        Fsmooth(Fsmooth<=0) = nan;
+        Fsmooth(Fsmooth <= 0) = min(Fsmooth(Fsmooth > 0));
+%         Fsmooth(Fsmooth<=0) = nan;
         contourf(log10(Fsmooth))
         cb = colorbar;
         for ii = 1:length(cb.TickLabels), cb.TickLabels{ii} = string(round(10 ^ str2double(cb.TickLabels{ii}),2,'significant')); end
@@ -76,19 +79,22 @@ switch var
         ylabel('depth (m)')
         xticks(100:100:fixedParams.nt)
         xticklabels(yearday(forcing.t(100:100:fixedParams.nt,1)))
-        yticks(linspace(0,abs(fixedParams.zw(end)),7))
-        yticklabels(linspace(fixedParams.zw(end),0,7))
+        
+        yt = round(linspace(0,max(abs(depthGrid(:))),7), 2, 'significant');
+        yticks(yt)
+        yticklabels(flip(-yt))
         %                 set(gca,'colorscale','log')
         
         % PAR
         subplot(3,1,3)
         x = squeeze(auxVars.I(:,:,:,traj));
         if ntraj > 1
-            x = mean(x, ndims(x));
+            x = mean(x, ndims(x), 'omitnan');
         end
         F = griddedInterpolant(depth, time, x, smooth);
         Fsmooth = flip(F(depthGrid, timeGrid));
-        Fsmooth(Fsmooth<=0) = nan;
+        Fsmooth(Fsmooth <= 0) = min(Fsmooth(Fsmooth > 0));
+%         Fsmooth(Fsmooth<=0) = nan;
         contourf(Fsmooth)
         cb = colorbar;
         cb.Label.String = '\muEin day^{-1} m^{-2}';
@@ -96,11 +102,18 @@ switch var
         xlabel('year-day')
         ylabel('depth (m)')
         xticks(100:100:fixedParams.nt)
-        xticklabels(yearday(forcing.t(100:100:fixedParams.nt,1)))
-        yticks(linspace(0,abs(fixedParams.zw(end)),7))
-        yticklabels(linspace(fixedParams.zw(end),0,7))
+        xticklabels(yearday(forcing.t(100:100:fixedParams.nt,1)))        
+        yt = round(linspace(0,max(abs(depthGrid(:))),7), 2, 'significant');
+        yticks(yt)
+        yticklabels(flip(-yt))
+%         yticks(linspace(0,abs(fixedParams.zw(end)),7))
+%         yticklabels(linspace(fixedParams.zw(end),0,7))
         colormap plasma
-        sgtitle(['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'])
+        if exist('sampleEvent', 'var')
+            sgtitle(['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'])
+        else
+            sgtitle([waterOrigin ' origin'])
+        end
         
         %----------------------------------------------------------
     
@@ -189,7 +202,11 @@ switch var
         yticks(linspace(0,abs(fixedParams.zw(end)),7))
         yticklabels(linspace(fixedParams.zw(end),0,7))
         colormap plasma
-        sgtitle(['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'])
+        if exist('sampleEvent', 'var')
+            sgtitle(['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'])
+        else
+            sgtitle([waterOrigin ' origin'])
+        end
 
         %------------------------------------------------------------------
         
@@ -219,8 +236,13 @@ switch var
             yticks(linspace(0,abs(fixedParams.zw(end)),7))
             yticklabels(linspace(fixedParams.zw(end),0,7))
         end
-        sgtitle({['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'], ...
-            'phytoplankton nitrogen concentration given cell diameter'})
+        if exist('sampleEvent', 'var')
+            sgtitle({['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'], ...
+                'phytoplankton nitrogen concentration given cell diameter'})
+        else
+            sgtitle({[waterOrigin ' origin'], ...
+                'phytoplankton nitrogen concentration given cell diameter'})
+        end
         colormap plasma
         
         %------------------------------------------------------------------
@@ -251,8 +273,13 @@ switch var
             yticks(linspace(0,abs(fixedParams.zw(end)),7))
             yticklabels(linspace(fixedParams.zw(end),0,7))
         end
-        sgtitle({['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'], ...
-            'phytoplankton chlorophyll_a concentration given cell diameter'})
+        if exist('sampleEvent' ,'var')
+            sgtitle({['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'], ...
+                'phytoplankton chlorophyll_a concentration given cell diameter'})
+        else
+            sgtitle({[waterOrigin ' origin'], ...
+                'phytoplankton chlorophyll_a concentration given cell diameter'})
+        end
         colormap plasma
         
         %------------------------------------------------------------------
@@ -282,8 +309,13 @@ switch var
             yticks(linspace(0,abs(fixedParams.zw(end)),7))
             yticklabels(linspace(fixedParams.zw(end),0,7))
         end
-        sgtitle({['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'], ...
-            'phytoplankton carbon concentration given cell diameter'})
+        if exist('sampleEvent', 'var')
+            sgtitle({['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'], ...
+                'phytoplankton carbon concentration given cell diameter'})
+        else
+            sgtitle({[waterOrigin ' origin'], ...
+                'phytoplankton carbon concentration given cell diameter'})
+        end
         colormap plasma
         
         %------------------------------------------------------------------
@@ -313,8 +345,13 @@ switch var
             yticks(linspace(0,abs(fixedParams.zw(end)),7))
             yticklabels(linspace(fixedParams.zw(end),0,7))
         end
-        sgtitle({['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'], ...
-            'phytoplankton N/C ratio given cell diameter'})
+        if exist('sampleEvent', 'var')
+            sgtitle({['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'], ...
+                'phytoplankton N/C ratio given cell diameter'})
+        else
+            sgtitle({[waterOrigin ' origin'], ...
+                'phytoplankton N/C ratio given cell diameter'})
+        end
         colormap plasma
         
         %------------------------------------------------------------------
@@ -345,17 +382,17 @@ switch var
             yticks(linspace(0,abs(fixedParams.zw(end)),7))
             yticklabels(linspace(fixedParams.zw(end),0,7))
         end
-        sgtitle({['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'], ...
-            'phytoplankton Chl/N ratio given cell diameter'})
+        if exist('sampleEvent', 'var')
+            sgtitle({['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'], ...
+                'phytoplankton Chl/N ratio given cell diameter'})
+        else
+            sgtitle({[waterOrigin ' origin'], ...
+                'phytoplankton Chl/N ratio given cell diameter'})
+        end
         colormap plasma
         
         %------------------------------------------------------------------
-        
 
-    
-    
-    
-    
     case 'zooplankton_C'
         plt = figure;        
         nc = floor(sqrt(fixedParams.nZP_size));
@@ -380,10 +417,15 @@ switch var
             yticks(linspace(0,abs(fixedParams.zw(end)),7))
             yticklabels(linspace(fixedParams.zw(end),0,7))
         end
-        sgtitle({['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'], ...
-            'zooplankton carbon concentration given cell diameter'})
+        if exist('sampleEvent' ,'var')
+            sgtitle({['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'], ...
+                'zooplankton carbon concentration given cell diameter'})
+        else
+            sgtitle({[waterOrigin ' origin'], ...
+                'zooplankton carbon concentration given cell diameter'})
+        end
         colormap plasma
-
+        
     case 'zooplankton_N'
         plt = figure;
         nc = floor(sqrt(fixedParams.nZP_size));
@@ -408,51 +450,14 @@ switch var
             yticks(linspace(0,abs(fixedParams.zw(end)),7))
             yticklabels(linspace(fixedParams.zw(end),0,7))
         end
-        sgtitle({['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'], ...
-            'zooplankton nitrogen concentration given cell diameter'})
+        if exist('sampleEvent', 'var')
+            sgtitle({['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'], ...
+                'zooplankton nitrogen concentration given cell diameter'})
+        else
+            sgtitle({[waterOrigin ' origin'], ...
+                'zooplankton nitrogen concentration given cell diameter'})
+        end
         colormap plasma
-
-%     case 'zooplankton_C'
-%         plt = figure;
-%         plt.Units = 'inches';
-%         plt.Position = [0 0 8 3];
-%         x = squeeze(Z(:,fixedParams.ZP_C_index,:));
-%         F = griddedInterpolant(depth, time, x, smooth);
-%         Fsmooth = flip(F(depthGrid, timeGrid));
-%         contourf(Fsmooth)
-%         cb = colorbar;
-%         cb.Label.String = 'mmol C / m^3';
-%         title('zooplankton abundance')
-%         xlabel('year-day')
-%         ylabel('depth (m)')
-%         xticks(100:100:fixedParams.nt)
-%         xticklabels(yearday(forcing.t(100:100:fixedParams.nt,1)))
-%         yticks(linspace(0,abs(fixedParams.zw(end)),7))
-%         yticklabels(linspace(fixedParams.zw(end),0,7))
-%         title(['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'])
-%         subtitle('zooplankton abundance')
-%         colormap plasma
-%         
-%     case 'zooplankton_N'
-%         plt = figure;
-%         plt.Units = 'inches';
-%         plt.Position = [0 0 8 3];
-%         x = squeeze(Z(:,fixedParams.ZP_N_index,:));
-%         F = griddedInterpolant(depth, time, x, smooth);
-%         Fsmooth = flip(F(depthGrid, timeGrid));
-%         contourf(Fsmooth)
-%         cb = colorbar;
-%         cb.Label.String = 'mmol N / m^3';
-%         title('zooplankton abundance')
-%         xlabel('year-day')
-%         ylabel('depth (m)')
-%         xticks(100:100:fixedParams.nt)
-%         xticklabels(yearday(forcing.t(100:100:fixedParams.nt,1)))
-%         yticks(linspace(0,abs(fixedParams.zw(end)),7))
-%         yticklabels(linspace(fixedParams.zw(end),0,7))
-%         title(['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'])
-%         subtitle('zooplankton abundance')
-%         colormap plasma
 
         
         

@@ -1120,28 +1120,159 @@ close all
 
 % Plot forcing data averaged over trajectories originating from Arctic & Atlantic
 
-sampleEvent = 1;
-% All trajectories used for sampleEvent
-traj = find(Data0.scalar.EventTraj(sampleEvent,:));
-% If waterMass is either Atlantic OR Arctic then it may make sense to plot
-% average over all trajectories, although there could be unwanted smoothing
-% effects...
-% Otherwise, if waterMass is a mixture of origins, then group trajectories
-% by origin and make separate plots
-waterMass = Data0.scalar.waterMass{sampleEvent};
+% Use function optimisationOptions.m to filter data by region/water mass
+fitTrajectories = 'Atlantic';
+[~, ~, Forc_Atlantic, Data_Atlantic] = ...
+    optimisationOptions(FixedParams, Params, Forc0, Data0, ...
+    'fitTrajectories', fitTrajectories);
+v0_Atlantic = initialiseVariables(FixedParams, Params, Forc_Atlantic);
+Forc_Atlantic.integrateFullTrajectory = true;
+% Generate model outputs over trajectories linked to Atlantic or Arctic
+tic; disp('.. started at'); disp(datetime('now'))
+[out_Atlantic, auxVars_Atlantic] = integrateTrajectories(FixedParams, Params, ... 
+    Forc_Atlantic, v0_Atlantic, FixedParams.odeIntegrator, FixedParams.odeOptions);
+toc
+% repeat for Arctic
+fitTrajectories = 'Arctic';
+[~, ~, Forc_Arctic, Data_Arctic] = ...
+    optimisationOptions(FixedParams, Params, Forc0, Data0, ...
+    'fitTrajectories', fitTrajectories);
+v0_Arctic = initialiseVariables(FixedParams, Params, Forc_Arctic);
+Forc_Arctic.integrateFullTrajectory = true;
+% Generate model outputs over trajectories linked to Atlantic or Arctic
+tic; disp('.. started at'); disp(datetime('now'))
+[out_Arctic, auxVars_Arctic] = integrateTrajectories(FixedParams, Params, ... 
+    Forc_Arctic, v0_Arctic, FixedParams.odeIntegrator, FixedParams.odeOptions);
+toc
 
 
-trajArctic = find(strcmp(Forc0.waterMass, 'Arctic'));
-trajAtlantic = find(strcmp(Forc0.waterMass, 'Atlantic'));
+plt_Forc = figure;
+plt_Forc.Units = 'inches';
+plt_Forc.Position = [0 0 10 9];
 
+% Left column = Arctic, right column = Atlantic
+% Top row = temperature, middle row = PAR, bottom row = diffusivity
 
-plt_Forc = plot_contour_DepthTime('forcing', ...
-    trajArctic, out0, auxVars0, FixedParams, Forc0, 'linear', ...
-    'Event', sampleEvent, 'waterOrigin', 'Arctic');
+ax(1) = subplot(3,2,1);
+Title = 'Arctic';
+ColourBar = true;
+unitTemperature = 'temperature (\circC)';
+% ColourBarLabel = '\circC';
+xLabel = '';
+plot_forcing_contour_DepthTime('T', Forc_Arctic, auxVars_Arctic, FixedParams, ... 
+    'Title', Title, 'ColourBar', ColourBar, 'ColourBarLabel', unitTemperature, ...
+    'xLabel', xLabel);
+c1 = caxis;
 
-plt_Forc = plot_contour_DepthTime('forcing', ...
-    trajAtlantic, out0, auxVars0, FixedParams, Forc0, 'linear', ...
-    'Event', sampleEvent, 'waterOrigin', 'Atlantic');
+ax(2) = subplot(3,2,2);
+Title = 'Atlantic';
+ColourBar = true;
+xLabel = '';
+yLabel = '';
+plot_forcing_contour_DepthTime('T', Forc_Atlantic, auxVars_Atlantic, FixedParams, ... 
+    'Title', Title, 'ColourBar', ColourBar, 'ColourBarLabel', unitTemperature, ...
+    'xLabel', xLabel, 'yLabel', yLabel);
+c2 = caxis;
+
+ax(3) = subplot(3,2,3);
+maxDepth = 50;
+nYTicks = 6;
+ColourBar = true;
+scaleFactor = 1e-6; % rescale from muEin/d/m2 to Ein/d/m2
+unitIrradiance = 'PAR (Ein day^{-1} m^{-2})';
+% ColourBarLabel = '\muEin day^{-1} m^{-2}';
+xLabel = '';
+plot_forcing_contour_DepthTime('PAR', Forc_Arctic, auxVars_Arctic, FixedParams, ... 
+    'ColourBar', ColourBar, 'ColourBarLabel', unitIrradiance, ...
+    'xLabel', xLabel, 'maxDepth', maxDepth, 'nYTicks', nYTicks, 'scaleFactor', scaleFactor);
+c3 = caxis;
+
+ax(4) = subplot(3,2,4);
+nYTicks = 6;
+ColourBar = true;
+xLabel = '';
+yLabel = '';
+plot_forcing_contour_DepthTime('PAR', Forc_Atlantic, auxVars_Atlantic, FixedParams, ... 
+    'ColourBar', ColourBar, 'ColourBarLabel', unitIrradiance, ...
+    'xLabel', xLabel, 'yLabel', yLabel, 'maxDepth', maxDepth, 'nYTicks', nYTicks, 'scaleFactor', scaleFactor);
+c4 = caxis;
+
+ax(5) = subplot(3,2,5);
+logScale = true;
+ColourBar = true;
+unitDiffusivity = 'Diffusivity (m^2 day^{-1})';
+% ColourBarLabel = 'm^2 day^{-1}';
+plot_forcing_contour_DepthTime('K', Forc_Arctic, auxVars_Arctic, FixedParams, ... 
+    'ColourBar', ColourBar, 'ColourBarLabel', unitDiffusivity, ...
+    'logScale', logScale);
+c5 = caxis;
+
+ax(6) = subplot(3,2,6);
+logScale = true;
+ColourBar = true;
+yLabel = '';
+plot_forcing_contour_DepthTime('K', Forc_Atlantic, auxVars_Atlantic, FixedParams, ... 
+    'ColourBar', ColourBar, 'ColourBarLabel', unitDiffusivity, ...
+    'yLabel', yLabel, 'logScale', logScale);
+c6 = caxis;
+
+cT = [min([c1(1) c2(1)]), max([c1(2) c2(2)])];
+cI = [min([c3(1) c4(1)]), max([c3(2) c4(2)])];
+cK = [min([c5(1) c6(1)]), max([c5(2) c6(2)])];
+
+xscale = 0.9;
+
+subplot(3,2,1)
+caxis(cT)
+colorbar off
+subplot(3,2,2)
+caxis(cT)
+% colorbar off
+% colorbar('EastOutside');
+pause(0.1)
+% ax(2).Position(3) = ax(1).Position(3);
+ax(1).Position(3) = xscale * ax(1).Position(3);
+pause(0.1)
+ax(2).Position(3) = ax(1).Position(3);
+
+subplot(3,2,3)
+caxis(cI)
+colorbar off
+subplot(3,2,4)
+caxis(cI)
+% colorbar off
+% colorbar('EastOutside');
+pause(0.1)
+ax(3).Position(3) = xscale * ax(3).Position(3);
+pause(0.1)
+ax(4).Position(3) = ax(3).Position(3);
+
+subplot(3,2,5)
+caxis(cK)
+colorbar off
+subplot(3,2,6)
+caxis(cK)
+colorbar off
+cb = colorbar('EastOutside');
+% relabel colour bar for log-scale plots, and re-input the label
+for ii = 1:length(cb.TickLabels), cb.TickLabels{ii} = num2str(round(10 ^ str2double(cb.TickLabels{ii}),2,'significant')); end
+
+cb.Label.String = unitDiffusivity;
+pause(0.1)
+ax(5).Position(3) = xscale * ax(5).Position(3);
+pause(0.1)
+ax(6).Position(3) = ax(5).Position(3);
+
+% colormap plasma
+% colormap viridis
+% colormap magma
+% colormap inferno
+colormap parula
+
+if exist('plt_Forc', 'var') && isvalid(plt_Forc)
+    filename = 'forcingData_contourPlots.png';
+    print(plt_Forc, fullfile(folder, filename), '-r300', '-dpng');
+end
 
 
 
