@@ -855,6 +855,93 @@ switch save, case true
 end
 
 
+% Ensure that the map is plotted using enough (all?) trajectories
+
+% generate struct containing all trajectories (unfiltered forcing data)
+Forc_ = forcingSetUp(Directories, FixedParams, 'year', 2018);
+
+plt_Map = figure;
+plt_Map.Units = 'inches';
+plt_Map.Position = [0 0 8 8];
+
+% axes('position', [0.2, 0.2, 0.75, 0.75])
+axes('position', [0.15, 0.15, 0.85, 0.85])
+
+% Plot all trajectories (Forc_) and highlight those selected for
+% parameter-tuning (Forc0)
+highlightTraj_ = nan(1,Forc0.nTraj);
+x_ = Forc_.x;
+y_ = Forc_.y;
+for ii = 1:Forc0.nTraj
+    x0 = Forc0.x(:,ii);
+    y0 = Forc0.y(:,ii);    
+    xi = find(all(x0 == x_));
+    yi = find(all(y0 == y_));
+    if xi == yi
+        highlightTraj_(ii) = xi;
+    end
+end
+highlightTraj = false(1,Forc_.nTraj);
+highlightTraj(highlightTraj_) = true;
+
+projection = 'lambert';
+% alphaLine = 0.01;
+alphaLine = 0.0075;
+includeLegend = true;
+legendPosition = 'east';
+legendTextSize = 12;
+legendTitle = 'Water origin';
+legendTitleSize = 12;
+polygonLineWidth = 3;
+stripedBorder = false;
+highlightStart = false;
+
+plot_trajectoryMap(Directories, Forc_, 'projection', projection, ...
+    'alphaLine', alphaLine, 'Data', Data0, 'newPlot', false, ...
+    'includeLegend', includeLegend, 'legendPosition', legendPosition, ...
+    'legendTitle', legendTitle, 'legendTitleSize', legendTitleSize, ...
+    'legendTextSize', legendTextSize, 'polygonLineWidth', polygonLineWidth, ...
+    'stripedBorder', stripedBorder, 'highlightStart', highlightStart, ... 
+    'highlightTraj', highlightTraj);
+
+axes('position', [0.1, 0.12, 0.5, 0.5])
+
+projection = 'lambert';
+alphaPoint = 0.5;
+pointSize = 9;
+pieSize = 0.02;
+lonSpace = 0.05;
+latSpace = 0.05;
+colourByDataType = true;
+showWaterOrigin = true;
+trimPolygons = true; % shape the water-origin polygons to fit neatly into the full area polygon
+polygonAlpha = 1; % polygons cannot be transparent because the underlying map shows though
+colSat = 0.6; % reduce colour saturation to emulate the transparent colours
+polygonSmooth = false;
+polygonExpand = 0;
+legendPosition = 'west';
+legendTitle = 'Data';
+omitMapGrid = true; % do not plot map coords -- instead surround data points with polygon used to show sample area in the trajectory map
+fullAreaPolygon = true; % draw polygon matching that used in the trajectory map
+polygonLineWidth = 3;
+
+plot_dataMap(Directories, Data0, 'projection', projection, ...
+    'alphaPoint', alphaPoint, 'pointSize', pointSize, 'lonSpace', lonSpace, ... 
+    'latSpace', latSpace, 'Forc', Forc_, ... 
+    'showWaterOrigin', showWaterOrigin, 'polygonAlpha', polygonAlpha, ...
+    'polygonExpand', polygonExpand, 'polygonSmooth', polygonSmooth, ...
+    'colourByDataType', colourByDataType, 'pieSize', pieSize, ...
+    'includeLegend', includeLegend, 'legendPosition', legendPosition, ... 
+    'omitMapGrid', omitMapGrid, 'colSat', colSat, ... 
+    'fullAreaPolygon', fullAreaPolygon, 'polygonLineWidth', polygonLineWidth, ... 
+    'trimPolygons', trimPolygons, 'legendTitle', legendTitle, ... 
+    'legendTitleSize', legendTitleSize, 'legendTextSize', legendTextSize, ...
+    'stripedBorder', stripedBorder, 'newPlot', false);
+
+
+
+
+
 
 
 %% Contour plots -- single trajectories, or grouped by sample event

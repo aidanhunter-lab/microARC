@@ -153,7 +153,7 @@ clear sizeData
 % years of forcing data into a single structure using prepareForcing.m.
 % An extra few useful metrics are also calculated here.
 Forc = prepareForcing(F,FixedParams);
-clear F
+% clear F
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -198,6 +198,51 @@ if ~exist('useSingleSizeSpectra', 'var'), useSingleSizeSpectra = true; end
 
 [Data, Forc, FixedParams] = selectYears(Data, Forc, FixedParams, ... 
     'singleYear', useSingleYear, 'singleSpectra', useSingleSizeSpectra);
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+% If forcing data have not already been grouped by particle origin (Arctic
+% or Atlantic) then assign each particle to a group. This is time-consuming
+% when using lots of particles, so the function is run once and the output
+% saved.
+
+for ii = 1:length(Forc.years)
+    year = Forc.years(ii);
+    fileName = ['particleGroupings_' num2str(year) '.mat'];
+    loadGroups = exist(fileName, 'file');
+    if loadGroups
+        loadedGroups = load(fullfile(forcDir,fileName));
+        particleGrouping = loadedGroups.particleGrouping;
+    end
+    match = length(Forc.iTraj) == height(particleGrouping); % do loaded values match forcing data?
+    
+    if loadGroups && match
+        Forc.waterMass = particleGrouping.waterMass';
+    else
+        warning('The particleOrigin.m function has been called to group all forcing data particles as either Arctic or Atlantic origin. This time-consuming function should only need called once per set of forcing data as the outputs are saved and re-used. This warning should only appear the 1st time modelSetUp.m is called for a new set of forcing data, otherwise there may be some problem.')
+        
+        if ~exist('trajectoryPlot', 'var')
+            trajectoryPlot = false;
+        end
+        if ~exist('dendrogramPlot', 'var')
+            dendrogramPlot = false;
+        end
+
+        Forc = particleOrigin(Forc, 'trajectoryPlot', trajectoryPlot, ... 
+            'dendrogramPlot', dendrogramPlot, 'progressBar', true); pause(0.25)
+        
+        % Extract and save water mass groupings so they may simply be
+        % loaded next time modelSetUp.m is called.
+        
+        particleGrouping = table(repmat(year, [Forc.nTraj, 1]), (1:Forc.nTraj)', Forc.waterMass(:), ...
+            'VariableNames', {'year','traj','waterMass'});
+        
+        save(fullfile(forcDir, fileName), 'particleGrouping')
+        
+    end
+
+end
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -264,8 +309,10 @@ if ~exist('dendrogramPlot', 'var')
     dendrogramPlot = false;
 end
 
-[Forc_, Data_] = particleOrigin(Forc_, Data_, ...
+[~, Data_] = particleOrigin(Forc_, 'Data', Data_, ...
     'trajectoryPlot', trajectoryPlot, 'dendrogramPlot', dendrogramPlot); pause(0.25)
+% [Forc_, Data_] = particleOrigin(Forc_, 'Data', Data_, ...
+%     'trajectoryPlot', trajectoryPlot, 'dendrogramPlot', dendrogramPlot); pause(0.25)
 
 % Now that water mass origin has been determined for each sample (using
 % particle trajectories) re-filter to select numTraj particle trajectories
@@ -290,7 +337,7 @@ Data.sizeFull.dataBinned.waterMass = Data_.sizeFull.dataBinned.waterMass;
 Data.sizeFull.dataBinned.AtlanticOrigin = Data_.sizeFull.dataBinned.AtlanticOrigin;
 Data.sizeFull.dataBinned.ArcticOrigin = Data_.sizeFull.dataBinned.ArcticOrigin;
 
-Forc.waterMass = Forc_.waterMass(ismember(Forc_.iTraj, Forc.iTraj));
+% Forc.waterMass = Forc_.waterMass(ismember(Forc_.iTraj, Forc.iTraj));
 
 clear Forc_ Data_
 
