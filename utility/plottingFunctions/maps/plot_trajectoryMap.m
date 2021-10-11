@@ -97,6 +97,14 @@ if ~exist('stripeColours', 'var')
     stripeColours = [0, 0, 0; 1, 1, 0]; % black and yellow
 end
 
+if ~exist('highlightStart', 'var')
+    highlightStart = true;
+end
+
+if ~exist('highlightTraj', 'var')
+    highlightTraj = false(1, Forc.nTraj);
+end
+
 
 %% Coordinate ranges
 ctrLon = 0; % Longitude of map centre
@@ -117,27 +125,40 @@ for i = 1:Forc.nTraj
     lat = Forc.y(:,i);
     type = Forc.waterMass(:,i);
     if strcmp(type, 'Atlantic')
-        Col = [colAtlantic alphaLine];
-        pAtl =     m_plot(lon, lat, 'Linestyle', '-', ...
+        if highlightTraj(i)
+            Col = [colAtlantic 0.5];
+%             Col = [colAtlantic 10 * alphaLine];
+        else
+            Col = [colAtlantic alphaLine];
+        end
+        m_plot(lon, lat, 'Linestyle', '-', ...
             'Color', Col, 'LineWidth', trajLineWidth);
     end
     if strcmp(type, 'Arctic')
-        Col = [colArctic alphaLine];
-        pArc = m_plot(lon, lat, 'Linestyle', '-', ...
+        if highlightTraj(i)
+            Col = [colArctic 0.5];
+%             Col = [colArctic 10 * alphaLine];
+        else
+            Col = [colArctic alphaLine];
+        end
+        m_plot(lon, lat, 'Linestyle', '-', ...
             'Color', Col, 'LineWidth', trajLineWidth);
     end
 end
+
 % Highlight starting locations
-for i = 1:Forc.nTraj
-    lon = Forc.x(:,i);
-    lat = Forc.y(:,i);
-    type = Forc.waterMass(:,i);
-    if strcmp(type, 'Atlantic'), Col = [colAtlantic alphaLine]; end
-    if strcmp(type, 'Arctic'), Col = [colArctic alphaLine]; end
-    m_plot(lon(1), lat(1), 'LineStyle', 'none', ...
-        'Marker', 'o', 'MarkerEdgeColor', 'none', ...
-        'MarkerFaceColor', brighten(Col(1:3),-0.5), ...
-        'MarkerSize', ceil(pointSize/4));
+switch highlightStart, case true
+    for i = 1:Forc.nTraj
+        lon = Forc.x(:,i);
+        lat = Forc.y(:,i);
+        type = Forc.waterMass(:,i);
+        if strcmp(type, 'Atlantic'), Col = [colAtlantic alphaLine]; end
+        if strcmp(type, 'Arctic'), Col = [colArctic alphaLine]; end
+        m_plot(lon(1), lat(1), 'LineStyle', 'none', ...
+            'Marker', 'o', 'MarkerEdgeColor', 'none', ...
+            'MarkerFaceColor', brighten(Col(1:3),-0.5), ...
+            'MarkerSize', ceil(pointSize/4));
+    end
 end
 
 %% Sample site area
@@ -324,8 +345,11 @@ if ~isempty(plotTitle) && ischar(plotTitle)
 end
 
 switch includeLegend, case true
-    pAtl.Color = pAtl.Color(1:3);
-    pArc.Color = pArc.Color(1:3);
+    % lines outside map boundaries to use for legend
+    pAtl = m_plot(repmat(180, size(lon)), repmat(-50, size(lat)), 'Linestyle', '-', ...
+        'Color', colAtlantic, 'LineWidth', trajLineWidth);
+    pArc = m_plot(repmat(180, size(lon)), repmat(-50, size(lat)), 'Linestyle', '-', ...
+        'Color', colArctic, 'LineWidth', trajLineWidth);
     leg = legend([pArc,pAtl], 'Arctic', 'Atlantic', 'Location', legendPosition);
     leg.FontSize = legendTextSize;
     leg.Title.String = legendTitle;

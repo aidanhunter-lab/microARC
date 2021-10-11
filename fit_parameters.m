@@ -14,15 +14,16 @@ addpath(genpath(fileparts(which('fit_parameters'))))
 rng(1) % set random seed
 
 % Store folders/filenames of data and saved parameters.
-% Set parFile = [] for default initial parameter values (hard-coded, not loaded)
-% or parFile = 'filename.mat' to use saved values as the initials.
-% parFile = [];
-parFile = 'parameterInitialValues';
+% Set parFileName = [] for default initial parameter values (hard-coded, 
+% not loaded) or parFileName = 'filename' to use saved values as the initials.
+parFileName = 'parameterInitialValues';
+parFileType = '.mat';
 % Identifying tag here is the name of cost function used to
 % generate saved parameters, and a string describing model set-up
 % (set tag=[] if unused).
-tag = '_RMS_Hellinger2_Atlantic_aG_sigG_upweightAbnTot.mat';
-if ~isempty(parFile), parFile = [parFile tag]; end
+tag = '_RMS_Hellinger_ZPratio_Atlantic_final';
+% tag = '_RMS_Hellinger2_Atlantic_aG_sigG_upweightAbnTot';
+if ~isempty(parFileName), parFile = [parFileName tag parFileType]; else, ParFile = []; end
 
 Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
     'parFile', parFile);
@@ -43,26 +44,31 @@ numTraj = 1; % For optimisation efficiency use only a single trajectory per samp
 
 
 %% Optimise parameters
-
 % Choose which parameters to tune, the cost function, and numerical tuning
 % algorithm. Can also select which data to fit / trajectories to run as
 % Arctic and/or Atlantic.
-niter = 50; % algorithm iterations (the algorithm can be halted and continued, so we may set niter quite small and run the algorithm in repeated blocks)
-popSize = 100; % number of parameter sets evaluated per iteration
-
-[~,~,~,cfc] = costFunction(); % list available cost function choices
-costFunctionType = 'RMS_Hellinger_ZPratio'; % select cost function from cfc
 
 % Fit parameters to data sampled from either Atlantic or Arctic waters
 fitTrajectories = 'Atlantic';
-
+% List available cost function choices
+[~,~,~,cfc] = costFunction();
+% Select cost function from cfc
+disp(cfc)
+costFunctionType = 'RMS_Hellinger_ZPratio';
 % Set rescaleForOptim true to estimate parameters within some transformed 
 % space -- transforms chosen to improve optimisation efficiency by
 % smoothing search space.
 rescaleForOptim = true;
+% Iterations of parameter-tuning algorithm (the algorithm can be halted
+% then continued, so we can set niter quite small and run the algorithm in
+% repeated blocks)
+niter = 50;
+% A population-based algorithm is used to tune parameters. Choose
+% population size -- number of parameter sets evaluated per iteration
+popSize = 100;
 
-[FixedParams, Params, Forc, Data] = ...
-    optimisationOptions(FixedParams, Params, Forc, Data, ...
+[FixedParams, Params, Forc, Data] = optimisationOptions(...
+    FixedParams, Params, Forc, Data, ...
     'niter', niter, ...
     'popSize', popSize, ...
     'costFunctionType', costFunctionType, ...
@@ -96,17 +102,20 @@ v0 = initialiseVariables(FixedParams, Params, Forc);
 restartRun = true;
 switch restartRun, case true
     fileName_results = 'fittedParameters'; % saved parameters file name (and identifying tag should already be defined)
-    fileName_results = fullfile(Directories.resultsDir, ...
-        [fileName_results tag]);
+    fileType_results = '.mat';
+    file_results = fullfile(Directories.resultsDir, ...
+        [fileName_results tag fileType_results]);    
     fp = false; % fp = true => restart using full population from prior run
                 % fp = false => restart with best param set from prior run and otherwise random population
     ni = true; % ni = true => use new v0 values generated (above) using loaded parameters
                % ni = false => use saved v0 values from previous optimisation run (v0 possibly generated using sub-optimal params)
-    restartParamFit(fileName_results, optimiserOptions, 'fp', fp, 'ni', ni)
     % Note: to avoid overwriting stucts Data, Forc, Params or
     % FixedParams generated above in model set-up, set to false the
     % optional name-value pair argument 'loadMainStructs' or individually
     % set as false 'loadData', 'loadForc', 'loadParams' or 'loadFixedParams'
+    restartParamFit(file_results, optimiserOptions, 'fp', fp, 'ni', ni)
+%     restartParamFit(file_results, optimiserOptions, 'fp', fp, 'ni', ni, ...
+%         'loadData', false, 'loadForc', false, 'loadMainStructs', false)
 end
 
 % Parallelise integrations over trajectories
@@ -117,7 +126,7 @@ if isempty(poolObj), poolObj = parpool('SpmdEnabled', false); end
 tic; disp('.. started at'); disp(datetime('now'))
 [optPar, fval, exitflag, output, population, scores] = optimise(@(x) ... 
     costCalc(x, FixedParams, Params, Forc, Data, v0, FixedParams.odeIntegrator, ...
-    FixedParams.odeOptions, 'selectFunction', costFunctionLabel), ... 
+    FixedParams.odeOptions, 'selectFunction', costFunctionType), ... 
     npars, [], [], [], [], boundsLower, boundsUpper, [], optimiserOptions);
 optimisationTime = toc / 60 / 60; disp('.. finished at'); disp(datetime('now')); fprintf('\n')
 disp(['Optimisation time: ' num2str(floor(optimisationTime)) ' hrs, ' ...
@@ -160,28 +169,30 @@ saveParams = true;
 
 % Choose file name
 fileName_results = 'fittedParameters';
+fileType_results = '.mat';
 % and identifying tag
-tag = 'Atlantic_aG_sigG_upweightAbnTot';
-tag = [FixedParams.costFunction '_' tag];
+% tag = 'Atlantic_aG_sigG_upweightAbnTot';
+tag = 'Atlantic_final';
+tag = ['_' FixedParams.costFunction '_' tag];
 
-fileName_results = fullfile(Directories.resultsDir, ...
-    [fileName_results '_' tag]);
+file_results = fullfile(Directories.resultsDir, ...
+    [fileName_results tag fileType_results]);
 
 switch saveParams, case true
     % Fitted parameters are saved as the 'results' struct, and the 
     % associated model set-up is saved within each subsequent struct
     if ~exist('v0', 'var'), v0 = []; end
-    saveOptimisationRun(fileName_results, results, Data, Forc, FixedParams, Params, v0);
+    saveOptimisationRun(file_results, results, Data, Forc, FixedParams, Params, v0);
 end
 
 % Fitted parameters may be saved as updated default values for future runs
 updateStoredInitials = true;
-
 fileName_initials = 'parameterInitialValues';
-fileName_initials = fullfile(Directories.resultsDir, ... 
-    [fileName_initials '_' tag]);
+fileType_initials = '.mat';
+file_initials = fullfile(Directories.resultsDir, ... 
+    [fileName_initials tag fileType_initials]);
 
 switch updateStoredInitials, case true
-    saveFittedParams(fileName_initials, results.optPar, results.parNames)
+    saveFittedParams(file_initials, results.optPar, results.parNames)
 end
 

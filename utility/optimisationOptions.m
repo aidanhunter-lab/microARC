@@ -104,7 +104,7 @@ if ~any(strcmp(costFunctionType, costFunctionChoices.label))
 end
 
 FixedParams.costFunction = costFunctionType;
-assignin('caller', 'costFunctionLabel', costFunctionType)
+assignin('caller', 'costFunctionType', costFunctionType)
 
 dataType = costFunctionChoices.dataType{strcmp(costFunctionType, ...
     costFunctionChoices.label)}; % cost function size data requirements (full spectra or binned size data)

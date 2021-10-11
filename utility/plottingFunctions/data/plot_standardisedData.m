@@ -1,5 +1,7 @@
 function plt = plot_standardisedData(Type, group, Data, varargin)
 
+pause(0.1) % this pause prevents misnumbering the y-axis... I don't know why...
+
 extractVarargin(varargin)
 
 % if ~exist('Ylim', 'var')
@@ -95,7 +97,6 @@ switch Type
             switch covariate, case 'Depth'
                 y = -y;
             end
-%             y = dat.Depth(ind_);
             col = unique(cell2mat(tt_.col(ind_)), 'rows');
             if j == 1
                 plt = scatter(x, y, ...
@@ -103,7 +104,7 @@ switch Type
                     'MarkerFaceAlpha', pointAlpha, 'MarkerEdgeAlpha', pointAlpha);
                 hold on
             else
-                scatter(x, y, ...
+                scatter(x, y,...
                     'MarkerFaceColor', col, 'MarkerEdgeColor', col, ...
                     'MarkerFaceAlpha', pointAlpha, 'MarkerEdgeAlpha', pointAlpha)
             end
@@ -119,30 +120,33 @@ switch Type
             case 'chl_a'
                 xLab = 'chl a';
         end
-        xlabel(xLab)
         switch covariate
             case 'Depth'
                 yLab = 'depth (m)';
             case 'Event'
                 yLab = 'sample event';
         end
-        ylabel(yLab)
-        gc = gca;
-%         if ~isempty(Ylim)
-%             gc.YLim = flip(-Ylim);
-%         end
+        
+%         gc = gca;
 
-        switch covariate, case 'Depth'
-            for j = 1:length(gc.YTickLabel)
-                gc.YTickLabel{j} = strrep(gc.YTickLabel{j},'-','');
-            end
-        end
         % Adjust y-axis limits so points do not lay on axes
         adj = 0.06;
         miny = min(abs(dat.(covariate)(ind)));
         maxy = max(abs(dat.(covariate)(ind)));
         switch covariate, case 'Depth', miny = - miny; maxy = -maxy; end        
-        yl = gc.YLim;
+        
+        
+        switch covariate, case 'Depth'
+            YTickLabel = get(gca, 'YTickLabel');
+            for j = 1:length(YTickLabel)
+                YTickLabel{j} = strrep(YTickLabel{j},'-','');
+            end
+            set(gca, 'YTickLabel', YTickLabel)
+        end
+
+        
+        yl = get(gca, 'YLim');
+        
         yld = abs(diff(yl));
         if yl(1) == maxy
             yl(1) = yl(1) - adj * yld;
@@ -150,38 +154,70 @@ switch Type
         if yl(2) == miny
             yl(2) = yl(2) + adj * yld;
         end
-        gc.YLim = yl;
         
+        set(gca, 'YLim', yl)        
+%         gc.YLim = yl;
+        
+        
+
+%         switch covariate, case 'Depth'
+%             for j = 1:length(gc.YTickLabel)
+%                 gc.YTickLabel{j} = strrep(gc.YTickLabel{j},'-','');
+%             end
+%         end
+
+        xl = get(gca, 'XLim');
         switch centrePlot, case true
-            xl = gc.XLim;
-            xl = max(abs(xl));
-            gc.XLim = [-xl, xl];
+            xlm = max(abs(xl));
+            xl = [-xlm, xlm];
+            set(gca, 'XLim', xl)
         end
-        
-        
+
+%         switch centrePlot, case true
+%             xl = gc.XLim;
+%             xl = max(abs(xl));
+%             gc.XLim = [-xl, xl];
+%         end
+                
         switch densityCurve, case true
             hold on
             yDist = fitdist(x, 'kernel', 'Bandwidth', Bandwidth);
-            x_ = linspace(gc.XLim(1), gc.XLim(2), 100);
+%             xl = get(gca, 'XLim');
+%             yl = get(gca, 'YLim');
+            x_ = linspace(xl(1), xl(2), 100);
             y_ = pdf(yDist, x_); % sample density of standardised data
             y_ = (y_ - min(y_)) ./ (max(y_) - min(y_));
-            y_ = gc.YLim(1) + y_ .* diff(gc.YLim);
+            y_ = yl(1) + y_ .* diff(yl);
             plot(x_, y_, 'Color', [0 0 0])
             nd = (2*pi)^(-0.5) * exp(-0.5 .* x_ .^ 2); % standard normal density
             nd = (nd - min(nd)) ./ (max(nd) - min(nd));
-            nd = gc.YLim(1) + nd .* diff(gc.YLim);
+            nd = yl(1) + nd .* diff(yl);
             plot(x_, nd, '--', 'Color', [0 0 0])
             hold off
         end
+
+        
+%         switch densityCurve, case true
+%             hold on
+%             yDist = fitdist(x, 'kernel', 'Bandwidth', Bandwidth);
+%             x_ = linspace(gc.XLim(1), gc.XLim(2), 100);
+%             y_ = pdf(yDist, x_); % sample density of standardised data
+%             y_ = (y_ - min(y_)) ./ (max(y_) - min(y_));
+%             y_ = gc.YLim(1) + y_ .* diff(gc.YLim);
+%             plot(x_, y_, 'Color', [0 0 0])
+%             nd = (2*pi)^(-0.5) * exp(-0.5 .* x_ .^ 2); % standard normal density
+%             nd = (nd - min(nd)) ./ (max(nd) - min(nd));
+%             nd = gc.YLim(1) + nd .* diff(gc.YLim);
+%             plot(x_, nd, '--', 'Color', [0 0 0])
+%             hold off
+%         end
         
         
-        
+        xlabel(xLab)
+        ylabel(yLab)
         switch includeLegend, case true
             legend(waterMass, 'Location', legendPosition)
         end
-        
-        
-        
         
 end
 
