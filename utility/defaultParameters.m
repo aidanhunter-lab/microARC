@@ -15,17 +15,25 @@ FixedParams.years = []; % number of modelled years (determined from forcing and 
 %~~~~~~~~~~~~~
 % Depth layers
 %~~~~~~~~~~~~~
-% FixedParams.nz     = 15;                                                   % number of modelled depth layers
+% Modelled layer width increases with depth => model has greater resolution
+% near surface waters. Define 2 depth zones: from the surface to depth
+% Hmain; and from depth Hmain to Htot. The 1st of these zones should be set
+% where the interesting plankton dynamics occurs -- where there's
+% sufficient light. Within this zone, the depth layer widths increase with
+% depth. The 2nd zone is included to model variables at depths below the 
+% nitrocline, and should be set with reference to nutrient data. This zone
+% is simply a single extra wide modelled layer.
 FixedParams.nz     = 9;                                                    % number of modelled depth layers
-% FixedParams.Htot   = 150;                                                  % total modelled depth
-FixedParams.Htot   = 80;                                                   % total modelled depth
+FixedParams.Hmain = 100;                                                   % limit of variable-width depth layers
+FixedParams.Htot  = 300;                                                   % total modelled depth
 FixedParams.dzmin  = 5;                                                    % minimum layer width (dzmin <= Htot/(nz-1))
-FixedParams.dzmax  = 2 * FixedParams.Htot / FixedParams.nz - ... 
+FixedParams.dzmax  = 2 * FixedParams.Hmain / (FixedParams.nz - 1) - ... 
     FixedParams.dzmin;                                                     % maximum layer width
 FixedParams.zwidth = linspace(FixedParams.dzmin, FixedParams.dzmax, ... 
-    FixedParams.nz)';                                                      % widths of depth layers
+    FixedParams.nz - 1)';                                                  % widths of depth layers
+FixedParams.zwidth = [FixedParams.zwidth; ... 
+    FixedParams.Htot - FixedParams.Hmain];
 FixedParams.zw     = [0; -cumsum(FixedParams.zwidth)];                     % depth of layer edges
-FixedParams.zwidth = FixedParams.zw(1:end-1) - FixedParams.zw(2:end);      % widths of depth layers
 FixedParams.z      = [];                                                   % midpoints of depth layers
 FixedParams.delz   = [];                                                   % distance between centres of adjacent depth layers
 
@@ -38,20 +46,20 @@ FixedParams.IN_nut = {'NO3'}; % nutrient types - only nitrate is modelled
 FixedParams.nIN    = [];
 
 % Plankton
-FixedParams.PP_nut  = {'C','N','Chl'};                                % phytoplankton cell contents - carbon, nitrogen and chlorophyll
-FixedParams.ZP_nut  = {'C','N'};                                      % zooplankton cell contents - carbon, nitrogen
-FixedParams.nPP_nut = [];
+FixedParams.PP_nut  = {'C','N','Chl'}; % phytoplankton cell contents - carbon, nitrogen and chlorophyll
+FixedParams.ZP_nut  = {'C','N'};       % zooplankton cell contents - carbon, nitrogen
+FixedParams.nPP_nut = [];              % number of plankton nutrient types
 FixedParams.nZP_nut = [];
 
-FixedParams.nPP_size = 9; % number of phytoplankton size classes
-FixedParams.PPdia_intervals = [];
-FixedParams.PPdia = 2 .^ (0:FixedParams.nPP_size - 1); % cell diameters -- each class is double the diameter of the previous (evenly spaced on log scale)
+FixedParams.nPP_size = 9;                                     % number of phytoplankton size classes
+FixedParams.PPdia_intervals = [];                             % edges of size class intervals
+FixedParams.PPdia = 2 .^ (0:FixedParams.nPP_size - 1);        % cell diameters -- each class is double the diameter of the previous (evenly spaced on log scale)
 FixedParams.PPdia = FixedParams.PPdia(:);
 logPPdia = log10(FixedParams.PPdia);
 d = diff(logPPdia(1:2));
 FixedParams.PPdia_intervals = 10 .^ [logPPdia - 0.5 .* d; ... 
-    logPPdia(end) + 0.5 .* d];   % edges of size class intervals
-FixedParams.PPsize = d2vol(FixedParams.PPdia); % cell volumes [mu m^3]
+    logPPdia(end) + 0.5 .* d];
+FixedParams.PPsize = d2vol(FixedParams.PPdia);                % cell volumes [mu m^3]
 
 % Use the same size interval grid for heterotrophs
 FixedParams.nZP_size = FixedParams.nPP_size;
@@ -59,37 +67,33 @@ FixedParams.ZPdia_intervals = FixedParams.PPdia_intervals;
 FixedParams.ZPdia = FixedParams.PPdia;
 FixedParams.ZPsize = FixedParams.PPsize;
 
-FixedParams.nPP           = [];                                       % number of phytoplankton classes
-FixedParams.nZP           = [];                                       % number of heterotroph classes
+FixedParams.nPP           = []; % number of phytoplankton classes
+FixedParams.nZP           = []; % number of heterotroph classes
 
 FixedParams.diaAll = [FixedParams.PPdia; FixedParams.ZPdia];
 FixedParams.sizeAll = [FixedParams.PPsize; FixedParams.ZPsize];
 
-% delta_pred = reshape(FixedParams.ZPsize, [FixedParams.nZP_size, 1]);
-% delta_prey = [reshape(FixedParams.PPsize, [1 FixedParams.nPP_size]), ... 
-%     reshape(FixedParams.ZPsize, [1 FixedParams.nZP_size])];
-% FixedParams.delta = delta_pred ./ delta_prey; % predator:prey size ratios
 FixedParams.delta = []; % predator:prey size ratios
 
-FixedParams.diatoms       = [];                                       % assume large phytoplankton are diatoms - only needed to split SINMOD output over classes during state variable initialisation
-FixedParams.phytoplankton = [];                                       % index phytoplankton
-FixedParams.zooplankton   = [];                                       % index zooplankton
+FixedParams.diatoms       = []; % index large plankton cells as diatoms - only needed to split SINMOD output over size classes during state variable initialisation
+FixedParams.phytoplankton = []; % index phytoplankton
+FixedParams.zooplankton   = []; % index zooplankton
 
 % Organic matter
-FixedParams.OM_nut   = {'C', 'N'};
-FixedParams.nOM_nut  = [];
-FixedParams.OM_type  = {'DOM', 'POM'};
-FixedParams.nOM_type = [];
-FixedParams.nOM      = [];
+FixedParams.OM_nut   = {'C', 'N'};     % organic matter nutrient types
+FixedParams.nOM_nut  = [];             % number of organic matter nutrient types
+FixedParams.OM_type  = {'DOM', 'POM'}; % organic matter types
+FixedParams.nOM_type = [];             % number of organic matter types
+FixedParams.nOM      = [];             % number of organic matter classes
 
 % All variables
-FixedParams.nVar       = [];                                          % number of state variables per depth and trajectory
-FixedParams.nEquations = [];                                          % total number of ODEs
+FixedParams.nVar       = []; % number of state variables per depth and trajectory
+FixedParams.nEquations = []; % total number of ODEs
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % All other fixed quantities
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~
-FixedParams.m_min = 0.01;
+FixedParams.m_min = 0.01;                                  % minimum background mortality rate - required if using size-dependent mortality function
 FixedParams.attSW = 0.04;                                  % light attenuation by sea water (1 / m)
 FixedParams.attP = 0.0149;                                 % light attenuation by chlorophyll (m^2 / mg Chl), Krause-Jensen & Sand-Jensen, Limnol. Oceanogr. 43(3):396-407(1998)
 FixedParams.minSinkSpeed_POM = 1;                          % minimum sinking speed (m / day) of POM (this is used to constrain POM sink speed if it's assumed to be depth dependent -- slower speeds near the surface fit the data better and may be justified if choppyness near the surface increases POM hang-time)
@@ -99,19 +103,20 @@ maxDepthLayerClearRate = 0.1;                              % max rate at which d
 FixedParams.maxSinkSpeed_P = maxDepthLayerClearRate .* ...
     min(FixedParams.zwidth);                               % max sinking speed of plankton (when this is too great the model becomes unstable because cells clear from depth layers too quickly)
 FixedParams.POM_is_lost  = true;                           % is POM lost from the system by sinking below bottom modelled depth layer
-
+FixedParams.NclineDepth = 110;                             % depth of N-cline -- in-situ data sampled below NclineDepth should not vary much with depth, check plots of data to set this parameter.
 
 %% Variable parameters
 
-% List names of all parameters that may be numerically optimised
+% List names of all parameters that MAY be numerically optimised
 Params.scalarParams = {
     'Tref'
     'A'
     'h'
+    'm2'
     'aP'
     'theta'
     'xi'
-    'k_G'
+    'aG'
     'delta_opt'
     'sigG'
     'Lambda'
@@ -139,6 +144,7 @@ Params.vectorParams = {
     'Gmax_b'
     'm_a'
     'm_b'
+    'K_m_coef'
     'beta1'
     'beta2'
     'beta3'
@@ -162,14 +168,16 @@ Params.Q_C_a = (1/12) * 1e-9 * 10^-0.69;
 Params.Q_C_b = 0.88;
 Params.Q_C = [];
 
+% The '_QC' suffix in parameter names indicates division by carbon quota Q_C
+
 % min and max cellular nitrogen quota [mmol N / cell], scaled by C quota [mmol N / mmol C], Maranon et al. (2013)
 Params.Qmin_QC_func = @(a,b,V) powerFunction(a,b,V);
 Params.Qmin_QC_a = (1/14) * 1e-9 * 10^-1.47 / Params.Q_C_a;
-Params.Qmin_QC_b = 0.84 - Params.Q_C_b;
+% Params.Qmin_QC_b = 0.84 - Params.Q_C_b;
+Params.Qmin_QC_b = 0; % minimum N:C ratio expected to have same size dependence as C-quota => set Qmin_QC_b = 0
 Params.Qmin_QC = [];
 
 % max quota
-
 Params.Qmax_QC_func = @(Qmin_QC, Qmax_delQ) Qmin_QC ./ (1 - 1 ./ Qmax_delQ);
 Params.Qmax_QC = [];
 
@@ -199,62 +207,69 @@ Params.kN = [];
 
 % maximum photosynthetic rate [1/day]
 Params.pmax_func = @(a,b,V) powerFunction(a,b,V);
-Params.pmax_a = 15;
-Params.pmax_b = -0.19;
+Params.pmax_a = 2.5;
+Params.pmax_b = -0.15;
 Params.pmax = [];
 
 % maximum grazing rate
 Params.Gmax_func = @(a,b,V) powerFunction(a,b,V);
-Params.Gmax_a = 10;
+Params.Gmax_a = 21;
 Params.Gmax_b = -0.16;
 Params.Gmax = [];
 
-% % half-saturation prey concentration (mmol N / m^3) for grazing uptake
-% Params.k_G_a = 0.5;
-% Params.k_G_b = 0.18;
-% Params.k_G = [];
-
 % prey size preferences
+Params.phi_func = @(delta_opt, sigG, delta) ... 
+    exp(-log(delta ./ delta_opt) .^ 2 ./ (2 .* sigG .^ 2));
 Params.phi = [];
 
 % background mortality
 Params.m_func = @(a,b,V) powerFunction(a,b,V);
 Params.m_a = 0.05; % mortality for cell volume = 1 mu m ^ 3
-Params.m_b = -0.1; % mortality size-exponent
+Params.m_b = 0; % mortality size-exponent
 Params.m = [];
 
-% sinking plankton
+% Hyperbolic term in mortality expression may be used to prevent extremely
+% low abundances/extinction during prolonged poor growth conditions.
+% Setting K_m_coef=0 removes this effect.
+Params.K_m_func = @(K_m_coef, Q_C) K_m_coef .* Q_C; % I'm not convinced that multiplying Q_C is a good approach... is there a better method?
+% Params.K_m_coef = 1; % Params.K_m_coef = 1 is equivalent to mortality 'half-saturation' at concentration of 1 cell / m^3
+Params.K_m_coef = 0;
+Params.K_m = [];
+
+% sinking plankton (parameter sensitivity assessment suggests omitting
+% plankton sinking => set to zero)
 Params.wp_func = @(a,b,V) powerFunction(a,b,V);
-Params.wp_a = 1e-5; % intercept = 0 => no sinking at any size
-Params.wp_b = 0.33;
+Params.wp_a = 0; % intercept = 0 => no sinking at any size
+Params.wp_b = 0;
 Params.wp = [];
 
 % partitioning of dead matter into DOM and POM,  initial values from Ward et al. (2016)
 Params.beta_func = @(b1,b2,b3,V) b1 ./ (1 + exp(log10(V) - b3)) + ...
-    b1 .* b2 ./ (1 + exp((b3 - log10(V)))); % % flexible 3-parameter double logistic function of log10(V)
+    b1 .* b2 ./ (1 + exp((b3 - log10(V)))); % flexible 3-parameter double logistic function of log10(V)
 Params.beta1 = 0.9;
 Params.beta2 = 0.2/0.9;
 Params.beta3 = 2.0;
 Params.beta = [];
 
 % Size-independent
-Params.aP = 0.0277;           % initial slope of photosynthesis(metabolism)-irradiance curve [mmol C / (mg Chl mu Ein / m^2)]
-Params.theta = 4.2;         % maximum chl:N ratio [mg Chl / mmol N], Geider et al., 1998
-Params.xi = 2.33;           % cost of photosynthesis (mmol C / mmol N)
-Params.Tref = 20;           % reference temperature (degrees C)
-Params.A = 0.05;            % temperature dependence (unitless)
-Params.h = 10;              % curvature on quota uptake limitation
-% Params.m = 0.05;            % linear plankton mortality (1/day)
-Params.k_G = 5;             % half-saturation prey concentration (mmol C / m^3) for grazing uptake
-% Params.Gmax = 5;            % maximum grazing rate
-Params.delta_opt = 10;      % optimal predator:prey size ratio maximising feeding fluxes
+Params.m2 = 0;                                % quadratic, density-dependent, term in background mortality (1/day) - param sensitivity analysis suggests setting to zero...
+Params.aP = 3.83e-7;                          % initial slope of photosynthesis-irradiance curve [(mmol C m^2) / (mg Chl mu Ein)]
+Params.theta = 4.2;                           % maximum chl:N ratio [mg Chl / mmol N], Geider et al., 1998
+Params.xi = 2.33;                             % cost of photosynthesis (mmol C / mmol N)
+Params.Tref = 20;                             % reference temperature (degrees C)
+Params.A = 0.05;                              % temperature dependence (unitless)
+Params.h = 10;                                % curvature on quota uptake limitation
+Params.aG = 4;                                % grazing 'clearance' rate -- initial slope of grazing rate-prey availability curve (m^3 / (day mmol C))
+Params.k_G_func = @(Gmax_a, aG) Gmax_a ./ aG; % half-saturation prey concentration (mmol C / m^3) for grazing uptake -- not estimated directly
+Params.k_G = [];
+Params.delta_opt = 10;                        % optimal predator:prey size ratio maximising feeding fluxes
 if strcmp(bioModel, 'singlePredatorClass')
     % adjust size ratios for single predator class model -- all prey grazed equally
     FixedParams.delta = repmat(Params.delta_opt, size(FixedParams.delta));
 end
-Params.sigG = 2;            % variability of predator:prey size ratios
-Params.Lambda = -1;         % prey refuge parameter (unitless)
-Params.lambda_max = 0.7;    % maximum prey assimilation efficiency
+Params.sigG = 2;                              % variability of predator:prey size ratios
+Params.Lambda = -1;                           % prey refuge parameter (unitless)
+Params.lambda_max = 0.7;                      % maximum prey assimilation efficiency
 
 %~~~~~~~~~~~~~~~
 % Organic matter
@@ -271,14 +286,13 @@ Params.rOM = []; % remineralisation rates (1 / day)
 % Assume that remineralisation rates are identical for all nutrients within
 % each OM type, i.e., choose values for N, then set values for C identically
 Params.rDOC_func = @(rDON) rDON;
-Params.rDON = 0.02;         % dissolved organic nitrogen remineralisation rate (1/day)
-% Params.rDOC = 0.02;         % dissolved organic carbon remineralisation rate (1/day)
-Params.rDOC = [];           % dissolved organic carbon remineralisation rate (1/day)
+Params.rDON = 0.02;              % dissolved organic nitrogen remineralisation rate (1/day)
+Params.rDOC = [];                % dissolved organic carbon remineralisation rate (1/day)
 Params.rPOC_func = @(rPON) rPON;
-Params.rPON = 0.04;         % particulate organic nitrogen remineralisation rate (1/day)
-Params.rPOC = [];           % particulate organic nitrogen remineralisation rate (1/day)
+Params.rPON = 0.04;              % particulate organic nitrogen remineralisation rate (1/day)
+Params.rPOC = [];                % particulate organic nitrogen remineralisation rate (1/day)
 
-% Sinking: parameters wDOM1 and wPOM1 are scalars that, together with
+% Sinking parameters wDOM1 and wPOM1 are scalars that, together with
 % functions wDOM_func and wPOM_func, produce vectors of sinking speeds at
 % depth. Depending on the function definitions, sink speeds may be constant
 % with depth, or have a functional relationship specified by a single
@@ -290,7 +304,7 @@ switch FixedParams.depthDependentPOMsinkSpeed
     case false
         % POM sink speed is constant over depth
         Params.wPOM_func = @(wPOM1, nz) wPOM1 .* ones(nz,1);
-        Params.wPOM1 = 2;
+        Params.wPOM1 = 1; % this is set far lower than Ward (2012, 2016), but POM sink speed needs to be this low to fit the data, unless remineralisation rates are made far greater...
         Params.wPOM = [];
     case true
         % Allow reduction of POM sinking speed near surface for low values of
@@ -317,15 +331,25 @@ Params.wk = [];
 Bounds.Tref       = [20, 20];
 Bounds.A          = [0.01, 0.2];
 Bounds.h          = [5, 15];
-Bounds.aP         = [0, 0.5];
+Bounds.m2         = [0, 1e-3];
+Bounds.aP         = [1e-10, 5.75e-6];
 Bounds.theta      = [3, 5];
 Bounds.xi         = [1.5, 5];
-Bounds.k_G        = [0.1, 10];
-Bounds.sigG        = [0.01, 4];
-Bounds.delta_opt  = [0.01, 20];
+Bounds.aG         = [5/30, 35/1];
+Bounds.sigG       = [0.25, 2.5];
+Bounds.delta_opt  = [10, 10];
 Bounds.Lambda     = [-1.5, -0.5];
 Bounds.lambda_max = [0.5, 0.9];
-Bounds.wDOM1       = [0, 0];
+Bounds.wDOM1      = [0, 0];
+
+% Bounds.K_m_coef   = [1, 1];
+Bounds.K_m_coef   = [0, 0];
+
+% The POM sinking speed has proven to be an awkward parameter... I think
+% that including both PON and POC data within the cost function is
+% problematic as these combined data create undesirable local minama. I
+% think that excluding the POC data from the cost function could be useful,
+% or perhaps just fixing wPOM1 to constant value...
 switch FixedParams.depthDependentPOMsinkSpeed
     case false
         Bounds.wPOM1 = [0.5, FixedParams.maxSinkSpeed_POM];
@@ -360,32 +384,19 @@ Bounds.Qmax_delQ_a = min(1, max(0, Bounds.Qmax_delQ_a)); % required 0 < Qmax_del
 Bounds.Qmax_delQ_b = [0.77 - 0.96, 0.92 - 0.83];
 Bounds.Qmax_delQ_b = min(0, Bounds.Qmax_delQ_b); % required Qmax_delQ_b < 0
 
-
 Bounds.Vmax_QC_a = 24 / 14 * 1e-9 / Params.Q_C_a * [10^-3.18, 10^-2.78]; % Vmax bounds from Maranon (2013)
 Bounds.Vmax_QC_b = -Params.Q_C_b + [0.89, 1.06];
 
-% Bounds.aN_QC_a = Bounds.Vmax_QC_a ./ [10^-0.44, 10^-1.2]; % N affinity bounds from Edwards et al. (2015)
-% Bounds.aN_QC_b = Bounds.Vmax_QC_b -[0.45, 0.24];
+Bounds.aN_QC_a = 1e-3 .* 10 .^ [-9, -7.4] / Params.Q_C_a; % N affinity bounds from Edwards et al. (2015)
+Bounds.aN_QC_b = -Params.Q_C_b + [0.58, 0.98];
 
-% Bounds.aN_QC_a = 1e-3 .* 10 .^ [-9, -7.4] / Params.Q_C_a; % N affinity bounds from Edwards et al. (2015)
-% Bounds.aN_QC_b = -Params.Q_C_b + [0.58, 0.98];
+Bounds.pmax_a = [0.5, 5];
+Bounds.pmax_b = [-0.5, 0];
 
-% try these more restrictive bounds for affinity -- I think the above provided too much freedom...
-Bounds.aN_QC_a = Params.Vmax_QC_a ./ [10^-0.44, 10^-1.2]; % N affinity bounds from Edwards et al. (2015)
-Bounds.aN_QC_b = Params.Vmax_QC_b -[0.45, 0.24];
+Bounds.Gmax_a = [5, 35];
+Bounds.Gmax_b = [-0.5, 0];
 
-
-% Bounds.pmax_a = [1.8, 24];  % pmax bounds guessed from mu_inf CIs given in Ward (2017)
-Bounds.pmax_a = [5, 100];
-% Bounds.pmax_b = [-0.7, -0.09];
-Bounds.pmax_b = [-0.7, 0];
-
-Bounds.Gmax_a = [0, 100];
-Bounds.Gmax_b = [-3, 0];
-% Bounds.k_G_a = [0, 10];
-% Bounds.k_G_b = [0, 1];
-
-Bounds.m_a = [FixedParams.m_min, 0.1];
+Bounds.m_a = [2 .* FixedParams.m_min, 0.1]; % if m_a=m_min then m_b becomes totally irrelevant => set lower bound of m_a > m_min
 Bounds.m_b = [-1, 0]; % negativity ensures that mortality rate decreases with size
 
 Bounds.beta1 = [0.5, 1];
@@ -409,13 +420,11 @@ end
 %% auxiliarly functions
 % Sphere diameter & volume conversions
 function vol = d2vol(d)
-vol = 4 ./ 3 .* pi .* (0.5 .* d) .^ 3;
+vol = 1 ./ 6 .* pi .* d .^ 3;
 end
-
-% function d = vol2d(vol)
-% d = 2 .* (vol .* (3 ./ 4 ./ pi)) .^ (1/3);
-% end
+% d2vol = @(z) 1 ./ 6 .* pi .* z .^ 3;
 
 function y = powerFunction(a,b,x)
 y = a .* x .^ b;
 end
+% powerFunction = @(a,b,x) a .* x .^ b;

@@ -71,7 +71,14 @@ out.Qstat = 1 - out.gammaN .^ params.h;
 out.gammaT = exp(params.A .* (T - params.Tref));
 
 % Background mortality
-out.mortality = params.m .* B;
+% out.mortality = params.m .* B;
+out.mortality = (params.m + params.m2 .* B) .* B;
+if isfield(params, 'K_m') && any(params.K_m > 0)
+    % hyperbolic term reduces mortality at very low abundance
+    out.mortality = (B ./ (params.K_m + B)) .* out.mortality;
+end
+    
+
 
 %~~~~~~~~~~~
 % Autotrophy
@@ -215,7 +222,8 @@ if (islogical(returnExtra) && returnExtra) || ...
         (~islogical(returnExtra) && ~any(strcmp(returnExtra, 'none')))
     
     out.cellDensity = B_C ./ params.Q_C;
-    out.biovolume = 1e-18 * fixedParams.sizeAll .* out.cellDensity;
+    out.biovolume = fixedParams.sizeAll .* out.cellDensity;
+%     out.biovolume = 1e-18 * fixedParams.sizeAll .* out.cellDensity;
 
     % Extra output variables retained by default when return = true or 'all'.
     keepVars = {'I', 'Q', 'V', 'G', 'lambda', 'cellDensity', 'biovolume'};
@@ -223,7 +231,7 @@ if (islogical(returnExtra) && returnExtra) || ...
     % with memory by only returning a few terms then deriving more extra
     % output outside this ODEs.m function.
     
-    if ~islogical(returnExtra) && ~all(strcmp(returnExtra, 'all'))
+    if ~islogical(returnExtra) && ~any(strcmp(returnExtra, 'all'))
         % if extra output variables have been specified explicitly...
         keepVars = returnExtra;
     end

@@ -36,11 +36,12 @@ display(Directories)
 % Parameters may be modified using name-value pairs in updateParameters.m
 % Params = updateParameters(Params, FixedParams, 'pmax_a', 20, 'aP', 0.01);
 
-%% Integrate
+% Input data (forcing trajectories and fitting data) may be filtered by the
+% origin of particle trajectories (Atlantic or Arctic)
+[Forc, Data] = filterInputByOrigin(Forc, Data, 'fitTrajectories', 'Atlantic');
 
-% Parallelise integrations over trajectories
-poolObj = gcp('nocreate');
-if isempty(poolObj), poolObj = parpool('SpmdEnabled', false); end
+
+%% Integrate
 
 % Initialise state variables.
 % Store state variables in array v0: 1st dimension = variable
@@ -53,6 +54,10 @@ v0 = initialiseVariables(FixedParams, Params, Forc);
 %                      organic matter      [type, depth, nutrient]
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+% Parallelise integrations over trajectories
+poolObj = gcp('nocreate');
+if isempty(poolObj), poolObj = parpool('SpmdEnabled', false); end
+
 % Run the model
 tic; disp('.. started at'); disp(datetime('now'))
 [out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, ... 
@@ -61,8 +66,4 @@ toc
 
 display(out)
 display(auxVars)
-
-
-
-
 

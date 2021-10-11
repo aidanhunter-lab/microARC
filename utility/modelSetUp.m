@@ -11,6 +11,17 @@ function [Forc, FixedParams, Params, Data] = modelSetUp(Directories, varargin)
 % Params      = model parameters that MAY be tuned.
 % Data        = observed data included in cost function to tune parameters.
 
+% Plots may be generated as extra output by setting as true any of the
+% following optional arguments coded in varargin as name-value pairs...
+% 'plotCellConcSpectra'
+% 'plotBioVolSpectra'
+% 'plotSizeClassIntervals'
+% 'trajectoryPlot'
+% 'dendrogramPlot'
+% 'plotScalarData'
+% 'plotSizeData'
+% 'plotAllData'
+
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -94,9 +105,6 @@ if ~exist('ESD1', 'var')
 end
 
 
-% Use the same size classes for autotrophs and heterotrophs to ensure that
-% grazing pressure is unbiased across sizes
-
 % Initialise model parameters.
 % Values can be modified in defaultParameters.m, which is called from
 % within initialiseParameters.m.
@@ -126,8 +134,7 @@ nsizes = FixedParams.nPP_size;
     'datFull', Data.sizeFull, 'nsizes', nsizes, 'FixedParams', FixedParams, ...
     'plotSizeClassIntervals', plotSizeClassIntervals);
 
-% Choose data types to use in cost function - I think bio-volume is the
-% best choice for the size data
+% Choose data types to use in cost function
 if ~exist('scalarFittingData', 'var')
     scalarFittingData = {'N','chl_a','PON','POC'};
 end
@@ -144,9 +151,9 @@ clear sizeData
 
 % Interpolate forcing data over modelled depth layers, and combine multiple
 % years of forcing data into a single structure using prepareForcing.m.
-% A few extra useful metrics are also calculated here.
+% An extra few useful metrics are also calculated here.
 Forc = prepareForcing(F,FixedParams);
-clear F
+% clear F
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -157,8 +164,26 @@ clear F
 % standardises data, filters out unrequired data, and derives a few useful
 % metrics.
 
-% Remove fitting-data samples from below the maximum modelled depth
-Data = omitDeepSamples(Data, FixedParams);
+% Remove fitting-data samples from below the maximum modelled depth.
+% Optional arguments may be included to omit samples from below selected depths.
+
+% Chlorophyll samples from deep water cannot be replicated by the model
+% unless modelled plankton sink -- light does not penetrate deeply enough 
+% to permit growth and diffusion is too weak. Unless plankton sinking is
+% modelled then the deep water chlorophyll samples should probabaly not be 
+% used when fitting model parameters.
+if ~exist('chlSampleDepthLimit', 'var')
+    chlSampleDepthLimit = 100; % By default exclude chl samples from depths >= 100
+end
+
+Data = omitDeepSamples(Data, FixedParams, ...
+    'chlSampleDepthLimit', chlSampleDepthLimit);
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% THIS CODE SECTION IS NOT ROBUST SO ANY CHANGES TO WHICH YEARS OF DATA ARE
+% USED WILL NEED TO BE MADE WITH CARE, BEARING IN MIND THAT SUBSEQUENT CODE
+% SECTIONS WILL BE AFFECTED, E.G., THE COST FUNCTION...
 
 % Select which year(s) to model and filter out unused data.
 % Function selectYears.m automatically chooses which year(s) to use based
@@ -167,11 +192,60 @@ Data = omitDeepSamples(Data, FixedParams);
 % Run model over a single year? If false, then multiple years of forcing 
 % data MAY be used depending on fitting-data availability
 if ~exist('useSingleYear', 'var'), useSingleYear = true; end
-% There are 2 size spectra for 2018 -- use only the Polarstern samples if true
+% In 2018 there are size spectra from 2 cruises --
+% if useSingleSizeSpectra = true then use only the Polarstern samples
 if ~exist('useSingleSizeSpectra', 'var'), useSingleSizeSpectra = true; end
 
 [Data, Forc, FixedParams] = selectYears(Data, Forc, FixedParams, ... 
     'singleYear', useSingleYear, 'singleSpectra', useSingleSizeSpectra);
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+% If forcing data have not already been grouped by particle origin (Arctic
+% or Atlantic) then assign each particle to a group. This is time-consuming
+% when using lots of particles, so the function is run once and the output
+% saved.
+
+for ii = 1:length(Forc.years)
+    year = Forc.years(ii);
+    fileName = ['particleGroupings_' num2str(year) '.mat'];
+    loadGroups = exist(fileName, 'file');
+    if loadGroups
+        loadedGroups = load(fullfile(forcDir,fileName));
+        particleGrouping = loadedGroups.particleGrouping;
+    end
+    match = length(Forc.iTraj) == height(particleGrouping); % do loaded values match forcing data?
+    
+    if loadGroups && match
+        Forc.waterMass = particleGrouping.waterMass';
+    else
+        warning('The particleOrigin.m function has been called to group all forcing data particles as either Arctic or Atlantic origin. This time-consuming function should only need called once per set of forcing data as the outputs are saved and re-used. This warning should only appear the 1st time modelSetUp.m is called for a new set of forcing data, otherwise there may be some problem.')
+        
+        if ~exist('trajectoryPlot', 'var')
+            trajectoryPlot = false;
+        end
+        if ~exist('dendrogramPlot', 'var')
+            dendrogramPlot = false;
+        end
+
+        Forc = particleOrigin(Forc, 'trajectoryPlot', trajectoryPlot, ... 
+            'dendrogramPlot', dendrogramPlot, 'progressBar', true); pause(0.25)
+        
+        % Extract and save water mass groupings so they may simply be
+        % loaded next time modelSetUp.m is called.
+        
+        particleGrouping = table(repmat(year, [Forc.nTraj, 1]), (1:Forc.nTraj)', Forc.waterMass(:), ...
+            'VariableNames', {'year','traj','waterMass'});
+        
+        save(fullfile(forcDir, fileName), 'particleGrouping')
+        
+    end
+
+end
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 % There are lots of forcing data particle trajectories -- far too many to
 % include within a parameter optimisation procedure, so these need to be
@@ -183,14 +257,6 @@ if ~exist('useSingleSizeSpectra', 'var'), useSingleSizeSpectra = true; end
 if ~exist('maxDist', 'var')
     maxDist = 25;
 end
-% Number of trajectories per sample event (duplicates may be required for 
-% some events, depending on maxDist).
-if ~exist('numTraj', 'var')
-    numTraj = 10;
-end
-
-[Forc_, eventTraj] = chooseTrajectories(Forc, Data.scalar, maxDist, numTraj);
-
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % The choice of maxDist is important. If maxDist is very large then the 
 % trajectories ascribed to each sampling event will correspond poorly to
@@ -202,20 +268,33 @@ end
 % small...
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+% Number of trajectories per sample event (duplicates may be required for 
+% some events, depending on maxDist).
+if exist('numTraj', 'var')
+    % numTrajDefault is used, in the first instance, to filter particle
+    % trajectories while retaining sufficient (at least 10) trajectories
+    % per sample event to determine the water mass origin of each sample.
+    % Then, after water mass origin (Arctic/Atlantic/Arctic&Atlantic) is
+    % determined, we re-filter to retain numTraj trajectories per sample.
+    % This roundabout method is important because if numTraj=1 (which is
+    % good for parameter optimisation efficiency) then samples at the
+    % water mass boundaries are described as EITHER Arctic OR Atlantic,
+    % which is dodgy because a sample may, in reality, be from Arctic water
+    % while the nearest trajectory originated from the Atlantic, and we
+    % cannot tell which samples are boundary cases from single trajecories.
+    numTrajDefault = max(eval('numTraj'), 10);
+else
+    numTraj = 10;
+    numTrajDefault = 10;
+end
+
+[Forc_, eventTraj] = chooseTrajectories(Forc, Data.scalar, maxDist, numTrajDefault, ...
+    'displayWarnings', false);
 % Observe any warnings produced by chooseTrajectories.m and use the table
-% 'eventTraj' to help evaluate choice of maxDist and numTraj: if happy then
-% set Forc = Forc_, otherwise reselect maxDist and numTraj and repeat
-% chooseTrajectories.m
-Forc = Forc_; clear Forc_
+% 'eventTraj' to help evaluate choice of maxDist and numTraj.
 
 % Omit data from any sampling events not matched with a set of trajectories
-Data = omitUnmatchedEvents(Data, eventTraj, Forc);
-% [Data, eventTraj] = omitUnmatchedEvents(Data, eventTraj, Forc);
-
-% % For each trajectory, find the time of the latest sampling event.
-% % Integrations along trajectories can then be stopped at these events to
-% % reduce model run-times during parameter optimisation.
-% Forc = latestSampleTime(Forc, Data);
+Data_ = omitUnmatchedEvents(Data, eventTraj, Forc_);
 
 % Group sampling events by origin of particles: Arctic or Atlantic.
 % Each individual trajectory is either of Atlantic or Arctic origin
@@ -230,22 +309,52 @@ if ~exist('dendrogramPlot', 'var')
     dendrogramPlot = false;
 end
 
-% [Forc, Data.scalar] = particleOrigin(Forc, Data.scalar, ...
-%     'trajectoryPlot', trajectoryPlot, 'dendrogramPlot', dendrogramPlot); pause(0.25)
-[Forc, Data] = particleOrigin(Forc, Data, ...
+[~, Data_] = particleOrigin(Forc_, 'Data', Data_, ...
     'trajectoryPlot', trajectoryPlot, 'dendrogramPlot', dendrogramPlot); pause(0.25)
+% [Forc_, Data_] = particleOrigin(Forc_, 'Data', Data_, ...
+%     'trajectoryPlot', trajectoryPlot, 'dendrogramPlot', dendrogramPlot); pause(0.25)
+
+% Now that water mass origin has been determined for each sample (using
+% particle trajectories) re-filter to select numTraj particle trajectories
+% per sample.
+[Forc, eventTraj] = chooseTrajectories(Forc, Data.scalar, maxDist, numTraj);
+
+% Omit data from any sampling events not matched with a set of trajectories
+Data = omitUnmatchedEvents(Data, eventTraj, Forc);
+
+% This code section is a bit messy because it was a quick-fix to sort out
+% issues with ascribing water mass origins to sample events when using a
+% single particle trajctory per event -- it could be improved...
+Data.scalar.waterMass = Data_.scalar.waterMass;
+Data.scalar.AtlanticOrigin = Data_.scalar.AtlanticOrigin;
+Data.scalar.ArcticOrigin = Data_.scalar.ArcticOrigin;
+
+Data.sizeFull.waterMass = Data_.sizeFull.waterMass;
+Data.sizeFull.AtlanticOrigin = Data_.sizeFull.AtlanticOrigin;
+Data.sizeFull.ArcticOrigin = Data_.sizeFull.ArcticOrigin;
+
+Data.sizeFull.dataBinned.waterMass = Data_.sizeFull.dataBinned.waterMass;
+Data.sizeFull.dataBinned.AtlanticOrigin = Data_.sizeFull.dataBinned.AtlanticOrigin;
+Data.sizeFull.dataBinned.ArcticOrigin = Data_.sizeFull.dataBinned.ArcticOrigin;
+
+% Forc.waterMass = Forc_.waterMass(ismember(Forc_.iTraj, Forc.iTraj));
+
+clear Forc_ Data_
 
 
 % Group size data by water origin -- find average spectra using
 % measurements from events whose trajectories all orginate from either the
 % Arctic or the Atlantic
-Data = sizeDataOrigin(Data);
+if ~exist('avFun_sizeSpectra', 'var')
+    avFun_sizeSpectra = @geomean; % by default find averages of multiple size spectra using geometric means
+end
+
+Data = sizeDataOrigin(Data, 'avFun', avFun_sizeSpectra);
 
 % For each trajectory, find the time of the latest sampling event.
 % Integrations along trajectories can then be stopped at these events to
 % reduce model run-times during parameter optimisation.
 Forc = latestSampleTime(Forc, Data);
-
 
 % Standardise the fitting data using linear mixed models to adjust for
 % variability due to depth and sampling event.
@@ -259,8 +368,15 @@ if ~exist('plotAllData', 'var')
     plotAllData = false;
 end
 
+if isfield(FixedParams,'NclineDepth')
+    NclineDepth = FixedParams.NclineDepth;
+else
+    NclineDepth = [];
+end
+
 Data = standardiseFittingData(Data, ...
-    'plotScalarData', plotScalarData, 'plotSizeData', plotSizeData, 'plotAllData', plotAllData);
+    'plotScalarData', plotScalarData, 'plotSizeData', plotSizeData, ...
+    'plotAllData', plotAllData, 'NclineDepth', NclineDepth);
 
 % Include extra fields indexing sorted order of data -- convenience for
 % plotting

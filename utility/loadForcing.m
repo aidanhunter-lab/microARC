@@ -11,8 +11,6 @@ end
 switch lower(forcModel)
     case 'sinmod' % for SINMOD forcing
         bioForcing = {'NO3', 'PS', 'PL'};
-    case 'biomas' % for BIOMAS forcing
-        bioForcing = {'NO3', 'Si', 'PS', 'PL', 'ZS', 'ZL', 'ZP'};
 end
 
 % Loop over selected years to load forcing data files
@@ -44,7 +42,6 @@ for iy = 1:length(years)
     if  isempty(useTraj)
         % no specific trajectories seleced => use all
         iTraj = 1:nTraj;
-%         iTraj = uint32(1:nTraj);
     else
         iSel = false(1,nTraj);
         if  sum(useTraj>0)>0
@@ -52,7 +49,6 @@ for iy = 1:length(years)
             iSel(useTraj(useTraj>0 & useTraj<=nTraj)) = true;
         end
         iTraj = find(iSel); % convert logical mask into index vector
-%         iTraj = uint32(find(iSel)); % convert logical mask into index vector
     end
 
     % filter forcing data

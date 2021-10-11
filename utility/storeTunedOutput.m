@@ -15,14 +15,36 @@ switch optimiser
             J = J(i);
         end
         
+%         for i = 1:length(FixedParams.tunePars)
+%             % Convert from parameter search space to natural space
+%             pn = FixedParams.tunePars{i};
+%             func = FixedParams.tuneParsInvTransform.(pn);
+%             populationhistory(:,i,:) = func(populationhistory(:,i,:));
+%         end
+        
+
         optPar = populationhistory(I,:,J);
+        optPar_raw = nan(size(optPar)); % parameter output on natural scale (rather than search-space scale)
+        
+        % The 'output' struct stores parameter info on search-space scale
+        % so that it may easily be used to restart an optimisation from
+        % prior run.
+        % The only fields where parameter are stored in their natural scale
+        % are optPar and optPar_summary.
+        for i = 1:length(optPar)
+            % Convert from parameter search space to natural space
+            pn = FixedParams.tunePars{i};
+            func = FixedParams.tuneParsInvTransform.(pn);
+            optPar_raw(i) = func(optPar(i));
+        end
         
         output.parNames = FixedParams.tunePars;
-        output.lowerBound = FixedParams.tunePars_lb;
-        output.upperBound = FixedParams.tunePars_ub;
-        output.optPar = optPar;
-        output.optPar_summary = table(output.parNames', output.lowerBound', ...
-            output.optPar', output.upperBound');
+        output.lowerBound = optimiserOptions.InitialPopulationRange(1,:);
+        output.upperBound = optimiserOptions.InitialPopulationRange(2,:);
+        output.optPar_searchSpace = optPar;
+        output.optPar = optPar_raw;
+        output.optPar_summary = table(output.parNames', FixedParams.tunePars_lb', ...
+            output.optPar', FixedParams.tunePars_ub');
         output.optPar_summary.Properties.VariableNames = {'par','lower','opt','upper'};
         output.populationHistory = populationhistory;
         output.scoreHistory = costhistory;

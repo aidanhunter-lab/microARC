@@ -60,9 +60,8 @@ stationList = 'PS114_station_list.csv';
 
 dat = readtable(fullfile(obsDir,nutrientObsFile), 'Format', 'auto');
 stations = readtable(fullfile(obsDir,stationList), 'Format', 'auto');
-% There is no date provided in dat(!), so need to combine table of
-% sampling station data with table of measurements... but the formating is
-% inconsistent...
+% There is no date provided in dat, so need to combine table of sampling 
+% station data with table of measurements, but the formating is inconsistent...
 dat.Label = join([dat.Cruise, dat.Station], '/');
 dat.Label = strrep(dat.Label, '_', '-');
 stations.Properties.VariableNames{'Station'} = 'Label';
@@ -287,9 +286,7 @@ dat_size = readtable(fullfile(obsDir, sizeSpectraObsFile), 'Format', 'auto');
 % A selection of cell size -> N conversions are contained in these data.
 % Although the different conversions produce nitrogen size-spectra of
 % similar shape, there is some substantial variation in magnitudes
-% (especially at small and large cell sizes). So maybe we should
-% use the measured cell densities in our cost function rather than the
-% nitrogen densities...
+% (especially at small and large cell sizes).
 varNames = dat_size.Properties.VariableNames;
 varNames = varNames(contains(varNames, 'NperCell'));
 ne = length(varNames);
@@ -301,18 +298,21 @@ end
 
 % Convert units of original data into units used in model (keep all
 % elemental concentrations in mmol)
-dat_size.cellDensity = 1e3 * dat_size.cellDensity; % cells/L -> cells/m^3
-dat_size.cellDensitySD = 1e3 * dat_size.cellDensitySD; % cells/L -> cells/m^3
-dat_size.cellDensitySE = 1e3 * dat_size.cellDensitySE; % cells/L -> cells/m^3
-dat_size.cellDensityCImin = 1e3 * dat_size.cellDensityCImin; % cells/L -> cells/m^3
-dat_size.cellDensityCImax = 1e3 * dat_size.cellDensityCImax; % cells/L -> cells/m^3
+dat_size.cellDensity = 1e3 * dat_size.cellDensity; % cells/L/log10(ESD) -> cells/m^3/log10(ESD)
+dat_size.cellDensitySD = 1e3 * dat_size.cellDensitySD; % cells/L/log10(ESD) -> cells/m^3/log10(ESD)
+dat_size.cellDensitySE = 1e3 * dat_size.cellDensitySE; % cells/L/log10(ESD) -> cells/m^3/log10(ESD)
+dat_size.cellDensityCImin = 1e3 * dat_size.cellDensityCImin; % cells/L/log10(ESD) -> cells/m^3/log10(ESD)
+dat_size.cellDensityCImax = 1e3 * dat_size.cellDensityCImax; % cells/L/log10(ESD) -> cells/m^3/log10(ESD)
 for i = 1:ne
     % nitrogen per cell: pg N / cell -> mmol N / cell
     dat_size.(['NperCell_' NsizeEqs{i}]) = ... 
         (1/14) * 1e-9 * dat_size.(['NperCell_' NsizeEqs{i}]);
 end
 
-dat_size.BioVolDensity = 1e-18 * dat_size.cellVolume .* dat_size.cellDensity; % m^3 / m^3
+% Derive bio-volume variable
+scaleFactor = 1; % may alter biovolume density units using scaleFactor... scaleFactor = 1 => units = (mu m)^3 / m^3 /log10(ESD)
+dat_size.BioVolDensity = scaleFactor .* dat_size.cellVolume .* dat_size.cellDensity;
+dat_size.BioVolDensitySD = abs(scaleFactor .* dat_size.cellVolume) .* dat_size.cellDensitySD;
 
 for i = 1:ne
     % nitrogen density: mug N / L -> mmol N / m^3
@@ -327,7 +327,7 @@ dat_size.Ndensity = mean(dat_size{:,strcat('Ndensity_', NsizeEqs)}, 2);
 % Remove unnecessary variables
 % scenarios = unique(dat_size.scenario)'; % data collected from different cruises/years
 keepVars = [{'scenario', 'season', 'regime', 'trophicLevel', 'ESD', 'cellVolume', ...
-    'cellDensity', 'cellDensitySD', 'BioVolDensity'}, strcat('Ndensity_', NsizeEqs), 'Ndensity'];
+    'cellDensity', 'cellDensitySD', 'BioVolDensity', 'BioVolDensitySD'}, strcat('Ndensity_', NsizeEqs), 'Ndensity'];
 dat_size = dat_size(:,keepVars);
 
 
@@ -341,8 +341,8 @@ dat_size_all = readtable(fullfile(obsDir, sizeSpectraObsFile), 'Format', 'auto')
 
 % Convert units of original data into units used in model (keep all
 % elemental concentrations in mmol)
-dat_size_all.cellDensity = 1e3 * dat_size_all.cellDensity; % cells/L -> cells/m^3
-dat_size_all.BioVolDensity = 1e-18 * dat_size_all.cellVol .* dat_size_all.cellDensity; % m^3 / m^3
+dat_size_all.cellDensity = 1e3 * dat_size_all.cellDensity; % cells/L/log10(ESD) -> cells/m^3/log10(ESD)
+dat_size_all.BioVolDensity = scaleFactor * dat_size_all.cellVol .* dat_size_all.cellDensity; % (mu m)^3 / m^3 / log10(ESD) if scaleFactor = 1
 
 % Reformat labels
 dat_size_all.Properties.VariableNames({'PangaeaEventLabel','depth','lat','long','date'}) = ...
@@ -374,34 +374,26 @@ dat_size_all.Yearday = yearday(dat_size_all.t);
 
 
 cruises = unique(dat_size_all.cruise, 'stable'); % data collected from different cruises/years
-% N = length(cruises);
+
 nutrition = unique(dat_size_all.nutrition, 'stable');
 
 
-% keepVars = [{'scenario', 'season', 'regime', 'ESD', 'cellVolume', ...
-%     'cellDensity', 'cellDensitySD', 'BioVolDensity'}, strcat('Ndensity_', NsizeEqs), 'Ndensity'];
-% dat_size_all = dat_size_all(:,keepVars);
-
-% cols = [[1 0 0]; [0 1 0]; [0 0 1]; ...
-%     [1 0 1]; [1 1 0]; [0 1 1]]; 
-% cols = cols(1:N,:); % plotting colours for different cruises
-
-
-% v = reshape(varargin, [2 0.5*length(varargin)]);
-
 %~~~
 % optional plots
-plotCellConcSpectra = exist('plotCellConcSpectra', 'var') && plotCellConcSpectra;
-plotBioVolSpectra = exist('plotBioVolSpectra', 'var') && plotBioVolSpectra;
-plotNconcSpectra = exist('plotNconcSpectra', 'var') && plotNconcSpectra;
-
-% makePlots = table(plotNconcSpectra, plotCellConcSpectra, plotBioVolSpectra);
-% makePlots.Properties.VariableNames = {'Ndensity', 'cellDensity', 'BioVolDensity'};
+if ~exist('plotCellConcSpectra', 'var')
+    plotCellConcSpectra = false;
+end
+if ~exist('plotBioVolSpectra', 'var')
+    plotBioVolSpectra = false;
+end
+if ~exist('plotNconcSpectra', 'var')
+    plotNconcSpectra = false;
+end
 
 makePlots = table();
-if plotNconcSpectra, makePlots.Ndensity = true; end
-if plotCellConcSpectra, makePlots.cellDensity = true; end
-if plotBioVolSpectra, makePlots.BioVolDensity = true; end
+switch plotNconcSpectra, case true ,makePlots.Ndensity = true; end
+switch plotCellConcSpectra, case true, makePlots.cellDensity = true; end
+switch plotBioVolSpectra, case true, makePlots.BioVolDensity = true; end
 
 cluster = unique(dat_size_all.cluster);
 cols = [[0 0 1]; [1 0 0]]; % Colour plot lines by water temperature
@@ -449,9 +441,9 @@ if ~isempty(makePlots)
                         yunit = 'cells m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
                         Title = 'Cell conc. density spectra: all sampling events';
                     case 'BioVolDensity'
-                        gc.YLim(1) = 1e-3 * 1e-6;
+                        gc.YLim(1) = min(d.cellVol);
                         ylab = 'bio vol density';
-                        yunit = 'm$^3\,$m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
+                        yunit = '$\mu$m$^3\,$m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
                         Title = 'Bio-volume density spectra: all sampling events';
                 end
                 gc.YLim(2) = 2 * max(dat_size_all.(pv));
@@ -517,9 +509,10 @@ if ~isempty(makePlots)
                         yunit = 'cells m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
                         Title = 'Cell conc. density spectra:  warm/cold regime averages';
                     case 'BioVolDensity'
-                        gc.YLim(1) = 1e-3 * 1e-6;
+                        gc.YLim(1) = min(d.cellVol);
+%                         gc.YLim(1) = 1e-3 * 1e-6;
                         ylab = 'bio vol density';
-                        yunit = 'm$^3\,$m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
+                        yunit = '$\mu$m$^3\,$m$^{-3}\,\log_{10}($ESD$/1\mu$m$)^{-1}$';
                         Title = 'Bio-volume density spectra:  warm/cold regime averages';
                 end
                 gc.YLim(2) = 2 * max(dat_size_all.(pv));
@@ -533,7 +526,7 @@ if ~isempty(makePlots)
                 end
                 
                 if ir == 1 && ic ==1
-                    lgd = legend(cluster, 'Location', 'northeast');
+                    lgd = legend(cluster, 'Location', 'south');
                     title(lgd, 'Regime')
                 end
 
@@ -542,7 +535,6 @@ if ~isempty(makePlots)
         end
         sgtitle(Title)
     end
-    
     
 end
 
