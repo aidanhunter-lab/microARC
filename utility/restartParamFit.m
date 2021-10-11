@@ -63,7 +63,7 @@ optimiserOptions.MaxGenerations = optimOptions.MaxGenerations;
 assignin('caller', 'results', results)
 assignin('caller', 'optimiserOptions', optimiserOptions)
 
-switch ni, case true
+switch ni, case false
     assignin('caller', 'v0', v0)
 end
 

@@ -9,6 +9,8 @@ end
 
 if ~exist('logScale', 'var')
     logScale = false; % log scale for plotted variable?
+else
+    logScale = eval('logScale');
 end
 
 if ~exist('scaleFactor', 'var')
@@ -25,6 +27,7 @@ if ~exist('ensurePositive', 'var')
         otherwise, ensurePositive = true; % interpolation can produce negative values which are reset
     end
 end
+if logScale, ensurePositive = false; end
 
 if ~exist('maxDepth', 'var')
     maxDepth = abs(fixedParams.zw(end)); % maximum depth to plot - if unspecified then defaults to maximum modelled depth
@@ -74,13 +77,14 @@ ntraj = length(traj);
 if ntraj > 1
     x = mean(x, ndims(x), 'omitnan'); % some trajectories may include NaNs from encountering shallow seafloors -- ignore these values when averaging over multiple trajectories
 end
+
+switch logScale, case true
+    x = log10(x);
+end
+
 F = griddedInterpolant(depth, time, x, smooth);
 Fsmooth = flip(F(depthGrid, timeGrid));
 if ensurePositive, Fsmooth(Fsmooth <= 0) = min(Fsmooth(Fsmooth > 0)); end
-
-switch logScale, case true
-    Fsmooth = log10(Fsmooth);
-end
 
 contourf(Fsmooth)
 
@@ -110,91 +114,4 @@ yticklabels(flip(yt))
 
 
 
-% switch var
-%     
-%     case 'forcing'
-%         
-%         plt = figure;
-%         plt.Units = 'inches';
-%         plt.Position = [0 0 8 9];
-%         
-%         % Temperature
-%         subplot(3,1,1)
-%         x = forcing.T(:,:,traj);
-%         if ntraj > 1
-%             x = mean(x, ndims(x));
-%         end
-%         F = griddedInterpolant(depth, time, x, smooth);
-%         
-%         Fsmooth = flip(F(depthGrid, timeGrid));
-% %         Fsmooth = flip(F(depthGrid, timeGrid));
-%         contourf(Fsmooth)
-%         cb = colorbar;
-%         cb.Label.String = '\circC';
-%         title('Temperature')
-%         ylabel('depth (m)')
-%         xticks(100:100:fixedParams.nt)
-%         xticklabels(yearday(forcing.t(100:100:fixedParams.nt,1)))
-%         
-%         yt = round(linspace(0,max(abs(depthGrid(:))),7), 2, 'significant');
-%         yticks(yt)
-%         yticklabels(flip(-yt))
-%         
-%         
-%         % Diffusivity
-%         subplot(3,1,2);
-%         x = forcing.K_center(:,:,traj);
-%         if ntraj > 1
-%             x = mean(x, ndims(x));
-%         end
-%         F = griddedInterpolant(depth, time, x, smooth);
-%         Fsmooth = flip(F(depthGrid, timeGrid));
-%         Fsmooth(Fsmooth <= 0) = min(Fsmooth(Fsmooth > 0));
-% %         Fsmooth(Fsmooth<=0) = nan;
-%         contourf(log10(Fsmooth))
-%         cb = colorbar;
-%         for ii = 1:length(cb.TickLabels), cb.TickLabels{ii} = string(round(10 ^ str2double(cb.TickLabels{ii}),2,'significant')); end
-%         cb.Label.String = 'm^2 day^{-1}';
-%         title('Diffusivity')
-%         ylabel('depth (m)')
-%         xticks(100:100:fixedParams.nt)
-%         xticklabels(yearday(forcing.t(100:100:fixedParams.nt,1)))
-%         
-%         yt = round(linspace(0,max(abs(depthGrid(:))),7), 2, 'significant');
-%         yticks(yt)
-%         yticklabels(flip(-yt))
-%         %                 set(gca,'colorscale','log')
-%         
-%         % PAR
-%         subplot(3,1,3)
-%         x = squeeze(auxVars.I(:,:,:,traj));
-%         if ntraj > 1
-%             x = mean(x, ndims(x), 'omitnan');
-%         end
-%         F = griddedInterpolant(depth, time, x, smooth);
-%         Fsmooth = flip(F(depthGrid, timeGrid));
-%         Fsmooth(Fsmooth <= 0) = min(Fsmooth(Fsmooth > 0));
-% %         Fsmooth(Fsmooth<=0) = nan;
-%         contourf(Fsmooth)
-%         cb = colorbar;
-%         cb.Label.String = '\muEin day^{-1} m^{-2}';
-%         title('PAR')
-%         xlabel('year-day')
-%         ylabel('depth (m)')
-%         xticks(100:100:fixedParams.nt)
-%         xticklabels(yearday(forcing.t(100:100:fixedParams.nt,1)))        
-%         yt = round(linspace(0,max(abs(depthGrid(:))),7), 2, 'significant');
-%         yticks(yt)
-%         yticklabels(flip(-yt))
-% %         yticks(linspace(0,abs(fixedParams.zw(end)),7))
-% %         yticklabels(linspace(fixedParams.zw(end),0,7))
-%         colormap plasma
-%         if exist('sampleEvent', 'var')
-%             sgtitle(['Sample event ' num2str(sampleEvent) ': ' waterOrigin ' origin'])
-%         else
-%             sgtitle([waterOrigin ' origin'])
-%         end
-%         
-        %----------------------------------------------------------
-        
         

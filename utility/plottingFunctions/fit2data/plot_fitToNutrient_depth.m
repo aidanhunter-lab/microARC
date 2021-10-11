@@ -101,6 +101,7 @@ allValues(~isnan(allValues) & allValues == 0) = nan;
 
 % Make boxplot
 bp = boxplot2(allValues, 'orientation', 'horizontal', 'barwidth', 0.7);
+
 % Asthetics
 for i = 1:size(allValues, 2)
     bp.out(i).Marker = '.';
@@ -112,6 +113,7 @@ for i = 1:size(allValues, 2) / 2
     bp.out(2*i).MarkerEdgeColor = colMod;
     bp.box(2*i-1).Color = colDat;
     bp.box(2*i).Color = colMod;
+    bp.box(2*i).MarkerFaceColor = colMod;
     bp.med(2*i-1).Color = [0 0 0];
     bp.med(2*i).Color = [0 0 0];
 end
