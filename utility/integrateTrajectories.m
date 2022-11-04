@@ -21,6 +21,9 @@ OM_index = FixedParams.OM_index;
 nTraj = Forc.nTraj;
 T = Forc.T;
 K = Forc.K;
+Y = Forc.y;
+TimeYD = yearday(Forc.t);
+
 PARsurf = Forc.PARsurf;
 deepens = Forc.deepens;
 infillDepth = Forc.infillDepth;
@@ -57,12 +60,18 @@ parfor i = 1:nTraj
     forcing.T = T(:,:,i);
     forcing.K = K(:,:,i);
     forcing.PARsurf = PARsurf(:,:,i);
+    
+    % also transfer t and y for calculation of day length and improved light  
+    forcing.lat = Y(:,i)';
+    forcing.yd = TimeYD(:,i)';
+
+    
     % Initial state
     v_in = v0(:,i);
     % Integrating method
     odeSolver = str2func(odeIntegrator);
     % Integrate step-wise between successive data points
-    for j = 2:nt
+    for j = 2:nt  % daily loop
         if j <= nt_traj(i)
             if deepens(:,j,i)
                 % Extract state variable types from input vector
@@ -79,6 +88,7 @@ parfor i = 1:nTraj
                 % Recombine the input vector
                 v_in = [N; P(:); Z(:); OM(:)];
             end
+           
             % Integrate
             sol = odeSolver(@(t, v_in) ODEs(t, v_in, parameterList, forcing, j, false), [0 1], v_in, odeOptions);
             % Store solutions each day (each forcing data time-step)

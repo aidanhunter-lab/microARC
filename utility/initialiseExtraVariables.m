@@ -8,6 +8,8 @@ nTraj = Forc.nTraj;
 forcing.T = Forc.T(:,:,1);
 forcing.K = Forc.K(:,:,1);
 forcing.PARsurf = Forc.PARsurf(:,:,1);
+forcing.lat = Forc.y(:,1)';
+forcing.yd = yearday(Forc.t(:,1)');
 
 [~, extraOutput] = ODEs(0, v0(:,1), parameterList, forcing, 2, returnExtra);
 
@@ -45,6 +47,8 @@ for i = 2:nTraj  % Loop through remaining trajectories
     forcing.T = Forc.T(:,:,i);
     forcing.K = Forc.K(:,:,i);
     forcing.PARsurf = Forc.PARsurf(:,:,i);
+    forcing.lat = Forc.y(:,i)';
+    forcing.yd = yearday(Forc.t(:,i)');
     [~, extraOutput] = ODEs(0, v0(:,i), parameterList, forcing, 2, returnExtra);
     extraOutput = structfun(@(x) x(:)', extraOutput, 'UniformOutput', false);
     AUXVARS(:,1,i) = struct2array(structfun(@(x) x(:)', extraOutput, ...
