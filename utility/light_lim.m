@@ -27,7 +27,8 @@ att     = att0 .* zw';
 att     = [0 cumsum(att(1:nz))];
 e(1,:)  = exp(-att(1:nz));
 e(2,:)  = exp(-att(2:nz+1));
-I       = max(Isurf,1e3) .* e; % low threshold is approx. 1e-2 muEin/s/m^2  
+I       = Isurf .* e;  
+% I       = max(Isurf,1e3) .* e; % low threshold is approx. 1e-2 muEin/s/m^2  
 
 % determine daylength
 dl      = daylen(lat*pi/180, yd);
@@ -38,22 +39,27 @@ fa      = 2 .* a_Chl ./ psat;
 % Convert from daily mean (I) to mean daytime irradiance (mI)
 if dl>0
     mI = I / dl;
+%     dl_ = dl;
 else
     mI = I;
-    dl = 1; % this is for the back conversion from daytime mean to daily mean (see line 55)
+%     dl_ = 1; % this is for the back conversion from daytime mean to daily mean (see line 55)
 end
 
 % mI
 
 % NOTE, Ei( x) = -expint(-x), for real x > 0 
 % -->   Ei(-x) = -expint( x)  (?)  
-I_lim1  = 1 - ( expint(fa.* mI(2,:)) - expint(fa.* mI(1,:)) ) ./ (att0 .* zw' );
-I_lim2  = ( (1-exp(-fa.*mI(2,:)))./mI(2,:) - (1-exp(-fa.*mI(1,:)))./mI(1,:) ) ./ ( fa .* att0 .* zw' );
+% I_lim1  = 1 - ( expint(fa.* mI(2,:)) - expint(fa.* mI(1,:)) ) ./ (att0 .* zw' );
+% I_lim2  = ( (1-exp(-fa.*mI(2,:)))./mI(2,:) - (1-exp(-fa.*mI(1,:)))./mI(1,:) ) ./ ( fa .* att0 .* zw' );
+
+I_lim1  = dl .* (1 - (expint(dl .* fa.* mI(2,:)) - expint(dl .* fa.* mI(1,:))) ./ (att0 .* zw' ));
+I_lim2  = ((1-exp(-dl.*fa.*mI(2,:)))./mI(2,:) - (1-exp(-dl.*fa.*mI(1,:)))./mI(1,:)) ./ ( fa .* att0 .* zw' );
+I_lim = I_lim1 - I_lim2;
 
 % Since the I_lim1 and I_lim2 calculations represent daytime averages (means),  
 % we have to convert them back to daily means by multiplying with the daylength 
 % I_lim   = dl * (I_lim1 - I_lim2);
-I_lim   = max(2e-16, dl * (I_lim1 - I_lim2));   % 2e-16
+% I_lim   = max(2e-16, dl_ * (I_lim1 - I_lim2));   % 2e-16
 pc      = psat .* I_lim;
 
     % nested function
