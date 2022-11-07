@@ -54,7 +54,7 @@ end
 
 I_lim1  = dl .* (1 - (expint(dl .* fa.* mI(2,:)) - expint(dl .* fa.* mI(1,:))) ./ (att0 .* zw' ));
 I_lim2  = ((1-exp(-dl.*fa.*mI(2,:)))./mI(2,:) - (1-exp(-dl.*fa.*mI(1,:)))./mI(1,:)) ./ ( fa .* att0 .* zw' );
-I_lim = I_lim1 - I_lim2;
+I_lim = min(max(I_lim1 - I_lim2, 0), 1);
 
 % Since the I_lim1 and I_lim2 calculations represent daytime averages (means),  
 % we have to convert them back to daily means by multiplying with the daylength 
