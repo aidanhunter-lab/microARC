@@ -38,18 +38,24 @@ OM =reshape(v_in(fixedParams.OM_index), [nOM_type nz nOM_nut]);
 T = forc.T(:,timeStep-1:timeStep);
 K = forc.K(:,timeStep-1:timeStep);
 Isurf = forc.PARsurf(:,timeStep-1:timeStep);
+lat = forc.lat(:,timeStep-1:timeStep); % latitude
+yd  = forc.yd(:,timeStep-1:timeStep); % day of year (year day)
+
 
 % Linearly interpolate between days
 T = (T(:,1) + diff(T,1,2) .* t)';
 K = K(:,1) + diff(K,1,2) .* t;
 Isurf = (Isurf(:,1) + diff(Isurf,1,2) .* t)';
+lat = lat(1) + diff(lat) .* t;
+yd = yd(1) + diff(yd) .* t;
 
 % Calculate light levels at depth -- within each depth layer light
 % attenuates over half the layer width plus the combined widths of all
 % shallower layers.
-att = (fixedParams.attSW + fixedParams.attP .* sum(B(:,:,fixedParams.PP_Chl_index))) .* fixedParams.zwidth';
-att = 0.5 * att + [0 cumsum(att(1:nz-1))];
-out.I = Isurf * exp(-att);
+att0    = fixedParams.attSW + fixedParams.attP .* sum(B(:,:,fixedParams.PP_Chl_index)); 
+att     = att0 .* fixedParams.zwidth';
+att     = 0.5 * att + [0 cumsum(att(1:nz-1))];
+out.I   = Isurf * exp(-att);
 
 
 %% MODEL EQUATIONS
@@ -95,9 +101,19 @@ zeroLight = out.I(1) == 0;
 
 if ~zeroLight
     out.psat = params.pmax .* out.gammaT .* out.gammaN; % light saturated photosynthetic rate (N-dependent)
-    aP_Q_I = (params.aP .* out.I) .* out.Q(:,:,fixedParams.PP_Chl_index); % photon capture rate (Chl-dependent)
-    out.pc = out.psat .* (1 - exp(-aP_Q_I ./ out.psat)); % photosynthetic (carbon production) rate (1 / day)    
+    
+    %aP_Q_I = (params.aP .* out.I) .* out.Q(:,:,fixedParams.PP_Chl_index); % photon capture rate (Chl-dependent)
+    %out.pc = out.psat .* (1 - exp(-aP_Q_I ./ out.psat)); % photosynthetic (carbon production) rate (1 / day)  
+        
+    a_Chl = params.aP .* out.Q(:,:,fixedParams.PP_Chl_index); % Chl-dependent initial slope of photon capture rate (day * m^2 / μEinstein)
+    [out.pc, I_lim, dl] = light_lim(a_Chl, out.psat, Isurf, att0, lat, yd, fixedParams.zwidth); % pc = photosynthetic (carbon production) rate (1 / day), I_lim = light limitation (depth- and time averaged light limitation), and dl = daylength
+    
+    out.I_lim = I_lim; 
+    out.dl = dl;
+    
+    aP_Q_I  = a_Chl .* out.I; 
     out.rho = params.theta .* min(1, out.pc ./ aP_Q_I, 'includenan'); % proportion of new nitrogen prodcution diverted to chlorophyll (mg Chl / mmol N)
+    
     % The min function in rho should only be required to correct numerical
     % inaccuracies when I -> 0.
     out.V(:,:,fixedParams.PP_C_index) = max(0, ... 
@@ -108,6 +124,7 @@ end
 out.V(isnan(out.V)) = 0;
 
 out.uptake = B_C .* out.V;
+
 out.N_uptake_losses = sum(out.uptake(:,:,fixedParams.PP_N_index));
 
 
@@ -116,7 +133,7 @@ out.N_uptake_losses = sum(out.uptake(:,:,fixedParams.PP_N_index));
 %~~~~~~~~~~~~~
 
 phi_BC = params.phi .* reshape(B_C, [1 size(B_C)]);
-F = sum(phi_BC, 2);
+F = max(sum(phi_BC, 2),2e-30);  % sonst produziert exp funktion bei out.G -Inf werte die sich als NaNs durchziehen!
 phi_BC2 = phi_BC .^ 2;
 Phi = phi_BC2 ./ sum(phi_BC2, 2); % prey preference
 
@@ -142,7 +159,6 @@ out.predation_losses = reshape(out.predation_losses, [nsize, nz, nPP_nut]);
 out.predation_gains = [zeros(nPP_size, nz, nPP_nut);  
     reshape(sum(out.predation_gains_all, 2), [nZP_size, nz, nPP_nut])];  % sum over prey
 
-
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % Sources and sinks of organic matter
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -163,7 +179,7 @@ out.OM_mort(fixedParams.POM_index,:,:) = sum(out.mortality(:,:,~fixedParams.PP_C
 out.OM_remin = params.rOM .* OM;
 
 SOM = out.OM_mort + out.OM_mess - out.OM_remin; % (mmol / m^3 / day)
-
+  
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 % Sources of inorganic nutrients
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -182,10 +198,12 @@ v_diffuse = diffusion_1D([N(:), B_C_t, OM_], K, fixedParams.zwidth, fixedParams.
 
 N_diffuse = v_diffuse(:,1);
 B_diffuse = out.Q .* v_diffuse(:,2:nsize+1)';
+
 OM_diffuse = permute(reshape( ...
     v_diffuse(:,nsize+2:end), ...
     [nz, nOM_type, nOM_nut]), [2, 1, 3]);
 
+out.B_diffuse = B_diffuse; 
 
 %~~~~~~~~
 % Sinking
@@ -196,6 +214,8 @@ v_sink = sinking([B_C_t, OM_], [params.wp, params.wk], fixedParams.zwidth);
 B_sink = out.Q .* v_sink(:,1:nsize)';
 OM_sink = permute(reshape(v_sink(:,nsize+1:end), ... 
     [nz, nOM_type, nOM_nut]), [2, 1, 3]);
+
+out.B_sink = B_sink;
 
 %~~~~~
 % ODEs
@@ -226,7 +246,9 @@ if (islogical(returnExtra) && returnExtra) || ...
 %     out.biovolume = 1e-18 * fixedParams.sizeAll .* out.cellDensity;
 
     % Extra output variables retained by default when return = true or 'all'.
-    keepVars = {'I', 'Q', 'V', 'G', 'lambda', 'cellDensity', 'biovolume'};
+    keepVars = {'I', 'Q', 'V', 'G', 'lambda', 'cellDensity', 'biovolume', 'I_lim'};
+ %  keepVars = {'B_sink', 'B_diffuse', 'uptake', 'predation_losses', 'predation_gains', 'mortality'  }; 
+    keepVars = [keepVars, {'B_sink', 'B_diffuse', 'uptake', 'predation_losses', 'predation_gains', 'mortality', 'dl', 'pc'  } ]; 
     % Any term can be included in keepVars, but it's useful to be sparing
     % with memory by only returning a few terms then deriving more extra
     % output outside this ODEs.m function.

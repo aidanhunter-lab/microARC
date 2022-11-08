@@ -12,8 +12,9 @@ extractVarargin(varargin)
 nutrientObsFile = 'PS99_2_nutrients_rev.csv';
 
 dat = readtable(fullfile(obsDir,nutrientObsFile), 'Format', 'auto');
-date = split(dat.Date, 'T');
-dat.Date = date(:,1);
+% date = split(dat.Date, 'T');
+date = split(string(dat.Date), 'T');
+dat.Date = datetime(date(:,1));
 dat.Time = date(:,2);
 dat.Time = cellfun(@(x) x(1:5), dat.Time, 'UniformOutput', false); % omit the seconds
 dat.t = datenum(dat.Date);
