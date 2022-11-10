@@ -49,13 +49,19 @@ Isurf = (Isurf(:,1) + diff(Isurf,1,2) .* t)';
 lat = lat(1) + diff(lat) .* t;
 yd = yd(1) + diff(yd) .* t;
 
-% Calculate light levels at depth -- within each depth layer light
-% attenuates over half the layer width plus the combined widths of all
-% shallower layers.
+% % Calculate light levels at depth -- within each depth layer light
+% % attenuates over half the layer width plus the combined widths of all
+% % shallower layers.
+% att0    = fixedParams.attSW + fixedParams.attP .* sum(B(:,:,fixedParams.PP_Chl_index)); 
+% att     = att0 .* fixedParams.zwidth';
+% att     = 0.5 * att + [0 cumsum(att(1:nz-1))];
+% out.I   = Isurf * exp(-att); % irradiance at depth layer midpoints
+
+% Light attenuates exponentially with depth.
 att0    = fixedParams.attSW + fixedParams.attP .* sum(B(:,:,fixedParams.PP_Chl_index)); 
-att     = att0 .* fixedParams.zwidth';
-att     = 0.5 * att + [0 cumsum(att(1:nz-1))];
-out.I   = Isurf * exp(-att);
+att1 = att .* abs(fixedParams.zw(1:nz))';
+att2 = att .* abs(fixedParams.zw(2:nz+1))';
+out.I = Isurf ./ att0 ./ fixedParams.zwidth' .* (exp(-att1) - exp(-att2)); % irradiance averaged within depth layers
 
 
 %% MODEL EQUATIONS
@@ -106,10 +112,7 @@ if ~zeroLight
     %out.pc = out.psat .* (1 - exp(-aP_Q_I ./ out.psat)); % photosynthetic (carbon production) rate (1 / day)  
         
     a_Chl = params.aP .* out.Q(:,:,fixedParams.PP_Chl_index); % Chl-dependent initial slope of photon capture rate (day * m^2 / μEinstein)
-    [out.pc, I_lim, dl] = light_lim(a_Chl, out.psat, Isurf, att0, lat, yd, fixedParams.zwidth); % pc = photosynthetic (carbon production) rate (1 / day), I_lim = light limitation (depth- and time averaged light limitation), and dl = daylength
-    
-    out.I_lim = I_lim; 
-    out.dl = dl;
+    [out.pc, out.I_lim, out.dl] = light_lim(a_Chl, out.psat, Isurf, att0, lat, yd, fixedParams.zwidth); % pc = photosynthetic (carbon production) rate (1 / day), I_lim = light limitation (depth- and time averaged light limitation), and dl = daylength
     
     aP_Q_I  = a_Chl .* out.I; 
     out.rho = params.theta .* min(1, out.pc ./ aP_Q_I, 'includenan'); % proportion of new nitrogen prodcution diverted to chlorophyll (mg Chl / mmol N)
