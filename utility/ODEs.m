@@ -59,8 +59,8 @@ yd = yd(1) + diff(yd) .* t;
 
 % Light attenuates exponentially with depth.
 att0    = fixedParams.attSW + fixedParams.attP .* sum(B(:,:,fixedParams.PP_Chl_index)); 
-att1 = att .* abs(fixedParams.zw(1:nz))';
-att2 = att .* abs(fixedParams.zw(2:nz+1))';
+att1 = att0 .* abs(fixedParams.zw(1:nz))';
+att2 = att0 .* abs(fixedParams.zw(2:nz+1))';
 out.I = Isurf ./ att0 ./ fixedParams.zwidth' .* (exp(-att1) - exp(-att2)); % irradiance averaged within depth layers
 
 
