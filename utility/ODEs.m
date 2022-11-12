@@ -112,8 +112,9 @@ if ~zeroLight
     %out.pc = out.psat .* (1 - exp(-aP_Q_I ./ out.psat)); % photosynthetic (carbon production) rate (1 / day)  
         
     a_Chl = params.aP .* out.Q(:,:,fixedParams.PP_Chl_index); % Chl-dependent initial slope of photon capture rate (day * m^2 / μEinstein)
-    [out.pc, out.I_lim, out.dl] = light_lim(a_Chl, out.psat, Isurf, att0, lat, yd, fixedParams.zwidth); % pc = photosynthetic (carbon production) rate (1 / day), I_lim = light limitation (depth- and time averaged light limitation), and dl = daylength
     
+    [out.pc, out.I_lim, out.dl] = light_lim(a_Chl, out.psat, Isurf, att0, lat, yd, fixedParams.zwidth, 'dist', 'flat'); % pc = photosynthetic (carbon production) rate (1 / day), I_lim = light limitation (depth- and, optionally, time averaged), and dl = daylength
+  
     aP_Q_I  = a_Chl .* out.I; 
     out.rho = params.theta .* min(1, out.pc ./ aP_Q_I, 'includenan'); % proportion of new nitrogen prodcution diverted to chlorophyll (mg Chl / mmol N)
     
