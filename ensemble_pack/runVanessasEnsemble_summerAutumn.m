@@ -147,7 +147,9 @@ end
 % the respective columns in the LHC matrix! 
 
 % read LHC matrix
-LHS = load([Directories.resultsDir 'LHS_p32_2000.txt']) ;
+% LHS = load([Directories.resultsDir 'LHS_p32_2000.txt']) ;
+LHS = load(['ensemble_pack/LHS_p32_2000.txt']) ;
+
 
 ncol = size(LHS,2);
 % clone last two colomns for rDOC and rPOC
@@ -158,9 +160,9 @@ deltaP = Pmax - Pmin;
 Pensemble = Pmin + LHS .* deltaP;  % each row represents the parameter set for one ensemble member (2000 sets of 32+2 params)
 
 % save Pensemble:
-save [Directories.resultsDir 'parameterEnsemble2000.txt'] Pensemble -ascii
-
-
+%save [Directories.resultsDir 'parameterEnsemble2000.txt'] Pensemble -ascii
+fpath = fullfile(Directories.resultsDir, 'parameterEnsemble2000.txt');
+save(fpath, 'Pensemble', '-ascii')
 % preparation of ensemble parameter sets is now complete. 
 
 %% Run ensemble model
