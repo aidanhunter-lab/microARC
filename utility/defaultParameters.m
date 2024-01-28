@@ -138,8 +138,10 @@ Params.vectorParams = {
     'Vmax_QC_b'
     'aN_QC_a'
     'aN_QC_b'
-    'pmax_a'
-    'pmax_b'
+%    'pmax_a'
+%    'pmax_b'
+    'pinf_a'
+    'pinf_b'
     'Gmax_a'
     'Gmax_b'
     'm_a'
@@ -205,11 +207,21 @@ Params.aN_QC = [];
 Params.kN_func = @(Vmax_QC, aN_QC) Vmax_QC ./ aN_QC;
 Params.kN = [];
 
-% maximum photosynthetic rate [1/day]
-Params.pmax_func = @(a,b,V) powerFunction(a,b,V);
-Params.pmax_a = 2.5;
-Params.pmax_b = -0.15;
+% theoretical maximum photosynthetic rate [1/day]
+Params.pinf_func = @(a,b,V) powerFunction(a,b,V);
+Params.pinf_a = 4.7;
+Params.pinf_b = -0.26;
+Params.pinf = [];
+
+% maximum photosynthetic rate [1/day] -- unimodal function
+Params.pmax_func = @(pinf, Vmax_QC, Qmin_QC) pinf .* Vmax_QC ./ (pinf .* Qmin_QC + Vmax_QC);
 Params.pmax = [];
+
+% % maximum photosynthetic rate [1/day]
+% Params.pmax_func = @(a,b,V) powerFunction(a,b,V);
+% Params.pmax_a = 2.5;
+% Params.pmax_b = -0.15;
+% Params.pmax = [];
 
 % maximum grazing rate
 Params.Gmax_func = @(a,b,V) powerFunction(a,b,V);
@@ -390,8 +402,12 @@ Bounds.Vmax_QC_b = -Params.Q_C_b + [0.89, 1.06];
 Bounds.aN_QC_a = 1e-3 .* 10 .^ [-9, -7.4] / Params.Q_C_a; % N affinity bounds from Edwards et al. (2015)
 Bounds.aN_QC_b = -Params.Q_C_b + [0.58, 0.98];
 
-Bounds.pmax_a = [0.5, 5];
-Bounds.pmax_b = [-0.5, 0];
+% Bounds.pmax_a = [0.5, 5];
+% Bounds.pmax_b = [-0.5, 0];
+
+Bounds.pinf_a = [3.6, 12];
+Bounds.pinf_b = [-0.35, -0.18];
+
 
 Bounds.Gmax_a = [5, 35];
 Bounds.Gmax_b = [-0.5, 0];

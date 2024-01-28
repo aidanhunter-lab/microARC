@@ -44,6 +44,12 @@ if ~isempty(varargin)
             Params.kN = Params.kN_func(Params.Vmax_QC, Params.aN_QC);
         end
         
+        if any(strcmp('pinf_a', parnames)) || any(strcmp('pinf_b', parnames)) || ...
+                any(strcmp('Vmax_QC_a', parnames)) || any(strcmp('Vmax_QC_b', parnames)) || ...
+                any(strcmp('Qmin_QC_a', parnames)) || any(strcmp('Qmin_QC_b', parnames))
+            Params.pmax = Params.pmax_func(Params.pinf, Params.Vmax_QC, Params.Qmin_QC);
+        end
+
         if any(strcmp('rDOC', parnames)) || any(strcmp('rDON', parnames)) || ...
                 any(strcmp('rPOC', parnames)) || any(strcmp('rPON', parnames))
             if isfield(Params, 'rDOC_func')
@@ -134,6 +140,12 @@ if ~isempty(varargin)
             Params.kN = Params.kN_func(Params.Vmax_QC, Params.aN_QC);
         end
         
+        if exist('pinf_a', 'var') || exist('pinf_b', 'var') || ...
+                exist('Vmax_QC_a', 'var') || exist('Vmax_QC_b', 'var') || ...
+                exist('Qmin_QC_a', 'var') || exist('Qmin_QC_b', 'var')
+            Params.pmax = Params.pmax_func(Params.pinf, Params.Vmax_QC, Params.Qmin_QC);
+        end
+
         if exist('rDOC', 'var') || exist('rDON', 'var') || ... 
                 exist('rPOC', 'var') || exist('rPON', 'var')
             if isfield(Params, 'rDOC_func')
