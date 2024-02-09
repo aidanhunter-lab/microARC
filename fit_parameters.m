@@ -16,14 +16,17 @@ rng(1) % set random seed
 % Store folders/filenames of data and saved parameters.
 % Set parFileName = [] for default initial parameter values (hard-coded, 
 % not loaded) or parFileName = 'filename' to use saved values as the initials.
-parFileName = 'parameterInitialValues';
+parFileName = [];
+% parFileName = 'parameterInitialValues';
 parFileType = '.mat';
 % Identifying tag here is the name of cost function used to
 % generate saved parameters, and a string describing model set-up
 % (set tag=[] if unused).
-tag = '_RMS_Hellinger_ZPratio_Atlantic_final';
+tag = '_RMS_Hellinger_ZPratio_Atlantic_correctedDiffusion';
+% tag = '_RMS_Hellinger_ZPratio_Atlantic_final';
 % tag = '_RMS_Hellinger2_Atlantic_aG_sigG_upweightAbnTot';
-if ~isempty(parFileName), parFile = [parFileName tag parFileType]; else, ParFile = []; end
+
+if ~isempty(parFileName), parFile = [parFileName tag parFileType]; else, parFile = []; end
 
 Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
     'parFile', parFile);
@@ -100,14 +103,15 @@ v0 = initialiseVariables(FixedParams, Params, Forc);
 
 % Restart algorithm from a saved prior run?
 restartRun = true;
+% restartRun = false;
 switch restartRun, case true
     fileName_results = 'fittedParameters'; % saved parameters file name (and identifying tag should already be defined)
     fileType_results = '.mat';
     file_results = fullfile(Directories.resultsDir, ...
         [fileName_results tag fileType_results]);    
-    fp = false; % fp = true => restart using full population from prior run
+    fp = true; % fp = true => restart using full population from prior run
                 % fp = false => restart with best param set from prior run and otherwise random population
-    ni = true; % ni = true => use new v0 values generated (above) using loaded parameters
+    ni = false; % ni = true => use new v0 values generated (above) using loaded parameters
                % ni = false => use saved v0 values from previous optimisation run (v0 possibly generated using sub-optimal params)
     % Note: to avoid overwriting stucts Data, Forc, Params or
     % FixedParams generated above in model set-up, set to false the
@@ -172,7 +176,7 @@ fileName_results = 'fittedParameters';
 fileType_results = '.mat';
 % and identifying tag
 % tag = 'Atlantic_aG_sigG_upweightAbnTot';
-tag = 'Atlantic_final';
+tag = 'Atlantic_correctedDiffusion';
 tag = ['_' FixedParams.costFunction '_' tag];
 
 file_results = fullfile(Directories.resultsDir, ...

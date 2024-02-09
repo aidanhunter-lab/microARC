@@ -63,7 +63,8 @@ for iy = 1:length(years)
     F.(y_index).iceh  = forcing.iceh(:,iTraj);
     F.(y_index).swrad = forcing.swrad(:,iTraj);
     F.(y_index).T     = forcing.profiles.temp(:,iTraj,:);
-    F.(y_index).kv    = forcing.profiles.Ks(:,iTraj,:) * 0.0001; % cm2/s -> m2/s
+    F.(y_index).kv    = forcing.profiles.Ks(:,iTraj,:);
+%     F.(y_index).kv    = forcing.profiles.Ks(:,iTraj,:) * 0.0001; % cm2/s -> m2/s
     % The 'bioForcing' variables returned from SINMOD can be used to help
     % initialise the model
     for j = 1:length(bioForcing)
