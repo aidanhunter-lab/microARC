@@ -5,6 +5,16 @@ function [state,options,optchanged] = gaStoreHistory(options,state,flag)
 % algorithm.
 persistent history costHistory
 optchanged = false;
+% Save all ga output as it's produced -- useful for recovering optimisation
+% if computer crashes or some unexpected shutdown occurs
+saveOnTheFly = true;
+if saveOnTheFly
+    savepath = 'results';
+    filenamehist = 'populationHistory_savedOnTheFly.mat';
+    filenamecost = 'costHistory_savedOnTheFly.mat';
+    filepathhist = fullfile(savepath, filenamehist);
+    filepathcost = fullfile(savepath, filenamecost);
+end
 switch flag
     case 'init'
         history(:,:,1) = state.Population;
@@ -21,6 +31,10 @@ switch flag
             assignin('base','gapopulationhistory',history);
             assignin('base','gacosthistory',costHistory);
         end
+        if saveOnTheFly
+            save(filepathhist, history)
+            save(filepathcost, costHistory)
+        end
     case 'done'
         % Include the final population in the history.
         ss = size(history,3);
@@ -28,4 +42,8 @@ switch flag
         costHistory(:,ss+1) = state.Score;
         assignin('base','gapopulationhistory',history);
         assignin('base','gacosthistory',costHistory);
+        if saveOnTheFly
+            save(filepathhist, history)
+            save(filepathcost, costHistory)
+        end
 end

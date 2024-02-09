@@ -82,7 +82,7 @@ elseif strcmp(var, 'biovolume')
     elseif strcmp(plankton, 'zoo')
         mod = auxVars.biovolume(fixedParams.zooplankton,:,:,:);
     end
-    unit = 'm^3';
+    unit = 'µm^3';
 end
 % mod(sizeclass, depth, doy, itraj)
 
