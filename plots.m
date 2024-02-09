@@ -21,8 +21,10 @@ file_params = fullfile([fileName_params tag fileType_params]);
 
 if ~exist(file_params, 'file'), warning('file_params does not exist -- check file names in results directory.'), file_params = []; end
 
+% Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
+%     'parFile', file_params);
 Directories = setDirectories('bioModel', 'multiplePredatorClasses', ...
-    'parFile', file_params);
+    'parFile', []);
 display(Directories)
 
 % Load saved outputs from optimisation runs or choose default set-up
@@ -61,6 +63,50 @@ end
 % Run model over entire trajectories?
 Forc.integrateFullTrajectory = true;
 Forc0.integrateFullTrajectory = Forc.integrateFullTrajectory;
+
+Params.Tref
+Params.A
+Params.h
+Params.m2 = 0.05; % are code equations as they describe?
+Params.aP
+Params.theta
+Params.xi
+Params.aG
+Params.k_G = 2.75;
+Params.delta_opt
+Params.sigG
+Params.Lambda
+Params.lambda_max
+FixedParams.m_min
+Params.rDOC = 0.04;
+Params.rDON = 0.04;
+Params.rPOC
+Params.rPON
+Params.beta1
+Params.beta2
+Params.beta3
+Params.wPOM1 = 10;
+Params.Qmin_QC_a = 0.035;
+Params.Qmin_QC_b
+Params.m_a
+Params.m_b
+Params.Qmax_delQ_a
+Params.Qmax_delQ_b
+Params.Vmax_QC_a
+Params.Vmax_QC_b
+Params.aN_QC_a
+Params.aN_QC_b
+Params.Gmax_a = 11;
+Params.Gmax_b
+
+% Params.Vmax_QC_a = 1e-9 / 14 * 0.024 / Params.Q_C_a
+% Params.Vmax_QC_b = 1.1 - Params.Q_C_b
+
+% Params.Qmin_QC_a = 1e-9 / 14 * 0.032 / Params.Q_C_a;
+
+
+Params = updateParameters(Params, FixedParams, 'm2',0.05,'k_G',2.75,'rDOC',0.04,...
+    'rDON',0.04,'wPOM1',10,'Qmin_QC_a',0.035,'Gmax_a',11, 'Vmax_QC_b', 1.1 - Params.Q_C_b, 'Qmin_QC_a', 0.1423);
 
 % Initialise variables
 if ~exist('v0', 'var') || ~isnumeric(v0)
@@ -409,7 +455,9 @@ ph = pht - yex * pht;
 pwt = Pw / ncols;
 pw = pwt - xex * pwt;
 
+% depthLayer = mean([Data.size.dataBinned.DepthMin(1), Data.size.dataBinned.DepthMax(1)]);
 depthLayer = Data.size.dataBinned.Depth(1);
+% time = mean([Data.size.dataBinned.YeardayFirst(1), Data.size.dataBinned.YeardayLast(2)]);
 time = Data.size.dataBinned.Yearday(1);
 meanType = 'geometric';
 compare2data = true;
@@ -544,6 +592,14 @@ plot_trajectoryMap(Directories, Forc_, 'projection', projection, ...
     'highlightTraj', highlightTraj);
 
 % Plot the in-situ data
+plt_Map_base = figure; % store base map
+plt_Map_base = imshow(plt_Map);
+
+figure
+print(plt_Map_base)
+
+
+
 axes('position', [0.1, 0.12, 0.5, 0.5])
 
 alphaPoint = 0.5;
@@ -564,6 +620,7 @@ omitMapGrid = true; % do not plot map coords -- instead surround data points wit
 fullAreaPolygon = true; % draw polygon matching that used in the trajectory map
 polygonLineWidth = 3;
 
+
 plot_dataMap(Directories, Data0, 'projection', projection, ...
     'alphaPoint', alphaPoint, 'pointSize', pointSize, 'lonSpace', lonSpace, ... 
     'latSpace', latSpace, 'Forc', Forc_, ... 
@@ -581,6 +638,13 @@ switch savePlots, case true
     if exist('plt_Map', 'var') && isvalid(plt_Map)
         filename = 'map_shipDataAndTrajectories.png';
         print(plt_Map, fullfile(folder, filename), '-r300', '-dpng');
+
+        filename = 'map_shipDataAndTrajectories_res300.eps';
+        exportgraphics(plt_Map, fullfile(folder, filename), 'Resolution', 300)
+
+        filename = 'map_shipDataAndTrajectories.eps';
+        exportgraphics(plt_Map, fullfile(folder, filename), 'Resolution', 3000)
+
     end
 end
 

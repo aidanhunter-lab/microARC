@@ -254,25 +254,25 @@ if (isfield(Params, 'aN_QC_a') && isfield(Params, 'aN_QC_b')) && ...
     Params.aN_QC = Params.aN_QC_func(Params.aN_QC_a, Params.aN_QC_b, Vol);
 end
 
-if (isfield(Params, 'pinf_a') && isfield(Params, 'pinf_b')) && ...
-        ~(isempty(Params.pinf_a) || isempty(Params.pinf_b))
-    switch bioModel
-        case {'singlePredatorClass','multiplePredatorClasses'}
-            powerFunction = Params.pinf_func;
-            Params.pinf_func = @(a,b,V) powerFunction(a,b,V) .* phytoplankton; % heterotrophs may have positive pinf only when bioModel = 'mixotrophy'
-    end
-    Params.pinf = Params.pinf_func(Params.pinf_a, Params.pinf_b, Vol);
-end
-
-% if (isfield(Params, 'pmax_a') && isfield(Params, 'pmax_b')) && ...
-%         ~(isempty(Params.pmax_a) || isempty(Params.pmax_b))
+% if (isfield(Params, 'pinf_a') && isfield(Params, 'pinf_b')) && ...
+%         ~(isempty(Params.pinf_a) || isempty(Params.pinf_b))
 %     switch bioModel
 %         case {'singlePredatorClass','multiplePredatorClasses'}
-%             powerFunction = Params.pmax_func;
-%             Params.pmax_func = @(a,b,V) powerFunction(a,b,V) .* phytoplankton; % heterotrophs may have positive pmax only when bioModel = 'mixotrophy'
+%             powerFunction = Params.pinf_func;
+%             Params.pinf_func = @(a,b,V) powerFunction(a,b,V) .* phytoplankton; % heterotrophs may have positive pinf only when bioModel = 'mixotrophy'
 %     end
-%     Params.pmax = Params.pmax_func(Params.pmax_a, Params.pmax_b, Vol);
+%     Params.pinf = Params.pinf_func(Params.pinf_a, Params.pinf_b, Vol);
 % end
+
+if (isfield(Params, 'pmax_a') && isfield(Params, 'pmax_b')) && ...
+        ~(isempty(Params.pmax_a) || isempty(Params.pmax_b))
+    switch bioModel
+        case {'singlePredatorClass','multiplePredatorClasses'}
+            powerFunction = Params.pmax_func;
+            Params.pmax_func = @(a,b,V) powerFunction(a,b,V) .* phytoplankton; % heterotrophs may have positive pmax only when bioModel = 'mixotrophy'
+    end
+    Params.pmax = Params.pmax_func(Params.pmax_a, Params.pmax_b, Vol);
+end
 
 if (isfield(Params, 'Gmax_a') && isfield(Params, 'Gmax_b')) && ...
         ~(isempty(Params.Gmax_a) || isempty(Params.Gmax_b))
@@ -392,10 +392,15 @@ if (isfield(Params, 'Vmax_QC') && isfield(Params, 'aN_QC')) && ...
     Params.kN = Params.kN_func(Params.Vmax_QC, Params.aN_QC);
 end
 
-if (isfield(Params, 'pinf') && isfield(Params, 'Vmax_QC') && isfield(Params, 'Qmin_QC')) && ...
-        ~(isempty(Params.pinf) || isempty(Params.Vmax_QC) || isempty(Params.Qmin_QC))
-    Params.pmax = Params.pmax_func(Params.pinf, Params.Vmax_QC, Params.Qmin_QC);
+if (isfield(Params, 'pmax') && isfield(Params, 'Vmax_QC') && isfield(Params, 'Qmin_QC')) && ...
+        ~(isempty(Params.pmax) || isempty(Params.Vmax_QC) || isempty(Params.Qmin_QC))
+    Params.mu_max = Params.mu_max_func(Params.pmax, Params.Vmax_QC, Params.Qmin_QC);
 end
+
+% if (isfield(Params, 'pinf') && isfield(Params, 'Vmax_QC') && isfield(Params, 'Qmin_QC')) && ...
+%         ~(isempty(Params.pinf) || isempty(Params.Vmax_QC) || isempty(Params.Qmin_QC))
+%     Params.pmax = Params.pmax_func(Params.pinf, Params.Vmax_QC, Params.Qmin_QC);
+% end
 
 if (isfield(Params, 'Gmax_a') && isfield(Params, 'aG')) && ...
         ~(isempty(Params.Gmax_a) || isempty(Params.aG))
