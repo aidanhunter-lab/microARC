@@ -91,6 +91,10 @@ popSize = 100;
 % ([]) to optimise using all trajectories and fitting to size data that is
 % aggregated over all samples.
 
+% Create functions defining parameter constraints (for use in the genetic
+% algorithm, ga, function).
+Params = parameterConstraints(FixedParams, Params);
+
 % Store state variables in array v0: 1st dimension = variable
 %                                    2nd dimension = location (trajectory)
 v0 = initialiseVariables(FixedParams, Params, Forc);
@@ -102,16 +106,16 @@ v0 = initialiseVariables(FixedParams, Params, Forc);
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 % Restart algorithm from a saved prior run?
-restartRun = true;
-% restartRun = false;
+% restartRun = true;
+restartRun = false;
 switch restartRun, case true
     fileName_results = 'fittedParameters'; % saved parameters file name (and identifying tag should already be defined)
     fileType_results = '.mat';
     file_results = fullfile(Directories.resultsDir, ...
         [fileName_results tag fileType_results]);    
-    fp = true; % fp = true => restart using full population from prior run
+    fp = false; % fp = true => restart using full population from prior run
                 % fp = false => restart with best param set from prior run and otherwise random population
-    ni = false; % ni = true => use new v0 values generated (above) using loaded parameters
+    ni = true; % ni = true => use new v0 values generated (above) using loaded parameters
                % ni = false => use saved v0 values from previous optimisation run (v0 possibly generated using sub-optimal params)
     % Note: to avoid overwriting stucts Data, Forc, Params or
     % FixedParams generated above in model set-up, set to false the
@@ -127,14 +131,43 @@ poolObj = gcp('nocreate');
 if isempty(poolObj), poolObj = parpool('SpmdEnabled', false); end
 
 % Call optimiser
+
+% Non-linear constraints need to appear in argument after boundsUpper. This
+% argument must be a function accepting X as an argument and returning
+% vectors C and Ceq, where C(X) <= 0 and Ceq(X) = 0 define the constraints.
+ % Store these constraints in the Params struct.
+
 tic; disp('.. started at'); disp(datetime('now'))
 [optPar, fval, exitflag, output, population, scores] = optimise(@(x) ... 
     costCalc(x, FixedParams, Params, Forc, Data, v0, FixedParams.odeIntegrator, ...
     FixedParams.odeOptions, 'selectFunction', costFunctionType), ... 
-    npars, [], [], [], [], boundsLower, boundsUpper, [], optimiserOptions);
+    npars, [], [], [], [], boundsLower, boundsUpper, [], [], optimiserOptions);
 optimisationTime = toc / 60 / 60; disp('.. finished at'); disp(datetime('now')); fprintf('\n')
 disp(['Optimisation time: ' num2str(floor(optimisationTime)) ' hrs, ' ...
     num2str(floor(mod(60*optimisationTime,60))) ' mins'])
+
+fun = @(x) costCalc(x, FixedParams, Params, Forc, Data, v0, FixedParams.odeIntegrator, ...
+    FixedParams.odeOptions, 'selectFunction', costFunctionType);
+
+
+[optPar, fval, exitflag, output, population, scores] = ga(fun, ... 
+    npars, [], [], [], [], boundsLower, boundsUpper, [], [], optimiserOptions);
+
+
+% fun = @(x) costCalc(x, FixedParams, Params, Forc, Data, v0, FixedParams.odeIntegrator, ...
+%     FixedParams.odeOptions, 'selectFunction', costFunctionType);
+% nvars = npars;
+% Aineq = [];
+% bineq = [];
+% Aeq = [];
+% beq = [];
+% lb = boundsLower;
+% ub = boundsUpper;
+% nonlcon = [];
+% intcon = [];
+% options = optimiserOptions;
+% 
+% ga(fun,nvars,Aineq,bineq,Aeq,beq,lb,ub,nonlcon,intcon,options)
 
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

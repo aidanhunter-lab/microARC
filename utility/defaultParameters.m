@@ -140,6 +140,8 @@ Params.vectorParams = {
     'aN_QC_b'
     'pmax_a'
     'pmax_b'
+%    'pinf_a'
+%    'pinf_b'
     'Gmax_a'
     'Gmax_b'
     'm_a'
@@ -173,8 +175,8 @@ Params.Q_C = [];
 % min and max cellular nitrogen quota [mmol N / cell], scaled by C quota [mmol N / mmol C], Maranon et al. (2013)
 Params.Qmin_QC_func = @(a,b,V) powerFunction(a,b,V);
 Params.Qmin_QC_a = (1/14) * 1e-9 * 10^-1.47 / Params.Q_C_a;
-% Params.Qmin_QC_b = 0.84 - Params.Q_C_b;
-Params.Qmin_QC_b = 0; % minimum N:C ratio expected to have same size dependence as C-quota => set Qmin_QC_b = 0
+Params.Qmin_QC_b = 0.76 - Params.Q_C_b;
+% Params.Qmin_QC_b = 0; % minimum N:C ratio expected to have same size dependence as C-quota => set Qmin_QC_b = 0
 Params.Qmin_QC = [];
 
 % max quota
@@ -207,9 +209,20 @@ Params.kN = [];
 
 % maximum photosynthetic rate [1/day]
 Params.pmax_func = @(a,b,V) powerFunction(a,b,V);
-Params.pmax_a = 2.5;
-Params.pmax_b = -0.15;
+Params.pmax_a = 4.7;
+Params.pmax_b = -0.26;
 Params.pmax = [];
+
+% maximum growth rate [1/day] -- unimodal function (see Ward et al. 2017)
+Params.mu_max_func = @(pmax, Vmax_QC, Qmin_QC) pmax .* Vmax_QC ./ (pmax .* Qmin_QC + Vmax_QC);
+Params.mu_max = [];
+
+% theoretical maximum photosynthetic rate [1/day] (thies was the mu_inf parameter from Ward et al. 2017)
+% Is this equivalent to pmax above?
+% Params.pinf_func = @(a,b,V) powerFunction(a,b,V);
+% Params.pinf_a = 4.7;
+% Params.pinf_b = -0.26;
+% Params.pinf = [];
 
 % maximum grazing rate
 Params.Gmax_func = @(a,b,V) powerFunction(a,b,V);
@@ -375,7 +388,7 @@ Bounds.Q_C_b = [Params.Q_C_b, Params.Q_C_b];
 Bounds.Qmin_QC_a = (1/14) * 1e-9 / Params.Q_C_a .* [10^-1.78, 10^-1.26];
 Bounds.Qmin_QC_a = max(0, Bounds.Qmin_QC_a); % required Qmin_QC_a > 0
 
-Bounds.Qmin_QC_b = -Params.Q_C_b + [0.77, 0.92];
+Bounds.Qmin_QC_b = -Params.Q_C_b + [0.76, 0.93];
 Bounds.Qmin_QC_b = max(Bounds.Qmin_QC_b, -Params.Q_C_b); % required Qmin_QC_b > - Q_C_b
 
 Bounds.Qmax_delQ_a = [10^(-1.78 - (-0.99)), 10^(-1.26 - (-1.35))];
@@ -390,8 +403,13 @@ Bounds.Vmax_QC_b = -Params.Q_C_b + [0.89, 1.06];
 Bounds.aN_QC_a = 1e-3 .* 10 .^ [-9, -7.4] / Params.Q_C_a; % N affinity bounds from Edwards et al. (2015)
 Bounds.aN_QC_b = -Params.Q_C_b + [0.58, 0.98];
 
-Bounds.pmax_a = [0.5, 5];
-Bounds.pmax_b = [-0.5, 0];
+Bounds.pmax_a = [3.6, 12];
+Bounds.pmax_b = [-0.35, -0.18];
+% Bounds.pmax_a = [0.5, 5]; % the bounds I was using previously
+% Bounds.pmax_b = [-0.5, 0];
+
+% Bounds.pinf_a = [3.6, 12];
+% Bounds.pinf_b = [-0.35, -0.18];
 
 Bounds.Gmax_a = [5, 35];
 Bounds.Gmax_b = [-0.5, 0];

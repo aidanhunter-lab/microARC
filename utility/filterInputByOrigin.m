@@ -55,7 +55,9 @@ if ~default
     
     evTraj = Data.scalar.evTraj(:,keepEvents); % linear index of required trajectories in Forc, matches sample event
     keepTraj = unique(evTraj);
-    trajTable = table((1:length(keepTraj))', keepTraj', ... 
+%    trajTable = table((1:length(keepTraj))', keepTraj', ... 
+%        'VariableNames', {'new','old'}); % table of new and old trajectory indices
+    trajTable = table((1:length(keepTraj))', keepTraj(:), ... 
         'VariableNames', {'new','old'}); % table of new and old trajectory indices
 
     Data.scalar.EventTraj = Data.scalar.EventTraj(keepEvents,keepTraj);
