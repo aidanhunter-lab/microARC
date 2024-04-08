@@ -22,7 +22,10 @@ parFileType = '.mat';
 % Identifying tag here is the name of cost function used to
 % generate saved parameters, and a string describing model set-up
 % (set tag=[] if unused).
-tag = '_RMS_Hellinger_ZPratio_Atlantic_correctedDiffusion';
+
+tag = '_RMS_Hellinger_ZPratio_Atlantic_constraint';
+% tag = '_RMS_Hellinger_ZPratio_Atlantic_correctedDiffusion';
+
 % tag = '_RMS_Hellinger_ZPratio_Atlantic_final';
 % tag = '_RMS_Hellinger2_Atlantic_aG_sigG_upweightAbnTot';
 
@@ -95,6 +98,60 @@ popSize = 100;
 % algorithm, ga, function).
 Params = parameterConstraints(FixedParams, Params);
 
+% Are constraints satisfied by selected/default parameters?
+pars = arrayfun(@(z) Params.(z{1}), FixedParams.tunePars);
+constraint_vals = Params.constraints(pars);
+constraints_satisfied = constraint_vals <= 0;
+if(~all(constraints_satisfied))
+    warning('Selected parameters do not satisfy constraints specified in Params.constraints')
+end
+disp(constraints_satisfied)
+
+% How do previous fitted parameter sets compare to the constraints?
+Params0 = Params; FixedParams0 = FixedParams;
+prevFit = load('fittedParameters_RMS_Hellinger_ZPratio_Atlantic_correctedDiffusion.mat');
+FixedParams.tunePars = prevFit.FixedParams.tunePars;
+Params = updateParameters(Params, FixedParams, prevFit.fittingOutput.optPar);
+Params = parameterConstraints(FixedParams, Params);
+
+pars = arrayfun(@(z) Params.(z{1}), FixedParams.tunePars);
+constraint_vals = Params.constraints(pars);
+constraints_satisfied = constraint_vals <= 0;
+if(~all(constraints_satisfied))
+    warning('Selected parameters do not satisfy constraints specified in Params.constraints')
+end
+disp(constraints_satisfied)
+% The optimal param set breaks the constraint, as we knew already. But what
+% about the parameter-fitting history?
+popfit = prevFit.fittingOutput.populationHistory;
+popfit = permute(popfit, [2,1,3]);
+popfit = popfit(:,:);
+ntest = size(popfit, 2);
+mtest = nan(ntest, 4);
+for i = 1:ntest
+    pars = popfit(:,i);
+    Params = updateParameters(Params, FixedParams, prevFit.fittingOutput.optPar);
+    constraint_vals = Params.constraints(pars);
+    mtest(i,:) = constraint_vals;
+end
+
+cmet = mtest <= 0;
+
+all(cmet, 1)
+any(cmet(:,1))
+any(cmet(:,2))
+any(cmet(:,3))
+any(cmet(:,4))
+% Constraint 2 was always met (mu_max not too large), constraints 1 and 4
+% were never met (mu_max optimum was always at too low volumes and mu_max
+% was always too low at large sizes).
+
+Params = Params0;
+FixedParams = FixedParams0;
+
+
+
+
 % Store state variables in array v0: 1st dimension = variable
 %                                    2nd dimension = location (trajectory)
 v0 = initialiseVariables(FixedParams, Params, Forc);
@@ -141,17 +198,16 @@ tic; disp('.. started at'); disp(datetime('now'))
 [optPar, fval, exitflag, output, population, scores] = optimise(@(x) ... 
     costCalc(x, FixedParams, Params, Forc, Data, v0, FixedParams.odeIntegrator, ...
     FixedParams.odeOptions, 'selectFunction', costFunctionType), ... 
-    npars, [], [], [], [], boundsLower, boundsUpper, [], [], optimiserOptions);
+    npars, [], [], [], [], boundsLower, boundsUpper, Params.constraints, [], ...
+    optimiserOptions);
 optimisationTime = toc / 60 / 60; disp('.. finished at'); disp(datetime('now')); fprintf('\n')
 disp(['Optimisation time: ' num2str(floor(optimisationTime)) ' hrs, ' ...
     num2str(floor(mod(60*optimisationTime,60))) ' mins'])
 
-fun = @(x) costCalc(x, FixedParams, Params, Forc, Data, v0, FixedParams.odeIntegrator, ...
-    FixedParams.odeOptions, 'selectFunction', costFunctionType);
-
-
-[optPar, fval, exitflag, output, population, scores] = ga(fun, ... 
-    npars, [], [], [], [], boundsLower, boundsUpper, [], [], optimiserOptions);
+% fun = @(x) costCalc(x, FixedParams, Params, Forc, Data, v0, FixedParams.odeIntegrator, ...
+%     FixedParams.odeOptions, 'selectFunction', costFunctionType);
+% [optPar, fval, exitflag, output, population, scores] = ga(fun, ... 
+%     npars, [], [], [], [], boundsLower, boundsUpper, [], [], optimiserOptions);
 
 
 % fun = @(x) costCalc(x, FixedParams, Params, Forc, Data, v0, FixedParams.odeIntegrator, ...

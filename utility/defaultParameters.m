@@ -174,8 +174,8 @@ Params.Q_C = [];
 
 % min and max cellular nitrogen quota [mmol N / cell], scaled by C quota [mmol N / mmol C], Maranon et al. (2013)
 Params.Qmin_QC_func = @(a,b,V) powerFunction(a,b,V);
-Params.Qmin_QC_a = (1/14) * 1e-9 * 10^-1.47 / Params.Q_C_a;
-Params.Qmin_QC_b = 0.76 - Params.Q_C_b;
+Params.Qmin_QC_a = (1/14) * 0.033 * 1e-9 / Params.Q_C_a;
+Params.Qmin_QC_b = 0.84 - Params.Q_C_b;
 % Params.Qmin_QC_b = 0; % minimum N:C ratio expected to have same size dependence as C-quota => set Qmin_QC_b = 0
 Params.Qmin_QC = [];
 
@@ -193,8 +193,8 @@ Params.Qmax_delQ = [];
 
 % maximum nitrogen uptake rate Vmax [mmol N/cell/day] scaled by C quota, Vmax_over_QC [mmol N / mmol C / day], Maranon et al. (2013)
 Params.Vmax_QC_func = @(a,b,V) powerFunction(a,b,V);
-Params.Vmax_QC_a = 24 / 14 * 1e-9 * 10^-3 / Params.Q_C_a;
-Params.Vmax_QC_b = 0.97 - Params.Q_C_b;
+Params.Vmax_QC_a = 1/14 * 0.023 * 1e-9 / Params.Q_C_a;
+Params.Vmax_QC_b = 0.98 - Params.Q_C_b;
 Params.Vmax_QC = [];
 
 % cellular affinity for nitrogen scaled by QC [m^3 / mmol C / day], derived using half saturation from Litchmann et al. (2007)
@@ -209,8 +209,8 @@ Params.kN = [];
 
 % maximum photosynthetic rate [1/day]
 Params.pmax_func = @(a,b,V) powerFunction(a,b,V);
-Params.pmax_a = 4.7;
-Params.pmax_b = -0.26;
+Params.pmax_a = 6.4;
+Params.pmax_b = -0.27;
 Params.pmax = [];
 
 % maximum growth rate [1/day] -- unimodal function (see Ward et al. 2017)
@@ -317,7 +317,8 @@ switch FixedParams.depthDependentPOMsinkSpeed
     case false
         % POM sink speed is constant over depth
         Params.wPOM_func = @(wPOM1, nz) wPOM1 .* ones(nz,1);
-        Params.wPOM1 = 1; % this is set far lower than Ward (2012, 2016), but POM sink speed needs to be this low to fit the data, unless remineralisation rates are made far greater...
+%         Params.wPOM1 = 1; % this is set far lower than Ward (2012, 2016), but POM sink speed needs to be this low to fit the data, unless remineralisation rates are made far greater...
+        Params.wPOM1 = 10;
         Params.wPOM = [];
     case true
         % Allow reduction of POM sinking speed near surface for low values of
